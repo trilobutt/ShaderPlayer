@@ -1,0 +1,44 @@
+# Build directories
+build/
+out/
+Release/
+Debug/
+RelWithDebInfo/
+MinSizeRel/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+CTestTestFile.cmake
+_deps/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Binaries
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.obj
+
+# FFmpeg (user-specific paths)
+ffmpeg/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# User config (if it contains local paths)
+config_local.json
