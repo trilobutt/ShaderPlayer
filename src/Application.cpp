@@ -1,6 +1,7 @@
 #include "Application.h"
 #include <commdlg.h>
 #include <shellapi.h>
+#include <shobjidl.h>
 #include <fstream>
 
 namespace SP {
@@ -45,6 +46,20 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
                 loadedPreset.shortcutKey = preset.shortcutKey;
                 loadedPreset.shortcutModifiers = preset.shortcutModifiers;
                 m_shaderManager->AddPreset(loadedPreset);
+            }
+        }
+    }
+
+    // Resolve the shader directory: if the configured path doesn't exist, try the
+    // directory next to the executable (works for dev builds run from build/Release/).
+    {
+        auto& shaderDir = m_configManager.GetConfig().shaderDirectory;
+        if (!std::filesystem::exists(shaderDir)) {
+            char exePath[MAX_PATH];
+            GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+            auto altDir = std::filesystem::path(exePath).parent_path() / "shaders";
+            if (std::filesystem::exists(altDir)) {
+                shaderDir = altDir.string();
             }
         }
     }
@@ -414,28 +429,35 @@ void Application::SeekTo(double seconds) {
 }
 
 bool Application::CompileCurrentShader(const std::string& source) {
+    int activeIndex = m_shaderManager->GetActivePresetIndex();
     auto* preset = m_shaderManager->GetActivePreset();
     if (preset) {
+        // Update source in the stored preset, then recompile via index so the
+        // compiled ID3D11PixelShader is reliably written into m_compiledShaders.
         preset->source = source;
-        if (m_shaderManager->CompilePreset(*preset)) {
-            m_shaderManager->SetActivePreset(m_shaderManager->GetActivePresetIndex());
+        if (m_shaderManager->RecompilePreset(activeIndex)) {
+            m_shaderManager->SetActivePreset(activeIndex);
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
         } else {
-            m_uiManager->ShowNotification("Shader compilation failed");
+            m_uiManager->ShowNotification("Shader compilation failed: " +
+                (preset->compileError.empty() ? "unknown error" : preset->compileError.substr(0, 80)));
             return false;
         }
     } else {
-        // Create new preset from source
+        // No active preset — compile the editor content into a new preset.
         ShaderPreset newPreset;
         newPreset.name = "Untitled";
         newPreset.source = source;
-        if (m_shaderManager->CompilePreset(newPreset)) {
-            int idx = m_shaderManager->AddPreset(newPreset);
+        // AddPreset compiles and stores the shader; no double-compile needed.
+        int idx = m_shaderManager->AddPreset(newPreset);
+        auto* added = m_shaderManager->GetPreset(idx);
+        if (added && added->isValid) {
             m_shaderManager->SetActivePreset(idx);
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
         } else {
+            m_shaderManager->RemovePreset(idx);
             m_uiManager->ShowNotification("Shader compilation failed");
             return false;
         }
@@ -499,6 +521,39 @@ void Application::SaveShaderAsDialog(const std::string& source) {
             m_uiManager->ShowNotification("Shader saved: " + std::string(filepath));
         }
     }
+}
+
+void Application::ScanFolderDialog() {
+    IFileOpenDialog* pDialog = nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&pDialog));
+    if (FAILED(hr)) return;
+
+    DWORD opts = 0;
+    pDialog->GetOptions(&opts);
+    pDialog->SetOptions(opts | FOS_PICKFOLDERS | FOS_PATHMUSTEXIST);
+    pDialog->SetTitle(L"Select Shader Folder");
+
+    hr = pDialog->Show(m_hwnd);
+    if (SUCCEEDED(hr)) {
+        IShellItem* pItem = nullptr;
+        hr = pDialog->GetResult(&pItem);
+        if (SUCCEEDED(hr)) {
+            PWSTR pszPath = nullptr;
+            if (SUCCEEDED(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszPath))) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pszPath, -1, nullptr, 0, nullptr, nullptr);
+                std::string path(len - 1, '\0');
+                WideCharToMultiByte(CP_UTF8, 0, pszPath, -1, path.data(), len, nullptr, nullptr);
+
+                m_configManager.GetConfig().shaderDirectory = path;
+                m_shaderManager->ScanDirectory(path);
+                m_uiManager->ShowNotification("Scanned: " + std::filesystem::path(path).filename().string());
+                CoTaskMemFree(pszPath);
+            }
+            pItem->Release();
+        }
+    }
+    pDialog->Release();
 }
 
 bool Application::StartRecording(const RecordingSettings& settings) {

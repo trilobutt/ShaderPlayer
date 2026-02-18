@@ -44,6 +44,7 @@ public:
     bool CompileCurrentShader(const std::string& source);
     bool SaveCurrentShader(const std::string& source);
     void SaveShaderAsDialog(const std::string& source);
+    void ScanFolderDialog();
 
     // Recording
     bool StartRecording(const RecordingSettings& settings);

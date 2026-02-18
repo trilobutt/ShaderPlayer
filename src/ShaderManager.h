@@ -18,6 +18,8 @@ public:
     bool LoadShaderFromFile(const std::string& filepath, ShaderPreset& outPreset);
     bool LoadShaderFromSource(const std::string& name, const std::string& source, ShaderPreset& outPreset);
     bool CompilePreset(ShaderPreset& preset);
+    // Compile a preset already stored at the given index and update m_compiledShaders[index].
+    bool RecompilePreset(int index);
     
     // Preset management
     int AddPreset(const ShaderPreset& preset);

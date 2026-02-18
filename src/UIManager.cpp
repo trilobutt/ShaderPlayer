@@ -307,7 +307,7 @@ void UIManager::DrawShaderLibrary() {
         }
         ImGui::SameLine();
         if (ImGui::Button("Scan Folder")) {
-            m_app.GetShaderManager().ScanDirectory(m_app.GetConfig().shaderDirectory);
+            m_app.ScanFolderDialog();
         }
 
         ImGui::Separator();

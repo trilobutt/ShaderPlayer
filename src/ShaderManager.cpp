@@ -69,6 +69,24 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
     }
 }
 
+bool ShaderManager::RecompilePreset(int index) {
+    if (index < 0 || index >= static_cast<int>(m_presets.size())) return false;
+
+    ComPtr<ID3D11PixelShader> shader;
+    std::string error;
+
+    if (m_renderer.CompilePixelShader(m_presets[index].source, shader, error)) {
+        m_presets[index].isValid = true;
+        m_presets[index].compileError.clear();
+        m_compiledShaders[index] = shader;
+        return true;
+    } else {
+        m_presets[index].isValid = false;
+        m_presets[index].compileError = error;
+        return false;
+    }
+}
+
 int ShaderManager::AddPreset(const ShaderPreset& preset) {
     m_presets.push_back(preset);
     
