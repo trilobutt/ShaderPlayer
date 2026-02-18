@@ -310,9 +310,10 @@ void Application::RenderFrame() {
     // Set shader uniforms
     m_renderer.SetShaderTime(m_playbackTime);
 
-    // Begin frame
+    // Set up D3D11 pipeline and clear backbuffer to black
     m_renderer.BeginFrame();
-    m_renderer.EndFrame();
+    // Render video+shader to the display texture; ImGui::Image picks it up from there
+    m_renderer.RenderToDisplay();
 
     // Render UI
     m_uiManager->BeginFrame();
@@ -321,8 +322,9 @@ void Application::RenderFrame() {
 
     // If recording, capture frame
     if (m_encoder.IsRecording() && !m_currentFrame.data[0].empty()) {
-        // Render to texture
-        m_renderer.BeginFrame();  // Set up pipeline
+        // Pipeline state is already configured from the BeginFrame() call above.
+        // RenderToTexture() sets its own render target and viewport, so no second
+        // BeginFrame() is needed (and calling it would clear the visible backbuffer).
         if (m_renderer.RenderToTexture()) {
             std::vector<uint8_t> frameData;
             int width, height;

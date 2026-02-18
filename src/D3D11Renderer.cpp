@@ -85,12 +85,15 @@ void D3D11Renderer::Shutdown() {
     }
 
     ReleaseRenderTarget();
-    
+
     m_videoTexture.Reset();
     m_videoSRV.Reset();
     m_renderTexture.Reset();
     m_renderTextureRTV.Reset();
     m_stagingTexture.Reset();
+    m_displayTexture.Reset();
+    m_displayRTV.Reset();
+    m_displaySRV.Reset();
     m_vertexShader.Reset();
     m_passthroughPS.Reset();
     m_activePS.Reset();
@@ -117,8 +120,7 @@ bool D3D11Renderer::CreateDeviceAndSwapChain(HWND hwnd, int width, int height) {
     };
 
     D3D_FEATURE_LEVEL featureLevel;
-    
-    // Create device first
+
     HRESULT hr = D3D11CreateDevice(
         nullptr,
         D3D_DRIVER_TYPE_HARDWARE,
@@ -132,19 +134,42 @@ bool D3D11Renderer::CreateDeviceAndSwapChain(HWND hwnd, int width, int height) {
         &m_context
     );
 
+#ifdef _DEBUG
+    // D3D11 debug layer requires "Graphics Tools" Windows optional feature.
+    // Retry without it if that's the cause of failure.
+    if (FAILED(hr) && (createDeviceFlags & D3D11_CREATE_DEVICE_DEBUG)) {
+        createDeviceFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        hr = D3D11CreateDevice(
+            nullptr,
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,
+            createDeviceFlags,
+            featureLevels,
+            _countof(featureLevels),
+            D3D11_SDK_VERSION,
+            &m_device,
+            &featureLevel,
+            &m_context
+        );
+    }
+#endif
+
     if (FAILED(hr)) {
         return false;
     }
 
     // Get DXGI factory
     ComPtr<IDXGIDevice> dxgiDevice;
-    m_device.As(&dxgiDevice);
+    hr = m_device.As(&dxgiDevice);
+    if (FAILED(hr)) return false;
 
     ComPtr<IDXGIAdapter> dxgiAdapter;
-    dxgiDevice->GetAdapter(&dxgiAdapter);
+    hr = dxgiDevice->GetAdapter(&dxgiAdapter);
+    if (FAILED(hr)) return false;
 
     ComPtr<IDXGIFactory2> dxgiFactory;
-    dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+    hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+    if (FAILED(hr)) return false;
 
     // Create swap chain
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -383,6 +408,70 @@ bool D3D11Renderer::CreateRenderToTexture(int width, int height) {
 
     hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_stagingTexture);
     return SUCCEEDED(hr);
+}
+
+bool D3D11Renderer::CreateDisplayTexture(int width, int height) {
+    if (m_displayWidth == width && m_displayHeight == height && m_displayTexture)
+        return true;
+
+    m_displayTexture.Reset();
+    m_displayRTV.Reset();
+    m_displaySRV.Reset();
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width = width;
+    texDesc.Height = height;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    // Must be both RTV (rendered into) and SRV (sampled by ImGui)
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+    HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_displayTexture);
+    if (FAILED(hr)) return false;
+
+    hr = m_device->CreateRenderTargetView(m_displayTexture.Get(), nullptr, &m_displayRTV);
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = texDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    hr = m_device->CreateShaderResourceView(m_displayTexture.Get(), &srvDesc, &m_displaySRV);
+    if (FAILED(hr)) return false;
+
+    m_displayWidth = width;
+    m_displayHeight = height;
+    return true;
+}
+
+void D3D11Renderer::RenderToDisplay() {
+    if (m_videoWidth <= 0 || m_videoHeight <= 0) return;
+    if (!CreateDisplayTexture(m_videoWidth, m_videoHeight)) return;
+
+    float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    m_context->ClearRenderTargetView(m_displayRTV.Get(), clearColor);
+    m_context->OMSetRenderTargets(1, m_displayRTV.GetAddressOf(), nullptr);
+
+    D3D11_VIEWPORT vp = {};
+    vp.Width = static_cast<float>(m_videoWidth);
+    vp.Height = static_cast<float>(m_videoHeight);
+    vp.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &vp);
+
+    m_context->Draw(3, 0);
+
+    // Unbind display RTV so ImGui can use it as SRV; restore backbuffer as RT
+    m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
+
+    D3D11_VIEWPORT mainVP = {};
+    mainVP.Width = static_cast<float>(m_width);
+    mainVP.Height = static_cast<float>(m_height);
+    mainVP.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &mainVP);
 }
 
 bool D3D11Renderer::UploadVideoFrame(const VideoFrame& frame) {

@@ -99,9 +99,12 @@ bool VideoDecoder::Open(const std::string& filepath) {
     // Estimate frame count
     m_frameCount = static_cast<int64_t>(m_duration * m_fps);
 
-    // Allocate conversion buffer for RGBA output
+    // Allocate conversion buffer for RGBA output.
+    // align=1 gives the exact minimum size with no row padding. sws_scale's SIMD
+    // routines (SSE/AVX) can overshoot by up to one full SIMD vector on the last row,
+    // corrupting the CRT heap guard. 64 bytes of tail padding absorbs that overshoot.
     int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
-    m_conversionBuffer.resize(bufferSize);
+    m_conversionBuffer.resize(bufferSize + 64);
 
     return true;
 }

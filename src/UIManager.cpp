@@ -200,21 +200,56 @@ void UIManager::DrawMenuBar() {
 }
 
 void UIManager::DrawVideoViewport() {
-    ImGui::Begin("Video", nullptr, ImGuiWindowFlags_NoScrollbar);
-    
-    // Display video info
+    ImGui::Begin("Video", nullptr,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
     auto& decoder = m_app.GetDecoder();
+
     if (decoder.IsOpen()) {
-        ImGui::Text("%dx%d @ %.2f fps | %s", 
+        // Info line above the image
+        ImGui::Text("%dx%d @ %.2f fps | %s",
             decoder.GetWidth(), decoder.GetHeight(),
             decoder.GetFPS(), decoder.GetCodecName().c_str());
+
+        ID3D11ShaderResourceView* srv = m_app.GetRenderer().GetDisplaySRV();
+        if (srv) {
+            // Compute letterbox rect: largest fit inside the available content area
+            // while preserving the video's exact aspect ratio.
+            const ImVec2 origin  = ImGui::GetCursorScreenPos();
+            const ImVec2 avail   = ImGui::GetContentRegionAvail();
+            const float  videoW  = static_cast<float>(decoder.GetWidth());
+            const float  videoH  = static_cast<float>(decoder.GetHeight());
+            const float  scale   = std::min(avail.x / videoW, avail.y / videoH);
+            const float  drawW   = videoW * scale;
+            const float  drawH   = videoH * scale;
+            const float  padX    = (avail.x - drawW) * 0.5f;
+            const float  padY    = (avail.y - drawH) * 0.5f;
+
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + padX, origin.y + padY));
+            ImGui::Image(reinterpret_cast<ImTextureID>(srv), ImVec2(drawW, drawH));
+        }
     } else {
-        ImGui::Text("No video loaded. Drag & drop a file or use File > Open Video");
+        // No video loaded: centre a button + hint text vertically and horizontally
+        const ImVec2 cursorStart = ImGui::GetCursorPos();
+        const ImVec2 avail       = ImGui::GetContentRegionAvail();
+        constexpr float kButtonW = 200.0f;
+        constexpr float kButtonH = 40.0f;
+        const char* hint         = "or drag & drop a video file";
+        const float  totalH      = kButtonH + 8.0f + ImGui::GetTextLineHeight();
+
+        ImGui::SetCursorPos(ImVec2(
+            cursorStart.x + (avail.x - kButtonW) * 0.5f,
+            cursorStart.y + (avail.y - totalH)   * 0.5f));
+
+        if (ImGui::Button("Open Video...", ImVec2(kButtonW, kButtonH))) {
+            m_app.OpenVideoDialog();
+        }
+
+        const float hintW = ImGui::CalcTextSize(hint).x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail.x - hintW) * 0.5f);
+        ImGui::TextDisabled("%s", hint);
     }
-    
-    // The actual video is rendered by D3D11 behind ImGui
-    // This window just provides the frame/title
-    
+
     ImGui::End();
 }
 
@@ -535,7 +570,9 @@ std::string UIManager::GetEditorContent() const {
 }
 
 bool UIManager::IsEditorFocused() const {
-    return m_editor.IsFocused();
+    // TextEditor has no IsFocused(); WantCaptureKeyboard is true
+    // whenever any ImGui widget (including the editor) holds focus.
+    return ImGui::GetIO().WantCaptureKeyboard;
 }
 
 void UIManager::ShowNotification(const std::string& message, float duration) {

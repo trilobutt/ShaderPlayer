@@ -29,8 +29,8 @@ _deps/
 *.ilk
 *.obj
 
-# FFmpeg (user-specific paths)
-ffmpeg/
+# FFmpeg: commit headers (include/) and import libs (lib/), ignore runtime DLLs
+# Note: *.dll above already handles third_party/ffmpeg/bin/*.dll
 
 # IDE
 .vscode/

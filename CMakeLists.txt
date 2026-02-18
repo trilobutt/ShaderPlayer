@@ -10,27 +10,43 @@ if(WIN32)
 endif()
 
 # Find FFmpeg
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    pkg_check_modules(FFMPEG IMPORTED_TARGET
-        libavcodec
-        libavformat
-        libavutil
-        libswscale
-        libswresample
-    )
-endif()
+# Priority: 1) third_party/ffmpeg (bundled, portable), 2) pkg-config, 3) FFMPEG_ROOT
+set(_FFMPEG_BUNDLED "${CMAKE_SOURCE_DIR}/third_party/ffmpeg")
 
-# If pkg-config didn't find FFmpeg, try manual paths
-if(NOT FFMPEG_FOUND)
-    set(FFMPEG_ROOT "" CACHE PATH "FFmpeg installation root")
-    if(FFMPEG_ROOT)
-        set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
-        set(FFMPEG_LIBRARY_DIRS "${FFMPEG_ROOT}/lib")
-        set(FFMPEG_LIBRARIES
-            avcodec avformat avutil swscale swresample
+if(EXISTS "${_FFMPEG_BUNDLED}/include/libavcodec/avcodec.h")
+    message(STATUS "FFmpeg: using bundled third_party/ffmpeg")
+    set(FFMPEG_INCLUDE_DIRS "${_FFMPEG_BUNDLED}/include")
+    set(FFMPEG_LIBRARY_DIRS "${_FFMPEG_BUNDLED}/lib")
+    set(FFMPEG_BIN_DIR      "${_FFMPEG_BUNDLED}/bin")
+    set(FFMPEG_LIBRARIES    avcodec avformat avutil swscale swresample)
+    set(FFMPEG_FOUND TRUE)
+    link_directories(${FFMPEG_LIBRARY_DIRS})
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FFMPEG IMPORTED_TARGET
+            libavcodec libavformat libavutil libswscale libswresample
         )
-        link_directories(${FFMPEG_LIBRARY_DIRS})
+        if(FFMPEG_FOUND)
+            message(STATUS "FFmpeg: found via pkg-config")
+        endif()
+    endif()
+
+    if(NOT FFMPEG_FOUND)
+        set(FFMPEG_ROOT "" CACHE PATH "FFmpeg installation root (fallback when third_party/ffmpeg is absent)")
+        if(FFMPEG_ROOT)
+            message(STATUS "FFmpeg: using FFMPEG_ROOT=${FFMPEG_ROOT}")
+            set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
+            set(FFMPEG_LIBRARY_DIRS "${FFMPEG_ROOT}/lib")
+            set(FFMPEG_BIN_DIR      "${FFMPEG_ROOT}/bin")
+            set(FFMPEG_LIBRARIES    avcodec avformat avutil swscale swresample)
+            link_directories(${FFMPEG_LIBRARY_DIRS})
+        else()
+            message(FATAL_ERROR
+                "FFmpeg not found. Either:\n"
+                "  1. Populate third_party/ffmpeg/ with include/ and lib/ from a shared FFmpeg build\n"
+                "  2. Pass -DFFMPEG_ROOT=<path> to cmake")
+        endif()
     endif()
 endif()
 
@@ -40,7 +56,7 @@ include(FetchContent)
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.90.1
+    GIT_TAG docking
 )
 FetchContent_MakeAvailable(imgui)
 
@@ -102,9 +118,9 @@ target_link_libraries(ShaderPlayer PRIVATE
     ${FFMPEG_LIBRARIES}
 )
 
-# Copy FFmpeg DLLs to output directory (if using shared FFmpeg)
-if(FFMPEG_ROOT AND EXISTS "${FFMPEG_ROOT}/bin")
-    file(GLOB FFMPEG_DLLS "${FFMPEG_ROOT}/bin/*.dll")
+# Copy FFmpeg DLLs to output directory
+if(DEFINED FFMPEG_BIN_DIR AND EXISTS "${FFMPEG_BIN_DIR}")
+    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
     foreach(DLL ${FFMPEG_DLLS})
         add_custom_command(TARGET ShaderPlayer POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different

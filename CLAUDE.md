@@ -78,20 +78,26 @@ Included shaders in `shaders/`:
 
 ### FFmpeg Setup
 
-1. Download FFmpeg shared build from https://www.gyan.dev/ffmpeg/builds/
-2. Extract to a permanent location (e.g., `C:\ffmpeg`)
-3. Set `FFMPEG_ROOT` environment variable or CMake cache variable
+FFmpeg headers and import libs are bundled in `third_party/ffmpeg/` and committed to the repo (~3 MB). Only the runtime DLLs (~220 MB) must be provided locally — they are gitignored.
+
+On a fresh clone:
+1. Download a shared FFmpeg build from https://www.gyan.dev/ffmpeg/builds/ (`ffmpeg-release-full-shared.7z`)
+2. Copy the DLLs into `third_party/ffmpeg/bin/`:
+   ```
+   xcopy "C:\path\to\ffmpeg\bin\*.dll" "third_party\ffmpeg\bin\"
+   ```
+3. CMake autodiscovers `third_party/ffmpeg/` — no flags needed
+
+If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>` to CMake and leave `third_party/ffmpeg/` unpopulated.
 
 ### Building
 
 ```bash
-mkdir build
-cd build
-cmake .. -DFFMPEG_ROOT=C:/ffmpeg
-cmake --build . --config Release
+cmake -B build
+cmake --build build --config Release
 ```
 
-The executable and required DLLs will be in `build/Release/`.
+The executable and required DLLs will be in `build/Release/`. FFmpeg DLLs are copied there automatically at post-build.
 
 ## Configuration
 

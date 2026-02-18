@@ -38,6 +38,10 @@ public:
     bool RenderToTexture();
     bool CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int& outWidth, int& outHeight);
 
+    // Render to display texture (for ImGui::Image preview)
+    void RenderToDisplay();
+    ID3D11ShaderResourceView* GetDisplaySRV() const { return m_displaySRV.Get(); }
+
     // Shader uniforms
     void SetShaderTime(float time);
     void SetShaderResolution(float width, float height);
@@ -55,6 +59,7 @@ private:
     bool CreateRenderTarget();
     bool CreateVideoTexture(int width, int height);
     bool CreateRenderToTexture(int width, int height);
+    bool CreateDisplayTexture(int width, int height);
     bool CreateShaderResources();
     bool CreatePassthroughShader();
     void ReleaseRenderTarget();
@@ -75,6 +80,13 @@ private:
     ComPtr<ID3D11Texture2D> m_renderTexture;
     ComPtr<ID3D11RenderTargetView> m_renderTextureRTV;
     ComPtr<ID3D11Texture2D> m_stagingTexture;
+
+    // Display texture (shader-processed frame for ImGui::Image preview)
+    ComPtr<ID3D11Texture2D> m_displayTexture;
+    ComPtr<ID3D11RenderTargetView> m_displayRTV;
+    ComPtr<ID3D11ShaderResourceView> m_displaySRV;
+    int m_displayWidth = 0;
+    int m_displayHeight = 0;
 
     // Shaders and pipeline state
     ComPtr<ID3D11VertexShader> m_vertexShader;
