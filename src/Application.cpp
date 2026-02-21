@@ -343,23 +343,22 @@ void Application::ProcessFrame() {
 /*static*/ void Application::PackParamValues(const ShaderPreset& preset, float out[16]) {
     std::fill(out, out + 16, 0.0f);
     for (const auto& p : preset.params) {
-        if (p.cbufferOffset >= 16) continue;
+        const int off = p.cbufferOffset;
         switch (p.type) {
         case ShaderParamType::Float:
         case ShaderParamType::Bool:
         case ShaderParamType::Long:
         case ShaderParamType::Event:
-            out[p.cbufferOffset] = p.values[0];
+            if (off < 16)       out[off] = p.values[0];
             break;
         case ShaderParamType::Point2D:
-            out[p.cbufferOffset]     = p.values[0];
-            out[p.cbufferOffset + 1] = p.values[1];
+            if (off + 1 < 16) { out[off] = p.values[0]; out[off + 1] = p.values[1]; }
             break;
         case ShaderParamType::Color:
-            out[p.cbufferOffset]     = p.values[0];
-            out[p.cbufferOffset + 1] = p.values[1];
-            out[p.cbufferOffset + 2] = p.values[2];
-            out[p.cbufferOffset + 3] = p.values[3];
+            if (off + 3 < 16) {
+                out[off] = p.values[0]; out[off + 1] = p.values[1];
+                out[off + 2] = p.values[2]; out[off + 3] = p.values[3];
+            }
             break;
         }
     }
