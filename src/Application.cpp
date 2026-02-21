@@ -168,11 +168,15 @@ LRESULT Application::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         HandleDroppedFiles(reinterpret_cast<HDROP>(wParam));
         return 0;
 
-    case WM_KEYDOWN:
-        if (!m_uiManager || !m_uiManager->WantsCaptureKeyboard()) {
-            HandleKeyboardShortcuts(static_cast<UINT>(wParam));
+    case WM_KEYDOWN: {
+        UINT vk = static_cast<UINT>(wParam);
+        // F-keys always fire so panel toggles work even when the editor has focus
+        bool alwaysHandle = (vk >= VK_F1 && vk <= VK_F12);
+        if (alwaysHandle || !m_uiManager || !m_uiManager->WantsCaptureKeyboard()) {
+            HandleKeyboardShortcuts(vk);
         }
         return 0;
+    }
 
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -227,6 +231,18 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         return;
     case VK_ESCAPE:
         m_shaderManager->SetPassthrough();
+        return;
+    case VK_F1:
+        if (m_uiManager) m_uiManager->ToggleEditor();
+        return;
+    case VK_F2:
+        if (m_uiManager) m_uiManager->ToggleLibrary();
+        return;
+    case VK_F3:
+        if (m_uiManager) m_uiManager->ToggleTransport();
+        return;
+    case VK_F4:
+        if (m_uiManager) m_uiManager->ToggleRecording();
         return;
     case VK_F5:
         if (m_uiManager) {

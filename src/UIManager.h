@@ -40,6 +40,10 @@ public:
 
     // Notifications
     void ShowNotification(const std::string& message, float duration = 3.0f);
+    void ToggleEditor()           { m_showEditor           = !m_showEditor; }
+    void ToggleLibrary()          { m_showLibrary          = !m_showLibrary; }
+    void ToggleTransport()        { m_showTransport        = !m_showTransport; }
+    void ToggleRecording()        { m_showRecording        = !m_showRecording; }
     void ToggleKeybindingsPanel() { m_showKeybindingsPanel = !m_showKeybindingsPanel; }
 
 private:

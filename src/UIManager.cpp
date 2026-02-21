@@ -341,22 +341,26 @@ void UIManager::DrawShaderLibrary() {
             }
             ImGui::SameLine();
 
-            // Selectable name
+            // Selectable name — single click activates, double-click opens keybinding modal
             if (ImGui::Selectable(preset->name.c_str(), isActive)) {
                 manager.SetActivePreset(i);
                 m_editor.SetText(preset->source);
             }
-
-            // Right-aligned [kb] button
-            {
-                ImGui::SameLine(ImGui::GetContentRegionMax().x - 26.0f);
-                if (ImGui::SmallButton("kb")) {
+            if (ImGui::IsItemHovered()) {
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                     m_keybindingPresetIndex = i;
-                    m_showKeybindingModal = true;
                     m_keybindingConflictMsg.clear();
+                    m_showKeybindingModal = true;
                 }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Set keybinding for '%s'", preset->name.c_str());
+                ImGui::SetTooltip("Double-click to set keybinding");
+            }
+
+            // Right-aligned keybinding label
+            if (preset->shortcutKey != 0) {
+                std::string combo = "[" + m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers) + "]";
+                float textW = ImGui::CalcTextSize(combo.c_str()).x;
+                ImGui::SameLine(ImGui::GetContentRegionMax().x - textW - 4.0f);
+                ImGui::TextDisabled("%s", combo.c_str());
             }
 
             // Context menu
@@ -370,13 +374,6 @@ void UIManager::DrawShaderLibrary() {
                     manager.RemovePreset(i);
                 }
                 ImGui::EndPopup();
-            }
-
-            // Show keybinding
-            if (preset->shortcutKey != 0) {
-                ImGui::SameLine();
-                ImGui::TextDisabled("[%s]",
-                    m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers).c_str());
             }
 
             ImGui::PopID();
