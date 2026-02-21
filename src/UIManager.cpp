@@ -121,6 +121,10 @@ void UIManager::Render() {
         DrawNewShaderModal();
     }
 
+    if (m_showKeybindingsPanel) {
+        DrawKeybindingsPanel();
+    }
+
     // Handle auto-compile
     if (m_editorNeedsCompile && m_app.GetConfig().autoCompileOnSave) {
         m_compileTimer += ImGui::GetIO().DeltaTime;
@@ -157,6 +161,7 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Shader Library", "F2", &m_showLibrary);
             ImGui::MenuItem("Transport Controls", "F3", &m_showTransport);
             ImGui::MenuItem("Recording Panel", "F4", &m_showRecording);
+            ImGui::MenuItem("Keybindings", "F6", &m_showKeybindingsPanel);
             ImGui::EndMenu();
         }
         
@@ -651,6 +656,60 @@ void UIManager::DrawNewShaderModal() {
         
         ImGui::EndPopup();
     }
+}
+
+void UIManager::DrawKeybindingsPanel() {
+    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Keybindings", &m_showKeybindingsPanel)) {
+        auto& manager = m_app.GetShaderManager();
+        const int count = manager.GetPresetCount();
+
+        if (count == 0) {
+            ImGui::TextDisabled("No shaders loaded.");
+        } else if (ImGui::BeginTable("kb_table", 2,
+                       ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                       ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Shader", ImGuiTableColumnFlags_WidthStretch, 0.6f);
+            ImGui::TableSetupColumn("Binding", ImGuiTableColumnFlags_WidthStretch, 0.4f);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < count; ++i) {
+                const ShaderPreset* preset = manager.GetPreset(i);
+                if (!preset) continue;
+
+                ImGui::TableNextRow();
+                ImGui::PushID(i);
+
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(preset->name.c_str());
+
+                ImGui::TableSetColumnIndex(1);
+                std::string label;
+                if (preset->shortcutKey != 0)
+                    label = m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers);
+                else
+                    label = "â";  // UTF-8 em dash
+
+                if (ImGui::Selectable(label.c_str(), false,
+                                      ImGuiSelectableFlags_SpanAllColumns)) {
+                    m_keybindingPresetIndex = i;
+                    m_keybindingConflictMsg.clear();
+                    m_showKeybindingModal = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Click to set keybinding");
+
+                ImGui::PopID();
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Click a binding to assign or change it.");
+    }
+    ImGui::End();
 }
 
 bool UIManager::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

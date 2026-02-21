@@ -233,6 +233,9 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
             CompileCurrentShader(m_uiManager->GetEditorContent());
         }
         return;
+    case VK_F6:
+        m_uiManager->ToggleKeybindingsPanel();
+        return;
     case VK_F9:
         if (m_encoder.IsRecording()) {
             StopRecording();

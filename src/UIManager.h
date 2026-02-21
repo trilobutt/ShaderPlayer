@@ -40,6 +40,7 @@ public:
 
     // Notifications
     void ShowNotification(const std::string& message, float duration = 3.0f);
+    void ToggleKeybindingsPanel() { m_showKeybindingsPanel = !m_showKeybindingsPanel; }
 
 private:
     void DrawMenuBar();
@@ -51,6 +52,7 @@ private:
     void DrawNotifications();
     void DrawKeybindingModal();
     void DrawNewShaderModal();
+    void DrawKeybindingsPanel();
 
     Application& m_app;
     
@@ -61,6 +63,7 @@ private:
     bool m_showRecording = false;
     bool m_showKeybindingModal = false;
     bool m_showNewShaderModal = false;
+    bool m_showKeybindingsPanel = false;
     int m_keybindingPresetIndex = -1;
     std::string m_keybindingConflictMsg;
     
