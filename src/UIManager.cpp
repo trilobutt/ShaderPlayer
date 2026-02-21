@@ -344,8 +344,7 @@ void UIManager::DrawShaderLibrary() {
 
             // Right-aligned [kb] button
             {
-                float rowRight = ImGui::GetContentRegionAvail().x;
-                ImGui::SameLine(rowRight - 26.0f);
+                ImGui::SameLine(ImGui::GetContentRegionMax().x - 26.0f);
                 if (ImGui::SmallButton("kb")) {
                     m_keybindingPresetIndex = i;
                     m_showKeybindingModal = true;
