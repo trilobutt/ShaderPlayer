@@ -40,8 +40,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Optional grid lines at pixel boundaries
     if (ShowGrid) {
-        float2 frac = frac(uv / normalised);
-        float  edge = min(frac.x, frac.y);
+        float2 blockFrac = frac(uv / normalised);
+        float  edge      = min(blockFrac.x, blockFrac.y);
         if (edge < 0.05) col = GridColour;
     }
 
