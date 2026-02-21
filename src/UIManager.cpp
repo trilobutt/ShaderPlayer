@@ -316,7 +316,7 @@ void UIManager::DrawShaderParameters() {
     bool anyChanged = false;
 
     for (auto& p : preset->params) {
-        ImGui::PushID(p.name.c_str());
+        ImGui::PushID(&p); // use address; PushID("") hashes to 0 and asserts
 
         switch (p.type) {
 
@@ -481,7 +481,7 @@ void UIManager::DrawShaderLibrary() {
             }
 
             // Context menu
-            if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::BeginPopupContextItem("##ctx")) {
                 if (ImGui::MenuItem("Set Keybinding...")) {
                     m_keybindingPresetIndex = i;
                     m_showKeybindingModal = true;
