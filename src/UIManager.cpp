@@ -344,6 +344,7 @@ void UIManager::DrawShaderLibrary() {
             // Selectable name — single click activates, double-click opens keybinding modal
             if (ImGui::Selectable(preset->name.c_str(), isActive)) {
                 manager.SetActivePreset(i);
+                m_app.OnParamChanged();
                 m_editor.SetText(preset->source);
             }
             if (ImGui::IsItemHovered()) {
@@ -641,6 +642,7 @@ void UIManager::DrawNewShaderModal() {
                 m_app.GetShaderManager().LoadShaderFromSource(preset.name, preset.source, preset);
                 int idx = m_app.GetShaderManager().AddPreset(preset);
                 m_app.GetShaderManager().SetActivePreset(idx);
+                m_app.OnParamChanged();
                 m_editor.SetText(preset.source);
                 m_showNewShaderModal = false;
             }
