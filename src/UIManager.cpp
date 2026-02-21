@@ -342,6 +342,18 @@ void UIManager::DrawShaderLibrary() {
                 m_editor.SetText(preset->source);
             }
 
+            // Right-aligned [kb] button
+            {
+                float rowRight = ImGui::GetContentRegionAvail().x;
+                ImGui::SameLine(rowRight - 26.0f);
+                if (ImGui::SmallButton("kb")) {
+                    m_keybindingPresetIndex = i;
+                    m_showKeybindingModal = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Set keybinding for '%s'", preset->name.c_str());
+            }
+
             // Context menu
             if (ImGui::BeginPopupContextItem()) {
                 if (ImGui::MenuItem("Set Keybinding...")) {
