@@ -689,7 +689,7 @@ void UIManager::DrawKeybindingsPanel() {
                 if (preset->shortcutKey != 0)
                     label = m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers);
                 else
-                    label = "â";  // UTF-8 em dash
+                    label = "\xe2\x80\x94";  // UTF-8 em dash
 
                 if (ImGui::Selectable(label.c_str(), false,
                                       ImGuiSelectableFlags_SpanAllColumns)) {
