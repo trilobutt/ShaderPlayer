@@ -316,78 +316,79 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
     std::string jsonText = "{" + source.substr(startPos + openTag.size(),
                                                 endPos - startPos - openTag.size()) + "}";
 
-    nlohmann::json j;
-    try {
-        j = nlohmann::json::parse(jsonText);
-    } catch (...) {
-        return {};
-    }
-
-    if (!j.contains("INPUTS") || !j["INPUTS"].is_array()) return {};
-
     std::vector<ShaderParam> params;
     int offset = 0;  // Current float index into custom[16]
 
-    for (const auto& input : j["INPUTS"]) {
-        if (!input.contains("NAME") || !input.contains("TYPE")) continue;
+    try {
+        nlohmann::json j = nlohmann::json::parse(jsonText);
 
-        ShaderParam p;
-        p.name  = input["NAME"].get<std::string>();
-        p.label = input.value("LABEL", p.name);
+        if (!j.contains("INPUTS") || !j["INPUTS"].is_array()) return {};
 
-        std::string typeStr = input["TYPE"].get<std::string>();
-        if      (typeStr == "float")   p.type = ShaderParamType::Float;
-        else if (typeStr == "bool")    p.type = ShaderParamType::Bool;
-        else if (typeStr == "long")    p.type = ShaderParamType::Long;
-        else if (typeStr == "color")   p.type = ShaderParamType::Color;
-        else if (typeStr == "point2d") p.type = ShaderParamType::Point2D;
-        else if (typeStr == "event")   p.type = ShaderParamType::Event;
-        else continue;  // Unknown type; skip
+        for (const auto& input : j["INPUTS"]) {
+            if (!input.contains("NAME") || !input.contains("TYPE")) continue;
 
-        p.min  = input.value("MIN",  0.0f);
-        p.max  = input.value("MAX",  1.0f);
-        p.step = input.value("STEP", 0.01f);
+            ShaderParam p;
+            p.name  = input["NAME"].get<std::string>();
+            p.label = input.value("LABEL", p.name);
 
-        if (p.type == ShaderParamType::Long && input.contains("VALUES")) {
-            for (const auto& v : input["VALUES"])
-                p.longLabels.push_back(v.get<std::string>());
-        }
+            std::string typeStr = input["TYPE"].get<std::string>();
+            if      (typeStr == "float")   p.type = ShaderParamType::Float;
+            else if (typeStr == "bool")    p.type = ShaderParamType::Bool;
+            else if (typeStr == "long")    p.type = ShaderParamType::Long;
+            else if (typeStr == "color")   p.type = ShaderParamType::Color;
+            else if (typeStr == "point2d") p.type = ShaderParamType::Point2D;
+            else if (typeStr == "event")   p.type = ShaderParamType::Event;
+            else continue;  // Unknown type; skip
 
-        // Parse DEFAULT
-        if (input.contains("DEFAULT")) {
-            const auto& def = input["DEFAULT"];
-            if (def.is_array()) {
-                int n = std::min((int)def.size(), 4);
-                for (int i = 0; i < n; ++i)
-                    p.defaultValues[i] = def[i].get<float>();
-            } else if (def.is_boolean()) {
-                p.defaultValues[0] = def.get<bool>() ? 1.0f : 0.0f;
-            } else if (def.is_number()) {
-                p.defaultValues[0] = def.get<float>();
+            p.min  = input.value("MIN",  0.0f);
+            p.max  = input.value("MAX",  1.0f);
+            p.step = input.value("STEP", 0.01f);
+
+            if (p.type == ShaderParamType::Long && input.contains("VALUES")) {
+                for (const auto& v : input["VALUES"])
+                    p.longLabels.push_back(v.get<std::string>());
             }
+
+            // Parse DEFAULT
+            if (input.contains("DEFAULT")) {
+                const auto& def = input["DEFAULT"];
+                if (def.is_array()) {
+                    int n = std::min((int)def.size(), 4);
+                    for (int i = 0; i < n; ++i)
+                        p.defaultValues[i] = def[i].get<float>();
+                } else if (def.is_boolean()) {
+                    p.defaultValues[0] = def.get<bool>() ? 1.0f : 0.0f;
+                } else if (def.is_number()) {
+                    p.defaultValues[0] = def.get<float>();
+                }
+            }
+            std::copy(p.defaultValues, p.defaultValues + 4, p.values);
+
+            // Alignment: point2d→even, color→multiple of 4
+            if (p.type == ShaderParamType::Point2D) {
+                if (offset % 2 != 0) ++offset;
+            } else if (p.type == ShaderParamType::Color) {
+                while (offset % 4 != 0) ++offset;
+            }
+
+            // Size consumed
+            int size = 1;
+            if (p.type == ShaderParamType::Point2D) size = 2;
+            else if (p.type == ShaderParamType::Color) size = 4;
+
+            if (offset + size > 16) {
+                // Budget exhausted; remaining INPUTS are silently dropped.
+                // D3DCompile will report 'undeclared identifier' for any shader code
+                // that references a dropped param name.
+                break;
+            }
+
+            p.cbufferOffset = offset;
+            offset += size;
+            params.push_back(std::move(p));
         }
-        std::copy(p.defaultValues, p.defaultValues + 4, p.values);
-
-        // Alignment: point2d→even, color→multiple of 4
-        if (p.type == ShaderParamType::Point2D) {
-            if (offset % 2 != 0) ++offset;
-        } else if (p.type == ShaderParamType::Color) {
-            while (offset % 4 != 0) ++offset;
-        }
-
-        // Size consumed
-        int size = 1;
-        if (p.type == ShaderParamType::Point2D) size = 2;
-        else if (p.type == ShaderParamType::Color) size = 4;
-
-        if (offset + size > 16) {
-            // No room; stop processing further params
-            break;
-        }
-
-        p.cbufferOffset = offset;
-        offset += size;
-        params.push_back(std::move(p));
+    } catch (...) {
+        return {};
     }
 
     return params;

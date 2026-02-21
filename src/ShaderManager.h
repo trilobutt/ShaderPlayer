@@ -2,7 +2,6 @@
 
 #include "Common.h"
 #include "D3D11Renderer.h"
-#include <nlohmann/json.hpp>
 
 namespace SP {
 
