@@ -245,7 +245,8 @@ void ShaderManager::CheckForChanges() {
             // File changed, reload
             ShaderPreset updated;
             if (LoadShaderFromFile(filepath, updated)) {
-                // Preserve keybinding
+                // Preserve keybinding; note: param values reset to ISF defaults
+                // on hot-reload (UpdatePreset is a wholesale replace by design).
                 updated.shortcutKey = m_presets[i].shortcutKey;
                 updated.shortcutModifiers = m_presets[i].shortcutModifiers;
                 UpdatePreset(i, updated);
