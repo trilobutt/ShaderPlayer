@@ -348,6 +348,7 @@ void UIManager::DrawShaderLibrary() {
                 if (ImGui::SmallButton("kb")) {
                     m_keybindingPresetIndex = i;
                     m_showKeybindingModal = true;
+                    m_keybindingConflictMsg.clear();
                 }
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("Set keybinding for '%s'", preset->name.c_str());
@@ -358,6 +359,7 @@ void UIManager::DrawShaderLibrary() {
                 if (ImGui::MenuItem("Set Keybinding...")) {
                     m_keybindingPresetIndex = i;
                     m_showKeybindingModal = true;
+                    m_keybindingConflictMsg.clear();
                 }
                 if (ImGui::MenuItem("Remove")) {
                     manager.RemovePreset(i);
@@ -499,40 +501,128 @@ void UIManager::DrawNotifications() {
 
 void UIManager::DrawKeybindingModal() {
     ImGui::OpenPopup("Set Keybinding");
-    
-    if (ImGui::BeginPopupModal("Set Keybinding", &m_showKeybindingModal, ImGuiWindowFlags_AlwaysAutoResize)) {
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Set Keybinding", &m_showKeybindingModal,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
         auto* preset = m_app.GetShaderManager().GetPreset(m_keybindingPresetIndex);
-        if (preset) {
-            ImGui::Text("Press a key to bind to '%s'", preset->name.c_str());
-            ImGui::Text("Press Escape to cancel, Delete to clear");
-            
-            // Check for key press
-            for (int key = 0; key < 256; ++key) {
-                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
-                    if (key == VK_ESCAPE) {
-                        m_showKeybindingModal = false;
-                    } else if (key == VK_DELETE) {
-                        preset->shortcutKey = 0;
-                        preset->shortcutModifiers = 0;
-                        m_showKeybindingModal = false;
-                    } else if (key >= 'A' && key <= 'Z' || key >= '0' && key <= '9' || 
-                               key >= VK_F1 && key <= VK_F12) {
-                        preset->shortcutKey = key;
-                        preset->shortcutModifiers = 0;
-                        if (GetKeyState(VK_CONTROL) & 0x8000) preset->shortcutModifiers |= MOD_CONTROL;
-                        if (GetKeyState(VK_SHIFT) & 0x8000) preset->shortcutModifiers |= MOD_SHIFT;
-                        if (GetKeyState(VK_MENU) & 0x8000) preset->shortcutModifiers |= MOD_ALT;
-                        m_showKeybindingModal = false;
-                        m_app.SaveConfig();
-                    }
-                }
+        if (!preset) {
+            m_showKeybindingModal = false;
+            ImGui::EndPopup();
+            return;
+        }
+
+        ImGui::Text("Setting keybinding for: %s", preset->name.c_str());
+        ImGui::Separator();
+        ImGui::TextDisabled("Hold modifiers and press a key   |   Esc = cancel   |   Del = clear");
+        ImGui::Spacing();
+
+        // --- Live preview ---
+        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+
+        // Detect the trigger key (first valid non-modifier key that is physically down)
+        int triggerKey = 0;
+        for (int k = 0; k < 256; ++k) {
+            if (k == VK_CONTROL || k == VK_SHIFT || k == VK_MENU ||
+                k == VK_LCONTROL || k == VK_RCONTROL ||
+                k == VK_LSHIFT   || k == VK_RSHIFT   ||
+                k == VK_LMENU    || k == VK_RMENU)
+                continue;
+            if (!(GetKeyState(k) & 0x8000)) continue;
+            if ((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9') ||
+                (k >= VK_F1 && k <= VK_F12)) {
+                triggerKey = k;
+                break;
             }
         }
-        
+
+        // Display live preview line
+        if (triggerKey != 0 || ctrl || shift || alt) {
+            std::string preview;
+            if (ctrl)       preview += "Ctrl+";
+            if (alt)        preview += "Alt+";
+            if (shift)      preview += "Shift+";
+            if (triggerKey) preview += m_app.GetKeyName(triggerKey);
+            else            preview += "...";
+
+            if (!m_keybindingConflictMsg.empty())
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", preview.c_str());
+            else
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s", preview.c_str());
+        } else {
+            ImGui::TextDisabled("â");  // UTF-8 em dash
+        }
+
+        // Conflict warning
+        if (!m_keybindingConflictMsg.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+                               m_keybindingConflictMsg.c_str());
+        }
+
+        ImGui::Spacing();
+
+        // --- Key press handling (react on first-press frame only) ---
+        for (int k = 1; k < 256; ++k) {
+            if (!ImGui::IsKeyPressed(static_cast<ImGuiKey>(k))) continue;
+
+            if (k == VK_ESCAPE) {
+                m_keybindingConflictMsg.clear();
+                m_showKeybindingModal = false;
+                break;
+            }
+
+            if (k == VK_DELETE) {
+                preset->shortcutKey = 0;
+                preset->shortcutModifiers = 0;
+                m_keybindingConflictMsg.clear();
+                m_showKeybindingModal = false;
+                m_app.SaveConfig();
+                break;
+            }
+
+            // Skip modifier-only keys
+            if (k == VK_CONTROL || k == VK_SHIFT || k == VK_MENU ||
+                k == VK_LCONTROL || k == VK_RCONTROL ||
+                k == VK_LSHIFT   || k == VK_RSHIFT   ||
+                k == VK_LMENU    || k == VK_RMENU)
+                continue;
+
+            // Accept only A-Z, 0-9, F1-F12
+            if (!((k >= 'A' && k <= 'Z') || (k >= '0' && k <= '9') ||
+                  (k >= VK_F1 && k <= VK_F12)))
+                continue;
+
+            int mods = 0;
+            if (ctrl)  mods |= MOD_CONTROL;
+            if (alt)   mods |= MOD_ALT;
+            if (shift) mods |= MOD_SHIFT;
+
+            // Duplicate check
+            int conflict = m_app.IsBindingConflict(k, mods, m_keybindingPresetIndex);
+            if (conflict >= 0) {
+                const ShaderPreset* other = m_app.GetShaderManager().GetPreset(conflict);
+                std::string otherName = other ? other->name : "another shader";
+                m_keybindingConflictMsg = "Already bound to \"" + otherName +
+                                          "\" â choose a different key.";
+                break;
+            }
+
+            // Commit
+            preset->shortcutKey = k;
+            preset->shortcutModifiers = mods;
+            m_keybindingConflictMsg.clear();
+            m_showKeybindingModal = false;
+            m_app.SaveConfig();
+            break;
+        }
+
         ImGui::EndPopup();
     }
 }
-
 void UIManager::DrawNewShaderModal() {
     ImGui::OpenPopup("New Shader");
     

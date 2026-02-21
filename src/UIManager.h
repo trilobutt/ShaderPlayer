@@ -62,6 +62,7 @@ private:
     bool m_showKeybindingModal = false;
     bool m_showNewShaderModal = false;
     int m_keybindingPresetIndex = -1;
+    std::string m_keybindingConflictMsg;
     
     // Editor
     TextEditor m_editor;
