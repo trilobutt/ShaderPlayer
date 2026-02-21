@@ -39,12 +39,21 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     }
 
     // Load shader presets from config
-    for (auto& preset : m_configManager.GetConfig().shaderPresets) {
-        if (!preset.filepath.empty()) {
+    for (auto& configPreset : m_configManager.GetConfig().shaderPresets) {
+        if (!configPreset.filepath.empty()) {
             ShaderPreset loadedPreset;
-            if (m_shaderManager->LoadShaderFromFile(preset.filepath, loadedPreset)) {
-                loadedPreset.shortcutKey = preset.shortcutKey;
-                loadedPreset.shortcutModifiers = preset.shortcutModifiers;
+            if (m_shaderManager->LoadShaderFromFile(configPreset.filepath, loadedPreset)) {
+                loadedPreset.shortcutKey       = configPreset.shortcutKey;
+                loadedPreset.shortcutModifiers = configPreset.shortcutModifiers;
+                // Restore saved param values by name
+                for (auto& param : loadedPreset.params) {
+                    auto it = configPreset.savedParamValues.find(param.name);
+                    if (it != configPreset.savedParamValues.end()) {
+                        const auto& vals = it->second;
+                        for (int i = 0; i < 4 && i < static_cast<int>(vals.size()); ++i)
+                            param.values[i] = vals[i];
+                    }
+                }
                 m_shaderManager->AddPreset(loadedPreset);
             }
         }

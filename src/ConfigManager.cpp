@@ -6,18 +6,40 @@ namespace SP {
 // JSON serialization implementations
 void to_json(nlohmann::json& j, const ShaderPreset& p) {
     j = nlohmann::json{
-        {"name", p.name},
-        {"filepath", p.filepath},
-        {"shortcutKey", p.shortcutKey},
+        {"name",              p.name},
+        {"filepath",          p.filepath},
+        {"shortcutKey",       p.shortcutKey},
         {"shortcutModifiers", p.shortcutModifiers}
     };
+    // Save current param values keyed by name
+    if (!p.params.empty()) {
+        nlohmann::json paramVals = nlohmann::json::object();
+        for (const auto& param : p.params) {
+            nlohmann::json vals = nlohmann::json::array();
+            int count = 1;
+            if (param.type == ShaderParamType::Point2D) count = 2;
+            else if (param.type == ShaderParamType::Color) count = 4;
+            for (int i = 0; i < count; ++i) vals.push_back(param.values[i]);
+            paramVals[param.name] = vals;
+        }
+        j["paramValues"] = paramVals;
+    }
 }
 
 void from_json(const nlohmann::json& j, ShaderPreset& p) {
-    if (j.contains("name")) j.at("name").get_to(p.name);
-    if (j.contains("filepath")) j.at("filepath").get_to(p.filepath);
-    if (j.contains("shortcutKey")) j.at("shortcutKey").get_to(p.shortcutKey);
+    if (j.contains("name"))              j.at("name").get_to(p.name);
+    if (j.contains("filepath"))          j.at("filepath").get_to(p.filepath);
+    if (j.contains("shortcutKey"))       j.at("shortcutKey").get_to(p.shortcutKey);
     if (j.contains("shortcutModifiers")) j.at("shortcutModifiers").get_to(p.shortcutModifiers);
+    if (j.contains("paramValues") && j["paramValues"].is_object()) {
+        for (auto& [name, vals] : j["paramValues"].items()) {
+            std::vector<float> v;
+            if (vals.is_array()) {
+                for (const auto& f : vals) v.push_back(f.get<float>());
+            }
+            p.savedParamValues[name] = std::move(v);
+        }
+    }
 }
 
 void to_json(nlohmann::json& j, const RecordingSettings& r) {
