@@ -245,6 +245,13 @@ Project created for ABL Films post-production workflows.
 ## ShaderManager API
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
+- `SetActivePreset` is called in **both** `Application.cpp` and `UIManager.cpp` — after any new call-site, always add `OnParamChanged()` (Application) or `m_app.OnParamChanged()` (UIManager)
+
+## C++ / Dependency Gotchas
+
+- `nlohmann/json.hpp` is ~25,000 lines — include it only in `.cpp` files, never in headers
+- nlohmann/json `try/catch` must wrap the full processing loop, not just `json::parse` — `get<>()` and `value()` throw `type_error` on type mismatches
+- HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.)
 
 ## Shader Parameter System
 
