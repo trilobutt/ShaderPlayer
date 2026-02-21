@@ -357,7 +357,8 @@ void UIManager::DrawShaderLibrary() {
             // Show keybinding
             if (preset->shortcutKey != 0) {
                 ImGui::SameLine();
-                ImGui::TextDisabled("[%s]", m_app.GetKeyName(preset->shortcutKey).c_str());
+                ImGui::TextDisabled("[%s]",
+                    m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers).c_str());
             }
 
             ImGui::PopID();
