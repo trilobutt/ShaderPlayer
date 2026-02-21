@@ -65,6 +65,13 @@ public:
     // Key name helper
     std::string GetKeyName(int vkCode) const;
 
+    // Returns a human-readable combo string, e.g. "Ctrl+Shift+F1"
+    std::string GetComboName(int vkCode, int modifiers) const;
+
+    // Returns the index of any preset that already uses this combo,
+    // excluding `excludeIndex` (-1 to check all). Returns -1 if free.
+    int IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const;
+
 private:
     // Window handling
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

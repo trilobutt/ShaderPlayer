@@ -606,4 +606,26 @@ std::string Application::GetKeyName(int vkCode) const {
     return "Key" + std::to_string(vkCode);
 }
 
+
+std::string Application::GetComboName(int vkCode, int modifiers) const {
+    std::string result;
+    if (modifiers & MOD_CONTROL) result += "Ctrl+";
+    if (modifiers & MOD_ALT)     result += "Alt+";
+    if (modifiers & MOD_SHIFT)   result += "Shift+";
+    result += GetKeyName(vkCode);
+    return result;
+}
+
+int Application::IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const {
+    const int count = m_shaderManager->GetPresetCount();
+    for (int i = 0; i < count; ++i) {
+        if (i == excludeIndex) continue;
+        const ShaderPreset* p = m_shaderManager->GetPreset(i);
+        if (!p || p->shortcutKey == 0) continue;
+        if (p->shortcutKey == vkCode && p->shortcutModifiers == modifiers)
+            return i;
+    }
+    return -1;
+}
+
 } // namespace SP
