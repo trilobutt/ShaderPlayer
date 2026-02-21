@@ -514,6 +514,18 @@ void UIManager::DrawKeybindingModal() {
             return;
         }
 
+        // Edge-detection state - reset each time the modal (re)opens
+        static bool s_wasOpen     = false;
+        static int  s_prevTrigger = 0;
+        static bool s_prevEsc     = false;
+        static bool s_prevDel     = false;
+        if (!s_wasOpen) {
+            s_prevTrigger = 0;
+            s_prevEsc     = false;
+            s_prevDel     = false;
+            s_wasOpen     = true;
+        }
+
         ImGui::Text("Setting keybinding for: %s", preset->name.c_str());
         ImGui::Separator();
         ImGui::TextDisabled("Hold modifiers and press a key   |   Esc = cancel   |   Del = clear");
@@ -524,7 +536,6 @@ void UIManager::DrawKeybindingModal() {
         bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
         bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
 
-        // Detect the trigger key (first valid non-modifier key that is physically down)
         int triggerKey = 0;
         for (int k = 0; k < 256; ++k) {
             if (k == VK_CONTROL || k == VK_SHIFT || k == VK_MENU ||
@@ -540,6 +551,10 @@ void UIManager::DrawKeybindingModal() {
             }
         }
 
+        // Clear stale conflict message when the trigger key changes
+        if (triggerKey != s_prevTrigger)
+            m_keybindingConflictMsg.clear();
+
         // Display live preview line
         if (triggerKey != 0 || ctrl || shift || alt) {
             std::string preview;
@@ -554,10 +569,9 @@ void UIManager::DrawKeybindingModal() {
             else
                 ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s", preview.c_str());
         } else {
-            ImGui::TextDisabled("â");  // UTF-8 em dash
+            ImGui::TextDisabled("\xe2\x80\x94");
         }
 
-        // Conflict warning
         if (!m_keybindingConflictMsg.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
                                m_keybindingConflictMsg.c_str());
@@ -566,26 +580,21 @@ void UIManager::DrawKeybindingModal() {
         ImGui::Spacing();
 
         // --- Key press handling ---
-        // Use GetKeyState consistently (ImGuiKey != VK codes since ImGui 1.87).
-        // Detect edges by comparing against previous frame state.
-        static int  s_prevTrigger = 0;
-        static bool s_prevEsc     = false;
-        static bool s_prevDel     = false;
-
         bool escDown = (GetKeyState(VK_ESCAPE) & 0x8000) != 0;
         bool delDown = (GetKeyState(VK_DELETE) & 0x8000) != 0;
 
         if (escDown && !s_prevEsc) {
             m_keybindingConflictMsg.clear();
             m_showKeybindingModal = false;
+            s_wasOpen = false;
         } else if (delDown && !s_prevDel) {
             preset->shortcutKey       = 0;
             preset->shortcutModifiers = 0;
             m_keybindingConflictMsg.clear();
             m_showKeybindingModal = false;
             m_app.SaveConfig();
+            s_wasOpen = false;
         } else if (triggerKey != 0 && triggerKey != s_prevTrigger) {
-            // New trigger key pressed this frame
             int mods = 0;
             if (ctrl)  mods |= MOD_CONTROL;
             if (alt)   mods |= MOD_ALT;
@@ -596,20 +605,20 @@ void UIManager::DrawKeybindingModal() {
                 const ShaderPreset* other = m_app.GetShaderManager().GetPreset(conflict);
                 std::string otherName = other ? other->name : "another shader";
                 m_keybindingConflictMsg = "Already bound to \"" + otherName +
-                                          "\" â choose a different key.";
-            } else {
+                                          "\" \xe2\x80\x94 choose a different key.";
+                                          "\" \xe2\x80\x94 choose a different key.";
                 preset->shortcutKey       = triggerKey;
                 preset->shortcutModifiers = mods;
                 m_keybindingConflictMsg.clear();
                 m_showKeybindingModal = false;
                 m_app.SaveConfig();
+                s_wasOpen = false;
             }
         }
 
         s_prevTrigger = triggerKey;
         s_prevEsc     = escDown;
         s_prevDel     = delDown;
-
 
         ImGui::EndPopup();
     }
