@@ -617,12 +617,14 @@ std::string Application::GetComboName(int vkCode, int modifiers) const {
 }
 
 int Application::IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const {
-    const int count = m_shaderManager->GetPresetCount();
+    if (vkCode == 0) return -1;
+    const auto& presets = m_shaderManager->GetPresets();
+    const int count = static_cast<int>(presets.size());
     for (int i = 0; i < count; ++i) {
         if (i == excludeIndex) continue;
-        const ShaderPreset* p = m_shaderManager->GetPreset(i);
-        if (!p || p->shortcutKey == 0) continue;
-        if (p->shortcutKey == vkCode && p->shortcutModifiers == modifiers)
+        const ShaderPreset& p = presets[i];
+        if (p.shortcutKey == 0) continue;
+        if (p.shortcutKey == vkCode && p.shortcutModifiers == modifiers)
             return i;
     }
     return -1;
