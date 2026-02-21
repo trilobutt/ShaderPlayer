@@ -245,3 +245,49 @@ Project created for ABL Films post-production workflows.
 ## ShaderManager API
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
+
+## Shader Parameter System
+
+See `docs/shader-parameter-guide.md` for the author-facing reference. Technical notes for development:
+
+### ISF JSON Block Parsing
+
+`ShaderManager::ParseISFParams(const std::string& source)` extracts parameter metadata:
+1. Find first `/*{` in source; extract up to matching `}*/`.
+2. Parse body with nlohmann/json; silent failure returns empty vector (no crash, no compile failure).
+3. Iterate `"INPUTS"` array; construct `ShaderParam` per entry with `cbufferOffset` assigned sequentially.
+4. Called from `CompilePreset` and `RecompilePreset` before `D3DCompile` — updates `preset.params`.
+
+The ISF block is **not stripped** — HLSL ignores block comments. No source modification required.
+
+### #define Alias Generation
+
+After parsing, a `#define` preamble is prepended to the source passed to `D3DCompile`. Mapping:
+- float offset `N` → array index `N/4`, component `"xyzw"[N%4]`
+- `float`/`event`: `#define Name custom[idx].comp`
+- `bool`: `#define Name (custom[idx].comp > 0.5)`
+- `long`: `#define Name int(custom[idx].comp)`
+- `point2d` (2 floats, even-aligned): `#define Name float2(custom[idx].ab, custom[idx].cd)`
+- `color` (4 floats, 4-aligned): `#define Name custom[idx]`
+
+The original source on disk is never modified.
+
+### Cbuffer Packing Rules
+
+Parameters packed into `custom[16]` (= `float4 custom[4]`) sequentially:
+- `float`, `bool`, `long`, `event`: 1 float, no alignment
+- `point2d`: 2 floats, aligned to next even offset
+- `color`: 4 floats, aligned to next multiple-of-4 offset
+
+Parameters exceeding 16 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
+
+### Value Storage and GPU Upload
+
+- `ShaderParam::values[4]` holds current values; `defaultValues[4]` holds parsed defaults.
+- On any widget change: `Application::OnParamChanged()` packs all `params` into a `float[16]` scratch buffer at their `cbufferOffset`s, then calls `D3D11Renderer::SetCustomUniforms`. Effect visible on next `BeginFrame`.
+- `event` type: set `values[0] = 1.0f` on button press; a one-frame flag in `Application` zeros it after the next `RenderFrame` submission.
+- No per-frame CPU cost — `SetCustomUniforms` called only on user interaction and on shader activation.
+
+### Persistence
+
+`ConfigManager` serialises only `ShaderParam::values` (not metadata) to `config.json`. On load, parsed params matched by `name` to restore saved values; unmatched params use `defaultValues`.
