@@ -384,8 +384,9 @@ void UIManager::DrawShaderParameters() {
             ImVec2 padEnd(padPos.x + padSize.x, padPos.y + padSize.y);
             draw->AddRectFilled(padPos, padEnd, IM_COL32(40, 40, 40, 255));
             draw->AddRect(padPos, padEnd, IM_COL32(100, 100, 100, 255));
-            float dotX = padPos.x + (p.values[0] - p.min) / (p.max - p.min + 1e-6f) * padSize.x;
-            float dotY = padPos.y + (p.values[1] - p.min) / (p.max - p.min + 1e-6f) * padSize.y;
+            float range = p.max - p.min;
+            float dotX  = padPos.x + (range > 1e-6f ? (p.values[0] - p.min) / range : 0.0f) * padSize.x;
+            float dotY  = padPos.y + (range > 1e-6f ? (p.values[1] - p.min) / range : 0.0f) * padSize.y;
             draw->AddCircleFilled(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 200, 50, 255));
             draw->AddCircle(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 255, 255, 180));
             break;
