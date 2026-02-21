@@ -231,3 +231,17 @@ To add a new shader:
 ## Contact
 
 Project created for ABL Films post-production workflows.
+
+## Build
+
+- `cmake --build build --config Release` — no automated test suite; build success + manual smoke test is the verification
+
+## ImGui Notes
+
+- `ImGuiKey` is not 1:1 with Win32 VK codes (broken since ImGui 1.87) — use `GetKeyState(VK_*)` for key state in modal/input code
+- `ImGui::SameLine(x)` takes absolute offset from window left — use `GetContentRegionMax().x` for right-alignment, not `GetContentRegionAvail().x`
+- Static locals in modal draw functions persist across sessions; use an `s_wasOpen` bool sentinel to reset edge-detection state when a modal reopens
+
+## ShaderManager API
+
+- `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
