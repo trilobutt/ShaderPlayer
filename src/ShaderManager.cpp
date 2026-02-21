@@ -118,7 +118,10 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
     std::string error;
     
     if (m_presets.back().isValid || !m_presets.back().source.empty()) {
-        // Only parse if params not already set (e.g. by a prior CompilePreset call)
+        // Only parse if params not already set. During startup, Application::Initialize
+        // calls LoadShaderFromFile (which runs CompilePreset, populating params with
+        // ISF defaults), then patches param.values from savedParamValues, then calls
+        // AddPreset. Skipping re-parse here preserves those restored user values.
         if (m_presets.back().params.empty()) {
             m_presets.back().params = ParseISFParams(m_presets.back().source);
         }
