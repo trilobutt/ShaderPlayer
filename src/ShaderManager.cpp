@@ -1,4 +1,5 @@
 #include "ShaderManager.h"
+#include <array>
 #include <fstream>
 #include <sstream>
 #include <nlohmann/json.hpp>
@@ -42,25 +43,33 @@ bool ShaderManager::LoadShaderFromSource(const std::string& name, const std::str
 }
 
 bool ShaderManager::CompilePreset(ShaderPreset& preset) {
+    // Preserve existing param values by name before re-parse
+    std::unordered_map<std::string, std::array<float, 4>> saved;
+    for (const auto& p : preset.params)
+        saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
+
+    preset.params = ParseISFParams(preset.source);
+
+    for (auto& p : preset.params) {
+        auto it = saved.find(p.name);
+        if (it != saved.end())
+            std::copy(it->second.begin(), it->second.end(), p.values);
+    }
+
+    std::string preamble = BuildDefinesPreamble(preset.params);
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
 
-    if (m_renderer.CompilePixelShader(preset.source, shader, error)) {
+    if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
         preset.isValid = true;
         preset.compileError.clear();
 
-        // Find or add to compiled shaders
         int presetIndex = -1;
         for (int i = 0; i < static_cast<int>(m_presets.size()); ++i) {
-            if (&m_presets[i] == &preset) {
-                presetIndex = i;
-                break;
-            }
+            if (&m_presets[i] == &preset) { presetIndex = i; break; }
         }
-
-        if (presetIndex >= 0 && presetIndex < static_cast<int>(m_compiledShaders.size())) {
+        if (presetIndex >= 0 && presetIndex < static_cast<int>(m_compiledShaders.size()))
             m_compiledShaders[presetIndex] = shader;
-        }
 
         return true;
     } else {
@@ -73,10 +82,23 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
 bool ShaderManager::RecompilePreset(int index) {
     if (index < 0 || index >= static_cast<int>(m_presets.size())) return false;
 
+    std::unordered_map<std::string, std::array<float, 4>> saved;
+    for (const auto& p : m_presets[index].params)
+        saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
+
+    m_presets[index].params = ParseISFParams(m_presets[index].source);
+
+    for (auto& p : m_presets[index].params) {
+        auto it = saved.find(p.name);
+        if (it != saved.end())
+            std::copy(it->second.begin(), it->second.end(), p.values);
+    }
+
+    std::string preamble = BuildDefinesPreamble(m_presets[index].params);
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
 
-    if (m_renderer.CompilePixelShader(m_presets[index].source, shader, error)) {
+    if (m_renderer.CompilePixelShader(preamble + m_presets[index].source, shader, error)) {
         m_presets[index].isValid = true;
         m_presets[index].compileError.clear();
         m_compiledShaders[index] = shader;
@@ -96,7 +118,12 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
     std::string error;
     
     if (m_presets.back().isValid || !m_presets.back().source.empty()) {
-        m_renderer.CompilePixelShader(m_presets.back().source, shader, error);
+        // Only parse if params not already set (e.g. by a prior CompilePreset call)
+        if (m_presets.back().params.empty()) {
+            m_presets.back().params = ParseISFParams(m_presets.back().source);
+        }
+        std::string preamble = BuildDefinesPreamble(m_presets.back().params);
+        m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error);
         if (!error.empty()) {
             m_presets.back().isValid = false;
             m_presets.back().compileError = error;
@@ -142,7 +169,10 @@ void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
     
-    if (m_renderer.CompilePixelShader(preset.source, shader, error)) {
+    m_presets[index].params = ParseISFParams(preset.source);
+    std::string preamble = BuildDefinesPreamble(m_presets[index].params);
+
+    if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
         m_presets[index].isValid = true;
         m_presets[index].compileError.clear();
         m_compiledShaders[index] = shader;
