@@ -57,6 +57,7 @@ private:
     void DrawKeybindingModal();
     void DrawNewShaderModal();
     void DrawKeybindingsPanel();
+    void DrawShaderParameters();
 
     Application& m_app;
     

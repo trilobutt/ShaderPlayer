@@ -2,6 +2,8 @@
 #include "Application.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
+#include <algorithm>
+#include <cmath>
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -296,10 +298,123 @@ void UIManager::DrawShaderEditor() {
             m_editorNeedsCompile = true;
             m_compileTimer = 0.0f;
         }
-        
+
         m_editorWidth = ImGui::GetWindowWidth();
+
+        DrawShaderParameters();
     }
     ImGui::End();
+}
+
+void UIManager::DrawShaderParameters() {
+    ShaderPreset* preset = m_app.GetShaderManager().GetActivePreset();
+    if (!preset || preset->params.empty()) return;
+
+    ImGui::Separator();
+    if (!ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen)) return;
+
+    bool anyChanged = false;
+
+    for (auto& p : preset->params) {
+        ImGui::PushID(p.name.c_str());
+
+        switch (p.type) {
+
+        case ShaderParamType::Float: {
+            float v = p.values[0];
+            if (ImGui::SliderFloat(p.label.c_str(), &v, p.min, p.max)) {
+                // Snap to step
+                if (p.step > 0.0f) v = std::round(v / p.step) * p.step;
+                p.values[0] = v;
+                anyChanged = true;
+            }
+            break;
+        }
+
+        case ShaderParamType::Bool: {
+            bool b = p.values[0] > 0.5f;
+            if (ImGui::Checkbox(p.label.c_str(), &b)) {
+                p.values[0] = b ? 1.0f : 0.0f;
+                anyChanged = true;
+            }
+            break;
+        }
+
+        case ShaderParamType::Long: {
+            int idx = static_cast<int>(p.values[0]);
+            // Build null-separated string for ImGui::Combo
+            std::string items;
+            for (const auto& lbl : p.longLabels) { items += lbl; items += '\0'; }
+            items += '\0';
+            if (ImGui::Combo(p.label.c_str(), &idx, items.c_str())) {
+                p.values[0] = static_cast<float>(idx);
+                anyChanged = true;
+            }
+            break;
+        }
+
+        case ShaderParamType::Color: {
+            if (ImGui::ColorEdit4(p.label.c_str(), p.values)) {
+                anyChanged = true;
+            }
+            break;
+        }
+
+        case ShaderParamType::Point2D: {
+            // Label on its own line
+            ImGui::Text("%s", p.label.c_str());
+
+            ImVec2 padSize(120.0f, 120.0f);
+            ImVec2 padPos = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##pad", padSize);
+
+            if (ImGui::IsItemActive()) {
+                ImVec2 mouse = ImGui::GetMousePos();
+                float nx = (mouse.x - padPos.x) / padSize.x;
+                float ny = (mouse.y - padPos.y) / padSize.y;
+                nx = std::clamp(nx, 0.0f, 1.0f);
+                ny = std::clamp(ny, 0.0f, 1.0f);
+                p.values[0] = p.min + nx * (p.max - p.min);
+                p.values[1] = p.min + ny * (p.max - p.min);
+                anyChanged = true;
+            }
+
+            // Draw pad background and dot
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            ImVec2 padEnd(padPos.x + padSize.x, padPos.y + padSize.y);
+            draw->AddRectFilled(padPos, padEnd, IM_COL32(40, 40, 40, 255));
+            draw->AddRect(padPos, padEnd, IM_COL32(100, 100, 100, 255));
+            float dotX = padPos.x + (p.values[0] - p.min) / (p.max - p.min + 1e-6f) * padSize.x;
+            float dotY = padPos.y + (p.values[1] - p.min) / (p.max - p.min + 1e-6f) * padSize.y;
+            draw->AddCircleFilled(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 200, 50, 255));
+            draw->AddCircle(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 255, 255, 180));
+            break;
+        }
+
+        case ShaderParamType::Event: {
+            if (ImGui::Button(p.label.c_str())) {
+                p.values[0] = 1.0f;
+                anyChanged = true;
+            }
+            break;
+        }
+
+        } // switch
+
+        ImGui::PopID();
+    }
+
+    // Reset to defaults button
+    ImGui::Spacing();
+    if (ImGui::SmallButton("Reset to defaults")) {
+        for (auto& p : preset->params)
+            std::copy(p.defaultValues, p.defaultValues + 4, p.values);
+        anyChanged = true;
+    }
+
+    if (anyChanged) {
+        m_app.OnParamChanged();
+    }
 }
 
 void UIManager::DrawShaderLibrary() {
