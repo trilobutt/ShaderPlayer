@@ -2,6 +2,7 @@
 
 #include "Common.h"
 #include "D3D11Renderer.h"
+#include <nlohmann/json.hpp>
 
 namespace SP {
 
@@ -58,6 +59,9 @@ private:
     // File watching
     bool m_fileWatchingEnabled = false;
     std::unordered_map<std::string, std::filesystem::file_time_type> m_fileTimestamps;
+
+    static std::vector<ShaderParam> ParseISFParams(const std::string& source);
+    static std::string BuildDefinesPreamble(const std::vector<ShaderParam>& params);
 };
 
 } // namespace SP

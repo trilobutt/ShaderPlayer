@@ -1,6 +1,7 @@
 #include "ShaderManager.h"
 #include <fstream>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 namespace SP {
 
@@ -298,6 +299,134 @@ float4 main(PS_INPUT input) : SV_TARGET {
     return color;
 }
 )";
+}
+
+std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source) {
+    // Find the ISF block: /*{ ... }*/
+    const std::string openTag  = "/*{";
+    const std::string closeTag = "}*/";
+
+    auto startPos = source.find(openTag);
+    if (startPos == std::string::npos) return {};
+
+    auto endPos = source.find(closeTag, startPos);
+    if (endPos == std::string::npos) return {};
+
+    // Extract just the JSON object (include the braces)
+    std::string jsonText = "{" + source.substr(startPos + openTag.size(),
+                                                endPos - startPos - openTag.size()) + "}";
+
+    nlohmann::json j;
+    try {
+        j = nlohmann::json::parse(jsonText);
+    } catch (...) {
+        return {};
+    }
+
+    if (!j.contains("INPUTS") || !j["INPUTS"].is_array()) return {};
+
+    std::vector<ShaderParam> params;
+    int offset = 0;  // Current float index into custom[16]
+
+    for (const auto& input : j["INPUTS"]) {
+        if (!input.contains("NAME") || !input.contains("TYPE")) continue;
+
+        ShaderParam p;
+        p.name  = input["NAME"].get<std::string>();
+        p.label = input.value("LABEL", p.name);
+
+        std::string typeStr = input["TYPE"].get<std::string>();
+        if      (typeStr == "float")   p.type = ShaderParamType::Float;
+        else if (typeStr == "bool")    p.type = ShaderParamType::Bool;
+        else if (typeStr == "long")    p.type = ShaderParamType::Long;
+        else if (typeStr == "color")   p.type = ShaderParamType::Color;
+        else if (typeStr == "point2d") p.type = ShaderParamType::Point2D;
+        else if (typeStr == "event")   p.type = ShaderParamType::Event;
+        else continue;  // Unknown type; skip
+
+        p.min  = input.value("MIN",  0.0f);
+        p.max  = input.value("MAX",  1.0f);
+        p.step = input.value("STEP", 0.01f);
+
+        if (p.type == ShaderParamType::Long && input.contains("VALUES")) {
+            for (const auto& v : input["VALUES"])
+                p.longLabels.push_back(v.get<std::string>());
+        }
+
+        // Parse DEFAULT
+        if (input.contains("DEFAULT")) {
+            const auto& def = input["DEFAULT"];
+            if (def.is_array()) {
+                int n = std::min((int)def.size(), 4);
+                for (int i = 0; i < n; ++i)
+                    p.defaultValues[i] = def[i].get<float>();
+            } else if (def.is_boolean()) {
+                p.defaultValues[0] = def.get<bool>() ? 1.0f : 0.0f;
+            } else if (def.is_number()) {
+                p.defaultValues[0] = def.get<float>();
+            }
+        }
+        std::copy(p.defaultValues, p.defaultValues + 4, p.values);
+
+        // Alignment: point2d→even, color→multiple of 4
+        if (p.type == ShaderParamType::Point2D) {
+            if (offset % 2 != 0) ++offset;
+        } else if (p.type == ShaderParamType::Color) {
+            while (offset % 4 != 0) ++offset;
+        }
+
+        // Size consumed
+        int size = 1;
+        if (p.type == ShaderParamType::Point2D) size = 2;
+        else if (p.type == ShaderParamType::Color) size = 4;
+
+        if (offset + size > 16) {
+            // No room; stop processing further params
+            break;
+        }
+
+        p.cbufferOffset = offset;
+        offset += size;
+        params.push_back(std::move(p));
+    }
+
+    return params;
+}
+
+std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& params) {
+    static constexpr char comp[] = "xyzw";
+    std::string preamble;
+
+    for (const auto& p : params) {
+        if (p.cbufferOffset >= 16) continue;
+        int idx  = p.cbufferOffset / 4;
+        int c    = p.cbufferOffset % 4;
+        std::string slot = "custom[" + std::to_string(idx) + "].";
+
+        switch (p.type) {
+        case ShaderParamType::Float:
+        case ShaderParamType::Event:
+            preamble += "#define " + p.name + " " + slot + comp[c] + "\n";
+            break;
+        case ShaderParamType::Bool:
+            preamble += "#define " + p.name + " (" + slot + comp[c] + " > 0.5)\n";
+            break;
+        case ShaderParamType::Long:
+            preamble += "#define " + p.name + " int(" + slot + comp[c] + ")\n";
+            break;
+        case ShaderParamType::Point2D:
+            // point2d is even-aligned, so c is always 0 or 2 — both comp[c+1] are in-range
+            preamble += "#define " + p.name + " float2(" + slot + comp[c] +
+                        ", " + slot + comp[c + 1] + ")\n";
+            break;
+        case ShaderParamType::Color:
+            // color is 4-aligned, so c==0 always
+            preamble += "#define " + p.name + " custom[" + std::to_string(idx) + "]\n";
+            break;
+        }
+    }
+
+    return preamble;
 }
 
 } // namespace SP
