@@ -38,6 +38,22 @@ class VideoEncoder;
 class UIManager;
 class ConfigManager;
 
+enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event };
+
+struct ShaderParam {
+    std::string name;               // HLSL identifier; used for #define alias
+    std::string label;              // ImGui display label (defaults to name)
+    ShaderParamType type = ShaderParamType::Float;
+    float values[4]        = {};    // Current values: float/bool/long/event→[0],
+                                    //   color→RGBA, point2d→XY
+    float defaultValues[4] = {};    // Restored on "Reset to defaults"
+    float min  = 0.0f;
+    float max  = 1.0f;
+    float step = 0.01f;
+    std::vector<std::string> longLabels; // Dropdown labels for type=Long
+    int cbufferOffset = 0;          // Float index into custom[16]; set at parse time
+};
+
 // Frame data structure
 struct VideoFrame {
     std::vector<uint8_t> data[4];  // Plane data (Y, U, V, or RGB)
@@ -58,6 +74,10 @@ struct ShaderPreset {
     int shortcutModifiers = 0;  // MOD_CONTROL, MOD_SHIFT, etc.
     bool isValid = false;
     std::string compileError;
+    std::vector<ShaderParam> params;
+    // Persistence bridge: saved values keyed by param name, restored after re-parse.
+    // Format: { "PixelSize": [8.0], "Tint": [1.0, 0.8, 0.6, 1.0] }
+    std::unordered_map<std::string, std::vector<float>> savedParamValues;
 };
 
 // Recording settings
