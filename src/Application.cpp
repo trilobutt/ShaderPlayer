@@ -77,6 +77,9 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
 
     m_lastFrameTime = std::chrono::steady_clock::now();
 
+    // Upload initial param values to GPU if a preset is already active
+    OnParamChanged();
+
     return true;
 }
 
@@ -208,6 +211,7 @@ void Application::HandleDroppedFiles(HDROP hDrop) {
             if (m_shaderManager->LoadShaderFromFile(utf8Path, preset)) {
                 int idx = m_shaderManager->AddPreset(preset);
                 m_shaderManager->SetActivePreset(idx);
+                OnParamChanged();
                 m_uiManager->SetEditorContent(preset.source);
                 m_uiManager->ShowNotification("Loaded shader: " + preset.name);
             }
@@ -285,6 +289,7 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
 
         if (modifiersMatch && vkCode == static_cast<UINT>(preset->shortcutKey)) {
             m_shaderManager->SetActivePreset(i);
+            OnParamChanged();
             m_uiManager->SetEditorContent(preset->source);
             m_uiManager->ShowNotification("Switched to: " + preset->name);
             return;
@@ -335,6 +340,47 @@ void Application::ProcessFrame() {
     }
 }
 
+/*static*/ void Application::PackParamValues(const ShaderPreset& preset, float out[16]) {
+    std::fill(out, out + 16, 0.0f);
+    for (const auto& p : preset.params) {
+        if (p.cbufferOffset >= 16) continue;
+        switch (p.type) {
+        case ShaderParamType::Float:
+        case ShaderParamType::Bool:
+        case ShaderParamType::Long:
+        case ShaderParamType::Event:
+            out[p.cbufferOffset] = p.values[0];
+            break;
+        case ShaderParamType::Point2D:
+            out[p.cbufferOffset]     = p.values[0];
+            out[p.cbufferOffset + 1] = p.values[1];
+            break;
+        case ShaderParamType::Color:
+            out[p.cbufferOffset]     = p.values[0];
+            out[p.cbufferOffset + 1] = p.values[1];
+            out[p.cbufferOffset + 2] = p.values[2];
+            out[p.cbufferOffset + 3] = p.values[3];
+            break;
+        }
+    }
+}
+
+void Application::OnParamChanged() {
+    ShaderPreset* preset = m_shaderManager->GetActivePreset();
+    if (!preset) return;
+
+    float packed[16] = {};
+    PackParamValues(*preset, packed);
+    m_renderer.SetCustomUniforms(packed, 16);
+
+    for (const auto& p : preset->params) {
+        if (p.type == ShaderParamType::Event && p.values[0] > 0.5f) {
+            m_eventResetPending = true;
+            break;
+        }
+    }
+}
+
 void Application::RenderFrame() {
     // Upload current video frame
     if (!m_currentFrame.data[0].empty()) {
@@ -353,6 +399,21 @@ void Application::RenderFrame() {
     m_uiManager->BeginFrame();
     m_uiManager->Render();
     m_uiManager->EndFrame();
+
+    // Reset event params after they have been visible for one frame
+    if (m_eventResetPending) {
+        m_eventResetPending = false;
+        ShaderPreset* preset = m_shaderManager->GetActivePreset();
+        if (preset) {
+            for (auto& p : preset->params) {
+                if (p.type == ShaderParamType::Event)
+                    p.values[0] = 0.0f;
+            }
+            float packed[16] = {};
+            PackParamValues(*preset, packed);
+            m_renderer.SetCustomUniforms(packed, 16);
+        }
+    }
 
     // If recording, capture frame
     if (m_encoder.IsRecording() && !m_currentFrame.data[0].empty()) {
@@ -456,6 +517,7 @@ bool Application::CompileCurrentShader(const std::string& source) {
         preset->source = source;
         if (m_shaderManager->RecompilePreset(activeIndex)) {
             m_shaderManager->SetActivePreset(activeIndex);
+            OnParamChanged();
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
         } else {
@@ -473,6 +535,7 @@ bool Application::CompileCurrentShader(const std::string& source) {
         auto* added = m_shaderManager->GetPreset(idx);
         if (added && added->isValid) {
             m_shaderManager->SetActivePreset(idx);
+            OnParamChanged();
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
         } else {
@@ -535,6 +598,7 @@ void Application::SaveShaderAsDialog(const std::string& source) {
                 m_shaderManager->CompilePreset(newPreset);
                 int idx = m_shaderManager->AddPreset(newPreset);
                 m_shaderManager->SetActivePreset(idx);
+                OnParamChanged();
             }
             
             m_uiManager->ShowNotification("Shader saved: " + std::string(filepath));

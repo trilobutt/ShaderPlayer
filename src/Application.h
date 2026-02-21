@@ -72,6 +72,9 @@ public:
     // excluding `excludeIndex` (-1 to check all). Returns -1 if free.
     int IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const;
 
+    // Called by UIManager after any shader parameter widget changes value.
+    void OnParamChanged();
+
 private:
     // Window handling
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -79,6 +82,7 @@ private:
     bool CreateMainWindow(HINSTANCE hInstance, int nCmdShow);
     void HandleDroppedFiles(HDROP hDrop);
     void HandleKeyboardShortcuts(UINT vkCode);
+    static void PackParamValues(const ShaderPreset& preset, float out[16]);
 
     // Frame processing
     void ProcessFrame();
@@ -106,6 +110,7 @@ private:
     std::chrono::steady_clock::time_point m_lastFrameTime;
     double m_frameDuration = 1.0 / 30.0;
     float m_playbackTime = 0.0f;
+    bool m_eventResetPending = false;
 };
 
 } // namespace SP
