@@ -602,12 +602,14 @@ void UIManager::DrawKeybindingModal() {
 
             int conflict = m_app.IsBindingConflict(triggerKey, mods, m_keybindingPresetIndex);
             if (conflict >= 0) {
+                // Conflict: show warning, do NOT commit
                 const ShaderPreset* other = m_app.GetShaderManager().GetPreset(conflict);
                 std::string otherName = other ? other->name : "another shader";
                 m_keybindingConflictMsg = "Already bound to \"" + otherName +
-                                          "\" \xe2\x80\x94 choose a different key.";
-                                          "\" \xe2\x80\x94 choose a different key.";
-                preset->shortcutKey       = triggerKey;
+                                          "\" â choose a different key.";
+            } else {
+                // No conflict: commit, save, close
+                preset->shortcutKey = triggerKey;
                 preset->shortcutModifiers = mods;
                 m_keybindingConflictMsg.clear();
                 m_showKeybindingModal = false;
