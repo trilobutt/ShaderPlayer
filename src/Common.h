@@ -80,6 +80,18 @@ struct ShaderPreset {
     std::unordered_map<std::string, std::vector<float>> savedParamValues;
 };
 
+struct WorkspacePreset {
+    std::string name;
+    std::string filepath;        // absolute path to .ini file; empty = built-in Default
+    int shortcutKey = 0;         // VK code; 0 = none
+    int shortcutModifiers = 0;   // MOD_CONTROL | MOD_SHIFT | MOD_ALT bitmask
+    bool showEditor = true;
+    bool showLibrary = true;
+    bool showTransport = true;
+    bool showRecording = false;
+    bool showKeybindingsPanel = false;
+};
+
 // Recording settings
 struct RecordingSettings {
     std::string outputPath;
@@ -100,6 +112,7 @@ struct AppConfig {
     int autoCompileDelayMs = 500;
     std::string lastOpenedVideo;
     std::string shaderDirectory = "shaders";
+    std::string layoutsDirectory = "layouts";
     
     // UI layout
     float editorPanelWidth = 500.0f;
