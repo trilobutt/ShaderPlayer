@@ -67,10 +67,16 @@ src/
 │                           auto-compile on change after 500 ms delay), Transport controls,
 │                           Recording settings, Notifications overlay.
 │                           Compile button calls Application::CompileCurrentShader().
-└── ConfigManager.{cpp,h} - Load/Save config.json next to the executable
-                            (GetDefaultConfigPath uses GetModuleFileNameA). Serialises
-                            AppConfig including shaderPresets (filepath + shortcutKey)
-                            and shaderDirectory.
+├── ConfigManager.{cpp,h} - Load/Save config.json next to the executable
+│                           (GetDefaultConfigPath uses GetModuleFileNameA). Serialises
+│                           AppConfig including shaderPresets (filepath + shortcutKey)
+│                           and shaderDirectory.
+└── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
+                              exe for `.ini` files (custom [WorkspacePreset] header +
+                              verbatim ImGui ini blob). Index 0 = built-in Default
+                              (kDefaultLayoutIni constant — replace after first live run).
+                              SavePreset calls ImGui::SaveIniSettingsToMemory; LoadPreset
+                              calls ImGui::LoadIniSettingsFromMemory. Owned by Application.
 ```
 
 ### Shader System
@@ -154,6 +160,10 @@ Shader shortcut keys are stored per-preset as virtual key codes (`shortcutKey`, 
 
 Presets saved to config include only the `filepath` and shortcut — source is re-read from disk on load. shaderDirectory is also saved so "Scan Folder" persists across sessions.
 
+### Workspace Presets
+
+Layout presets stored as `.ini` files in `layouts/` next to the executable (path in `AppConfig::layoutsDirectory`). Not referenced in `config.json` — discovered by `WorkspaceManager::ScanDirectory()` at startup. Keybindings are in the `.ini` file headers, not config.json. Access via View > Workspace Presets.
+
 ## Development Notes
 
 ### Render Loop (RenderFrame)
@@ -201,17 +211,24 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `ImGuiKey` is not 1:1 with Win32 VK codes (broken since ImGui 1.87) — use `GetKeyState(VK_*)` for key state in modal/input code
 - `ImGui::SameLine(x)` takes absolute offset from window left — use `GetContentRegionMax().x` for right-alignment, not `GetContentRegionAvail().x`
 - Static locals in modal draw functions persist across sessions; use an `s_wasOpen` bool sentinel to reset edge-detection state when a modal reopens
+- `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
+- `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame
 
 ## ShaderManager API
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
 - `SetActivePreset` is called in **both** `Application.cpp` and `UIManager.cpp` — after any new call-site, always add `OnParamChanged()` (Application) or `m_app.OnParamChanged()` (UIManager)
 
+## Application API
+
+- `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F6, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding.
+
 ## C++ / Dependency Gotchas
 
 - `nlohmann/json.hpp` is ~25,000 lines — include it only in `.cpp` files, never in headers
 - nlohmann/json `try/catch` must wrap the full processing loop, not just `json::parse` — `get<>()` and `value()` throw `type_error` on type mismatches
 - HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.)
+- `std::stoi` throws `std::invalid_argument`/`std::out_of_range` on malformed input — use `std::from_chars` (C++17, `<charconv>`) for parsing untrusted file content; it is noexcept and leaves the output unchanged on failure
 
 ## Shader Parameter System
 
