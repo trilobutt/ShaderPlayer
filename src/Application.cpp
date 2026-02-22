@@ -182,8 +182,12 @@ LRESULT Application::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
 
     case WM_KEYDOWN: {
         UINT vk = static_cast<UINT>(wParam);
-        // F-keys always fire so panel toggles work even when the editor has focus
-        bool alwaysHandle = (vk >= VK_F1 && vk <= VK_F12);
+        // F-keys and modifier-key combos always fire so panel toggles and user
+        // shader keybinds work even when the editor has focus.
+        bool hasModifier = (GetKeyState(VK_CONTROL) & 0x8000) != 0
+                        || (GetKeyState(VK_SHIFT)   & 0x8000) != 0
+                        || (GetKeyState(VK_MENU)    & 0x8000) != 0;
+        bool alwaysHandle = (vk >= VK_F1 && vk <= VK_F12) || hasModifier;
         if (alwaysHandle || !m_uiManager || !m_uiManager->WantsCaptureKeyboard()) {
             HandleKeyboardShortcuts(vk);
         }

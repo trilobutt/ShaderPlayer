@@ -127,6 +127,8 @@ void UIManager::Render() {
         DrawKeybindingsPanel();
     }
 
+    DrawShaderParameters();
+
     // Handle auto-compile
     if (m_editorNeedsCompile && m_app.GetConfig().autoCompileOnSave) {
         m_compileTimer += ImGui::GetIO().DeltaTime;
@@ -300,18 +302,23 @@ void UIManager::DrawShaderEditor() {
         }
 
         m_editorWidth = ImGui::GetWindowWidth();
-
-        DrawShaderParameters();
     }
     ImGui::End();
 }
 
 void UIManager::DrawShaderParameters() {
-    ShaderPreset* preset = m_app.GetShaderManager().GetActivePreset();
-    if (!preset || preset->params.empty()) return;
+    ImGui::SetNextWindowSize(ImVec2(300, 350), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Shader Parameters")) {
+        ImGui::End();
+        return;
+    }
 
-    ImGui::Separator();
-    if (!ImGui::CollapsingHeader("Parameters", ImGuiTreeNodeFlags_DefaultOpen)) return;
+    ShaderPreset* preset = m_app.GetShaderManager().GetActivePreset();
+    if (!preset || preset->params.empty()) {
+        ImGui::TextDisabled("No parameters for active shader.");
+        ImGui::End();
+        return;
+    }
 
     bool anyChanged = false;
 
@@ -416,6 +423,8 @@ void UIManager::DrawShaderParameters() {
     if (anyChanged) {
         m_app.OnParamChanged();
     }
+
+    ImGui::End();
 }
 
 void UIManager::DrawShaderLibrary() {
@@ -502,13 +511,14 @@ void UIManager::DrawShaderLibrary() {
 }
 
 void UIManager::DrawTransportControls() {
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
-    
+    ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize;
+
+    // Set initial position only once; after that the user can move/dock freely.
     ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImVec2 windowPos(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f, 
+    ImVec2 windowPos(viewport->WorkPos.x + viewport->WorkSize.x * 0.5f,
                      viewport->WorkPos.y + viewport->WorkSize.y - 60);
-    ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always, ImVec2(0.5f, 1.0f));
-    
+    ImGui::SetNextWindowPos(windowPos, ImGuiCond_FirstUseEver, ImVec2(0.5f, 1.0f));
+
     if (ImGui::Begin("Transport", &m_showTransport, flags)) {
         auto& decoder = m_app.GetDecoder();
         
