@@ -11,7 +11,7 @@ namespace SP {
 // Hardcoded factory layout. To update: arrange the windows as desired,
 // then copy the contents of imgui.ini (written to CWD by ImGui automatically)
 // and paste it here, replacing everything between the quotes.
-// NOTE: This is a placeholder - replaced in Task 10 after a live run.
+// NOTE: Placeholder layout — replace with actual imgui.ini content after a live run.
 static const char* const kDefaultLayoutIni = R"(
 [Window][DockSpace]
 Pos=0,0
@@ -135,6 +135,15 @@ int WorkspaceManager::SavePreset(const std::string& name,
         }
     }
 
+    // Preserve existing keybinding if overwriting a same-name preset
+    for (int i = 1; i < static_cast<int>(m_presets.size()); ++i) {
+        if (m_presets[i].filepath == preset.filepath) {
+            preset.shortcutKey      = m_presets[i].shortcutKey;
+            preset.shortcutModifiers = m_presets[i].shortcutModifiers;
+            break;
+        }
+    }
+
     if (!WritePresetFile(preset, imguiBlob)) return -1;
 
     // If a preset with this filepath already exists, update it in-place
@@ -185,41 +194,17 @@ void WorkspaceManager::DeletePreset(int index) {
     m_presets.erase(m_presets.begin() + index);
 }
 
-bool WorkspaceManager::RenamePreset(int index, const std::string& newName) {
+bool WorkspaceManager::SetKeybinding(int index, int vkCode, int modifiers) {
     if (index <= 0 || index >= static_cast<int>(m_presets.size())) return false;
-
-    WorkspacePreset& preset = m_presets[index];
-    std::string newFilename = SanitiseName(newName) + ".ini";
-    std::string newPath = (std::filesystem::path(m_layoutsDir) / newFilename).string();
-
-    try {
-        std::filesystem::rename(preset.filepath, newPath);
-    } catch (...) {
-        return false;
-    }
-
-    // Rewrite file with updated name in header
-    preset.name = newName;
-    preset.filepath = newPath;
-
-    WorkspacePreset dummy;
-    std::string imguiBlock;
-    if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return false;
-    return WritePresetFile(preset, imguiBlock);
-}
-
-void WorkspaceManager::SetKeybinding(int index, int vkCode, int modifiers) {
-    if (index <= 0 || index >= static_cast<int>(m_presets.size())) return;
 
     WorkspacePreset& preset = m_presets[index];
     preset.shortcutKey = vkCode;
     preset.shortcutModifiers = modifiers;
 
-    // Rewrite file with updated keybinding in header
     WorkspacePreset dummy;
     std::string imguiBlock;
-    if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return;
-    WritePresetFile(preset, imguiBlock);
+    if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return false;
+    return WritePresetFile(preset, imguiBlock);
 }
 
 bool WorkspaceManager::ParsePresetFile(const std::string& filepath,

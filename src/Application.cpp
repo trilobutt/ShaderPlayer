@@ -79,18 +79,9 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     // Create shaders directory if it doesn't exist
     std::filesystem::create_directories(m_configManager.GetConfig().shaderDirectory);
 
-    // Initialise workspace manager
+    // Initialise workspace manager — Initialize handles relative-path resolution internally
     m_workspaceManager = std::make_unique<WorkspaceManager>();
-    {
-        auto& layoutsDir = m_configManager.GetConfig().layoutsDirectory;
-        if (!std::filesystem::path(layoutsDir).is_absolute() &&
-            !std::filesystem::exists(layoutsDir)) {
-            char exePath[MAX_PATH];
-            GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-            layoutsDir = (std::filesystem::path(exePath).parent_path() / "layouts").string();
-        }
-        m_workspaceManager->Initialize(layoutsDir);
-    }
+    m_workspaceManager->Initialize(m_configManager.GetConfig().layoutsDirectory);
 
     // Open last video if available
     if (!m_configManager.GetConfig().lastOpenedVideo.empty()) {

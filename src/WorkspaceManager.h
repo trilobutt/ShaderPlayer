@@ -34,11 +34,8 @@ public:
     // Delete preset file and remove from vector. No-op for index 0 (Default).
     void DeletePreset(int index);
 
-    // Rename preset: renames the .ini file and updates the struct. No-op for index 0.
-    bool RenamePreset(int index, const std::string& newName);
-
-    // Assign keybinding. No-op for index 0.
-    void SetKeybinding(int index, int vkCode, int modifiers);
+    // Assign keybinding. Returns false if the file could not be written. No-op for index 0.
+    bool SetKeybinding(int index, int vkCode, int modifiers);
 
     const std::vector<WorkspacePreset>& GetPresets() const { return m_presets; }
     int GetPresetCount() const { return static_cast<int>(m_presets.size()); }

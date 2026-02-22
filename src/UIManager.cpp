@@ -1082,11 +1082,14 @@ void UIManager::DrawWorkspaceKeybindingModal() {
             s_wasOpen = false;
             ImGui::CloseCurrentPopup();
         } else if (delDown && !s_prevDel) {
-            wm.SetKeybinding(m_workspaceKeybindingIndex, 0, 0);
-            m_workspaceKeybindingConflictMsg.clear();
-            m_showWorkspaceKeybindingModal = false;
-            s_wasOpen = false;
-            ImGui::CloseCurrentPopup();
+            if (!wm.SetKeybinding(m_workspaceKeybindingIndex, 0, 0)) {
+                m_workspaceKeybindingConflictMsg = "Failed to write layout file.";
+            } else {
+                m_workspaceKeybindingConflictMsg.clear();
+                m_showWorkspaceKeybindingModal = false;
+                s_wasOpen = false;
+                ImGui::CloseCurrentPopup();
+            }
         } else if (triggerKey != 0 && triggerKey != s_prevTrigger) {
             int mods = 0;
             if (ctrl)  mods |= MOD_CONTROL;
@@ -1098,11 +1101,14 @@ void UIManager::DrawWorkspaceKeybindingModal() {
             if (!conflict.empty()) {
                 m_workspaceKeybindingConflictMsg = conflict + " — choose a different key.";
             } else {
-                wm.SetKeybinding(m_workspaceKeybindingIndex, triggerKey, mods);
-                m_workspaceKeybindingConflictMsg.clear();
-                m_showWorkspaceKeybindingModal = false;
-                s_wasOpen = false;
-                ImGui::CloseCurrentPopup();
+                if (!wm.SetKeybinding(m_workspaceKeybindingIndex, triggerKey, mods)) {
+                    m_workspaceKeybindingConflictMsg = "Failed to write layout file.";
+                } else {
+                    m_workspaceKeybindingConflictMsg.clear();
+                    m_showWorkspaceKeybindingModal = false;
+                    s_wasOpen = false;
+                    ImGui::CloseCurrentPopup();
+                }
             }
         }
 
