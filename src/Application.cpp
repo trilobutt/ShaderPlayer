@@ -773,6 +773,7 @@ std::string Application::FindBindingConflict(int vkCode, int modifiers,
     if (modifiers == MOD_CONTROL) {
         if (vkCode == 'O') return "reserved for Open Video (Ctrl+O)";
         if (vkCode == 'S') return "reserved for Save Shader (Ctrl+S)";
+        if (vkCode == 'N') return "reserved for New Shader (Ctrl+N)";
     }
 
     // Shader presets
