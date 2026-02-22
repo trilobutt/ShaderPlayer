@@ -931,11 +931,192 @@ void UIManager::ShowNotification(const std::string& message, float duration) {
 }
 
 void UIManager::DrawManageWorkspacesModal() {
-    // Implemented in Task 9
+    ImGui::OpenPopup("Manage Workspaces");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(500.0f, 360.0f), ImGuiCond_Appearing);
+
+    if (ImGui::BeginPopupModal("Manage Workspaces", &m_showManageWorkspacesModal)) {
+        auto& wm = m_app.GetWorkspaceManager();
+        const auto& presets = wm.GetPresets();
+
+        ImGui::TextDisabled("Right-click a workspace to rename, delete, or set a keybinding.");
+        ImGui::Spacing();
+
+        if (ImGui::BeginTable("##wspresets", 2,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_ScrollY, ImVec2(0, 260.0f)))
+        {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Keybinding", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+            ImGui::TableHeadersRow();
+
+            for (int i = 0; i < static_cast<int>(presets.size()); ++i) {
+                const auto& wp = presets[i];
+                ImGui::TableNextRow();
+
+                ImGui::TableSetColumnIndex(0);
+                std::string rowLabel = wp.name;
+                if (i == 0) rowLabel += " (built-in)";
+                // Use Selectable spanning both columns for context menu
+                ImGui::Selectable(rowLabel.c_str(), false,
+                    ImGuiSelectableFlags_SpanAllColumns);
+
+                if (i > 0) {
+                    if (ImGui::BeginPopupContextItem(("##wsctx" + std::to_string(i)).c_str())) {
+                        if (ImGui::MenuItem("Set Keybinding...")) {
+                            m_workspaceKeybindingIndex = i;
+                            m_workspaceKeybindingConflictMsg.clear();
+                            m_showWorkspaceKeybindingModal = true;
+                        }
+                        if (ImGui::MenuItem("Delete")) {
+                            wm.DeletePreset(i);
+                            ImGui::EndPopup();
+                            break;  // vector modified; exit loop safely
+                        }
+                        ImGui::EndPopup();
+                    }
+                }
+
+                ImGui::TableSetColumnIndex(1);
+                if (wp.shortcutKey != 0)
+                    ImGui::Text("%s", m_app.GetComboName(wp.shortcutKey, wp.shortcutModifiers).c_str());
+                else
+                    ImGui::TextDisabled("\xe2\x80\x94");  // UTF-8 em dash
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(100, 0))) {
+            m_showManageWorkspacesModal = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void UIManager::DrawWorkspaceKeybindingModal() {
-    // Implemented in Task 9
+    ImGui::OpenPopup("Set Workspace Keybinding");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(340.0f, 200.0f), ImGuiCond_Appearing);
+
+    static bool s_wasOpen    = false;
+    static int  s_prevTrigger = 0;
+    static bool s_prevEsc    = false;
+    static bool s_prevDel    = false;
+
+    bool open = true;
+    if (ImGui::BeginPopupModal("Set Workspace Keybinding", &open)) {
+        if (!s_wasOpen) { s_prevTrigger = 0; s_wasOpen = true; }
+
+        auto& wm = m_app.GetWorkspaceManager();
+        if (m_workspaceKeybindingIndex < 0 ||
+            m_workspaceKeybindingIndex >= wm.GetPresetCount())
+        {
+            m_showWorkspaceKeybindingModal = false;
+            s_wasOpen = false;
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        const WorkspacePreset& wp = wm.GetPresets()[m_workspaceKeybindingIndex];
+        ImGui::Text("Workspace: %s", wp.name.c_str());
+        ImGui::TextDisabled("Press a key combination. Delete = clear. Escape = cancel.");
+        ImGui::Spacing();
+
+        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+
+        // Scan for a non-modifier trigger key (alphanumeric + F1-F12)
+        int triggerKey = 0;
+        for (int vk = 0x30; vk <= 0x5A; ++vk) {
+            if (GetKeyState(vk) & 0x8000) { triggerKey = vk; break; }
+        }
+        if (triggerKey == 0) {
+            for (int vk = VK_F1; vk <= VK_F12; ++vk) {
+                if (GetKeyState(vk) & 0x8000) { triggerKey = vk; break; }
+            }
+        }
+
+        // Clear stale conflict message when the trigger key changes
+        if (triggerKey != s_prevTrigger)
+            m_workspaceKeybindingConflictMsg.clear();
+
+        // Preview line
+        if (triggerKey != 0 || ctrl || shift || alt) {
+            std::string preview;
+            if (ctrl)       preview += "Ctrl+";
+            if (alt)        preview += "Alt+";
+            if (shift)      preview += "Shift+";
+            if (triggerKey) preview += m_app.GetKeyName(triggerKey);
+            else            preview += "...";
+
+            if (!m_workspaceKeybindingConflictMsg.empty())
+                ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", preview.c_str());
+            else
+                ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), "%s", preview.c_str());
+        } else {
+            ImGui::TextDisabled("\xe2\x80\x94");
+        }
+
+        if (!m_workspaceKeybindingConflictMsg.empty()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s",
+                               m_workspaceKeybindingConflictMsg.c_str());
+        }
+
+        ImGui::Spacing();
+        bool escDown = (GetKeyState(VK_ESCAPE) & 0x8000) != 0;
+        bool delDown = (GetKeyState(VK_DELETE) & 0x8000) != 0;
+
+        if (escDown && !s_prevEsc) {
+            m_workspaceKeybindingConflictMsg.clear();
+            m_showWorkspaceKeybindingModal = false;
+            s_wasOpen = false;
+            ImGui::CloseCurrentPopup();
+        } else if (delDown && !s_prevDel) {
+            wm.SetKeybinding(m_workspaceKeybindingIndex, 0, 0);
+            m_workspaceKeybindingConflictMsg.clear();
+            m_showWorkspaceKeybindingModal = false;
+            s_wasOpen = false;
+            ImGui::CloseCurrentPopup();
+        } else if (triggerKey != 0 && triggerKey != s_prevTrigger) {
+            int mods = 0;
+            if (ctrl)  mods |= MOD_CONTROL;
+            if (alt)   mods |= MOD_ALT;
+            if (shift) mods |= MOD_SHIFT;
+
+            std::string conflict = m_app.FindBindingConflict(
+                triggerKey, mods, -1, m_workspaceKeybindingIndex);
+            if (!conflict.empty()) {
+                m_workspaceKeybindingConflictMsg = conflict + " — choose a different key.";
+            } else {
+                wm.SetKeybinding(m_workspaceKeybindingIndex, triggerKey, mods);
+                m_workspaceKeybindingConflictMsg.clear();
+                m_showWorkspaceKeybindingModal = false;
+                s_wasOpen = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+
+        s_prevTrigger = triggerKey;
+        s_prevEsc     = escDown;
+        s_prevDel     = delDown;
+
+        ImGui::EndPopup();
+    }
+
+    if (!open) {
+        m_showWorkspaceKeybindingModal = false;
+        s_wasOpen = false;
+    }
 }
 
 } // namespace SP
