@@ -129,6 +129,40 @@ void UIManager::Render() {
 
     DrawShaderParameters();
 
+    if (m_showManageWorkspacesModal) {
+        DrawManageWorkspacesModal();
+    }
+    if (m_showWorkspaceKeybindingModal) {
+        DrawWorkspaceKeybindingModal();
+    }
+
+    // "Save Current As" popup
+    if (m_showSaveWorkspacePopup) {
+        ImGui::OpenPopup("Save Workspace As");
+        m_showSaveWorkspacePopup = false;
+    }
+    if (ImGui::BeginPopup("Save Workspace As")) {
+        ImGui::Text("Workspace name:");
+        ImGui::SetNextItemWidth(260.0f);
+        bool submit = ImGui::InputText("##wsname", m_saveWorkspaceName,
+                                       sizeof(m_saveWorkspaceName),
+                                       ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SameLine();
+        if (ImGui::Button("Save") || submit) {
+            if (m_saveWorkspaceName[0] != '\0') {
+                m_app.GetWorkspaceManager().SavePreset(
+                    m_saveWorkspaceName,
+                    m_showEditor, m_showLibrary, m_showTransport,
+                    m_showRecording, m_showKeybindingsPanel);
+                ShowNotification("Workspace saved: " + std::string(m_saveWorkspaceName));
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
     // Handle auto-compile
     if (m_editorNeedsCompile && m_app.GetConfig().autoCompileOnSave) {
         m_compileTimer += ImGui::GetIO().DeltaTime;
@@ -166,6 +200,37 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Transport Controls", "F3", &m_showTransport);
             ImGui::MenuItem("Recording Panel", "F4", &m_showRecording);
             ImGui::MenuItem("Keybindings", "F6", &m_showKeybindingsPanel);
+
+            ImGui::Separator();
+            if (ImGui::BeginMenu("Workspace Presets")) {
+                auto& wm = m_app.GetWorkspaceManager();
+
+                if (ImGui::MenuItem("Save Current As...")) {
+                    m_showSaveWorkspacePopup = true;
+                    memset(m_saveWorkspaceName, 0, sizeof(m_saveWorkspaceName));
+                }
+
+                ImGui::Separator();
+
+                const auto& presets = wm.GetPresets();
+                for (int i = 0; i < static_cast<int>(presets.size()); ++i) {
+                    const auto& wp = presets[i];
+                    std::string label = wp.name;
+                    if (wp.shortcutKey != 0) {
+                        label += "  " + m_app.GetComboName(wp.shortcutKey, wp.shortcutModifiers);
+                    }
+                    if (ImGui::MenuItem(label.c_str())) {
+                        m_app.LoadWorkspacePreset(i);
+                    }
+                }
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Manage Workspaces...")) {
+                    m_showManageWorkspacesModal = true;
+                }
+
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
         
@@ -863,6 +928,14 @@ bool UIManager::IsEditorFocused() const {
 
 void UIManager::ShowNotification(const std::string& message, float duration) {
     m_notifications.push_back({message, duration});
+}
+
+void UIManager::DrawManageWorkspacesModal() {
+    // Implemented in Task 9
+}
+
+void UIManager::DrawWorkspaceKeybindingModal() {
+    // Implemented in Task 9
 }
 
 } // namespace SP

@@ -68,6 +68,8 @@ private:
     void DrawNewShaderModal();
     void DrawKeybindingsPanel();
     void DrawShaderParameters();
+    void DrawManageWorkspacesModal();
+    void DrawWorkspaceKeybindingModal();
 
     Application& m_app;
     
@@ -81,6 +83,14 @@ private:
     bool m_showKeybindingsPanel = false;
     int m_keybindingPresetIndex = -1;
     std::string m_keybindingConflictMsg;
+
+    // Workspace preset UI state
+    bool m_showManageWorkspacesModal = false;
+    bool m_showSaveWorkspacePopup = false;
+    char m_saveWorkspaceName[256] = "";
+    bool m_showWorkspaceKeybindingModal = false;
+    int m_workspaceKeybindingIndex = -1;
+    std::string m_workspaceKeybindingConflictMsg;
     
     // Editor
     TextEditor m_editor;
