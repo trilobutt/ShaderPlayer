@@ -74,6 +74,7 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"autoCompileDelayMs", c.autoCompileDelayMs},
         {"lastOpenedVideo", c.lastOpenedVideo},
         {"shaderDirectory", c.shaderDirectory},
+        {"layoutsDirectory", c.layoutsDirectory},
         {"editorPanelWidth", c.editorPanelWidth},
         {"libraryPanelHeight", c.libraryPanelHeight},
         {"showEditor", c.showEditor},
@@ -89,6 +90,7 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("autoCompileDelayMs")) j.at("autoCompileDelayMs").get_to(c.autoCompileDelayMs);
     if (j.contains("lastOpenedVideo")) j.at("lastOpenedVideo").get_to(c.lastOpenedVideo);
     if (j.contains("shaderDirectory")) j.at("shaderDirectory").get_to(c.shaderDirectory);
+    if (j.contains("layoutsDirectory")) j.at("layoutsDirectory").get_to(c.layoutsDirectory);
     if (j.contains("editorPanelWidth")) j.at("editorPanelWidth").get_to(c.editorPanelWidth);
     if (j.contains("libraryPanelHeight")) j.at("libraryPanelHeight").get_to(c.libraryPanelHeight);
     if (j.contains("showEditor")) j.at("showEditor").get_to(c.showEditor);
