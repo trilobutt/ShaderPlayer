@@ -101,6 +101,7 @@ add_executable(ShaderPlayer WIN32
     src/VideoEncoder.cpp
     src/UIManager.cpp
     src/ConfigManager.cpp
+    src/WorkspaceManager.cpp
 )
 
 target_include_directories(ShaderPlayer PRIVATE
