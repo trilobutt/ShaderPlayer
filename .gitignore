@@ -42,3 +42,6 @@ Thumbs.db
 
 # User config (if it contains local paths)
 config_local.json
+
+# Git worktrees
+.worktrees/
