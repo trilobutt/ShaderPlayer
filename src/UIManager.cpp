@@ -729,13 +729,11 @@ void UIManager::DrawKeybindingModal() {
             if (alt)   mods |= MOD_ALT;
             if (shift) mods |= MOD_SHIFT;
 
-            int conflict = m_app.IsBindingConflict(triggerKey, mods, m_keybindingPresetIndex);
-            if (conflict >= 0) {
+            std::string conflict = m_app.FindBindingConflict(triggerKey, mods,
+                                                              m_keybindingPresetIndex, -1);
+            if (!conflict.empty()) {
                 // Conflict: show warning, do NOT commit
-                const ShaderPreset* other = m_app.GetShaderManager().GetPreset(conflict);
-                std::string otherName = other ? other->name : "another shader";
-                m_keybindingConflictMsg = "Already bound to \"" + otherName +
-                                          "\" â choose a different key.";
+                m_keybindingConflictMsg = conflict + " — choose a different key.";
             } else {
                 // No conflict: commit, save, close
                 preset->shortcutKey = triggerKey;

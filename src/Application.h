@@ -7,6 +7,7 @@
 #include "VideoEncoder.h"
 #include "UIManager.h"
 #include "ConfigManager.h"
+#include "WorkspaceManager.h"
 
 namespace SP {
 
@@ -61,6 +62,7 @@ public:
     ShaderManager& GetShaderManager() { return *m_shaderManager; }
     VideoEncoder& GetEncoder() { return m_encoder; }
     UIManager& GetUI() { return *m_uiManager; }
+    WorkspaceManager& GetWorkspaceManager() { return *m_workspaceManager; }
 
     // Key name helper
     std::string GetKeyName(int vkCode) const;
@@ -68,9 +70,14 @@ public:
     // Returns a human-readable combo string, e.g. "Ctrl+Shift+F1"
     std::string GetComboName(int vkCode, int modifiers) const;
 
-    // Returns the index of any preset that already uses this combo,
-    // excluding `excludeIndex` (-1 to check all). Returns -1 if free.
-    int IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const;
+    // Returns a human-readable conflict description, or empty string if the binding is free.
+    // excludeShaderIdx: shader preset index to skip (-1 = check all)
+    // excludeWorkspaceIdx: workspace preset index to skip (-1 = check all)
+    std::string FindBindingConflict(int vkCode, int modifiers,
+                                     int excludeShaderIdx,
+                                     int excludeWorkspaceIdx) const;
+
+    void LoadWorkspacePreset(int index);
 
     // Called by UIManager after any shader parameter widget changes value.
     void OnParamChanged();
@@ -100,6 +107,7 @@ private:
     VideoEncoder m_encoder;
     std::unique_ptr<UIManager> m_uiManager;
     ConfigManager m_configManager;
+    std::unique_ptr<WorkspaceManager> m_workspaceManager;
 
     // State
     PlaybackState m_playbackState = PlaybackState::Stopped;

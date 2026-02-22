@@ -79,6 +79,19 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     // Create shaders directory if it doesn't exist
     std::filesystem::create_directories(m_configManager.GetConfig().shaderDirectory);
 
+    // Initialise workspace manager
+    m_workspaceManager = std::make_unique<WorkspaceManager>();
+    {
+        auto& layoutsDir = m_configManager.GetConfig().layoutsDirectory;
+        if (!std::filesystem::path(layoutsDir).is_absolute() &&
+            !std::filesystem::exists(layoutsDir)) {
+            char exePath[MAX_PATH];
+            GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+            layoutsDir = (std::filesystem::path(exePath).parent_path() / "layouts").string();
+        }
+        m_workspaceManager->Initialize(layoutsDir);
+    }
+
     // Open last video if available
     if (!m_configManager.GetConfig().lastOpenedVideo.empty()) {
         OpenVideo(m_configManager.GetConfig().lastOpenedVideo);
@@ -305,6 +318,22 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
             OnParamChanged();
             m_uiManager->SetEditorContent(preset->source);
             m_uiManager->ShowNotification("Switched to: " + preset->name);
+            return;
+        }
+    }
+
+    // Check workspace preset keybindings (skip index 0 = Default, it has no shortcut)
+    for (int i = 1; i < m_workspaceManager->GetPresetCount(); ++i) {
+        const WorkspacePreset& wp = m_workspaceManager->GetPresets()[i];
+        if (wp.shortcutKey == 0) continue;
+
+        bool modifiersMatch = true;
+        if ((wp.shortcutModifiers & MOD_CONTROL) && !ctrl) modifiersMatch = false;
+        if ((wp.shortcutModifiers & MOD_SHIFT)   && !shift) modifiersMatch = false;
+        if ((wp.shortcutModifiers & MOD_ALT)     && !alt)   modifiersMatch = false;
+
+        if (modifiersMatch && vkCode == static_cast<UINT>(wp.shortcutKey)) {
+            LoadWorkspacePreset(i);
             return;
         }
     }
@@ -711,18 +740,63 @@ std::string Application::GetComboName(int vkCode, int modifiers) const {
     return result;
 }
 
-int Application::IsBindingConflict(int vkCode, int modifiers, int excludeIndex) const {
-    if (vkCode == 0) return -1;
-    const auto& presets = m_shaderManager->GetPresets();
-    const int count = static_cast<int>(presets.size());
-    for (int i = 0; i < count; ++i) {
-        if (i == excludeIndex) continue;
-        const ShaderPreset& p = presets[i];
+void Application::LoadWorkspacePreset(int index) {
+    bool se, sl, st, sr, sk;
+    if (m_workspaceManager->LoadPreset(index, se, sl, st, sr, sk)) {
+        m_uiManager->ApplyVisibility(se, sl, st, sr, sk);
+        const std::string& name = m_workspaceManager->GetPresets()[index].name;
+        m_uiManager->ShowNotification("Workspace: " + name);
+    }
+}
+
+std::string Application::FindBindingConflict(int vkCode, int modifiers,
+                                              int excludeShaderIdx,
+                                              int excludeWorkspaceIdx) const
+{
+    if (vkCode == 0) return {};
+
+    // Hardcoded unmodified keys
+    if (modifiers == 0) {
+        switch (vkCode) {
+        case VK_SPACE:  return "reserved for Play/Pause (Space)";
+        case VK_ESCAPE: return "reserved for Reset to Passthrough (Escape)";
+        case VK_F1:     return "reserved for Toggle Editor (F1)";
+        case VK_F2:     return "reserved for Toggle Library (F2)";
+        case VK_F3:     return "reserved for Toggle Transport (F3)";
+        case VK_F4:     return "reserved for Toggle Recording (F4)";
+        case VK_F5:     return "reserved for Compile (F5)";
+        case VK_F6:     return "reserved for Toggle Keybindings (F6)";
+        case VK_F9:     return "reserved for Start/Stop Recording (F9)";
+        }
+    }
+    // Hardcoded Ctrl combos
+    if (modifiers == MOD_CONTROL) {
+        if (vkCode == 'O') return "reserved for Open Video (Ctrl+O)";
+        if (vkCode == 'S') return "reserved for Save Shader (Ctrl+S)";
+    }
+
+    // Shader presets
+    const auto& shaderPresets = m_shaderManager->GetPresets();
+    for (int i = 0; i < static_cast<int>(shaderPresets.size()); ++i) {
+        if (i == excludeShaderIdx) continue;
+        const ShaderPreset& p = shaderPresets[i];
         if (p.shortcutKey == 0) continue;
         if (p.shortcutKey == vkCode && p.shortcutModifiers == modifiers)
-            return i;
+            return "conflicts with shader \"" + p.name + "\"";
     }
-    return -1;
+
+    // Workspace presets
+    if (m_workspaceManager) {
+        const auto& wps = m_workspaceManager->GetPresets();
+        for (int i = 0; i < static_cast<int>(wps.size()); ++i) {
+            if (i == excludeWorkspaceIdx) continue;
+            if (wps[i].shortcutKey == 0) continue;
+            if (wps[i].shortcutKey == vkCode && wps[i].shortcutModifiers == modifiers)
+                return "conflicts with workspace \"" + wps[i].name + "\"";
+        }
+    }
+
+    return {};
 }
 
 } // namespace SP

@@ -46,6 +46,16 @@ public:
     void ToggleRecording()        { m_showRecording        = !m_showRecording; }
     void ToggleKeybindingsPanel() { m_showKeybindingsPanel = !m_showKeybindingsPanel; }
 
+    // Apply a full set of panel visibility flags (used by workspace preset load).
+    void ApplyVisibility(bool showEditor, bool showLibrary, bool showTransport,
+                         bool showRecording, bool showKeybindingsPanel) {
+        m_showEditor           = showEditor;
+        m_showLibrary          = showLibrary;
+        m_showTransport        = showTransport;
+        m_showRecording        = showRecording;
+        m_showKeybindingsPanel = showKeybindingsPanel;
+    }
+
 private:
     void DrawMenuBar();
     void DrawVideoViewport();
