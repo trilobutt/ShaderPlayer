@@ -1,5 +1,6 @@
 #include "WorkspaceManager.h"
 #include "imgui.h"
+#include <charconv>
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -69,7 +70,9 @@ bool WorkspaceManager::Initialize(const std::string& layoutsDirectory) {
         m_layoutsDir = (std::filesystem::path(exePath).parent_path() / m_layoutsDir).string();
     }
 
-    std::filesystem::create_directories(m_layoutsDir);
+    std::error_code ec;
+    std::filesystem::create_directories(m_layoutsDir, ec);
+    if (ec) return false;
     ScanDirectory();
     return true;
 }
@@ -116,7 +119,31 @@ int WorkspaceManager::SavePreset(const std::string& name,
     std::string filename = SanitiseName(name) + ".ini";
     preset.filepath = (std::filesystem::path(m_layoutsDir) / filename).string();
 
+    // Ensure unique filepath: append suffix if the sanitised name collides on disk
+    // but is not already tracked in our vector (different name, same sanitised form).
+    if (std::filesystem::exists(preset.filepath)) {
+        bool inVector = false;
+        for (int i = 1; i < static_cast<int>(m_presets.size()); ++i) {
+            if (m_presets[i].filepath == preset.filepath) { inVector = true; break; }
+        }
+        if (!inVector) {
+            int suffix = 2;
+            while (std::filesystem::exists(preset.filepath)) {
+                filename = SanitiseName(name) + "_" + std::to_string(suffix++) + ".ini";
+                preset.filepath = (std::filesystem::path(m_layoutsDir) / filename).string();
+            }
+        }
+    }
+
     if (!WritePresetFile(preset, imguiBlob)) return -1;
+
+    // If a preset with this filepath already exists, update it in-place
+    for (int i = 1; i < static_cast<int>(m_presets.size()); ++i) {
+        if (m_presets[i].filepath == preset.filepath) {
+            m_presets[i] = preset;
+            return i;
+        }
+    }
 
     m_presets.push_back(preset);
     return static_cast<int>(m_presets.size()) - 1;
@@ -178,9 +205,7 @@ bool WorkspaceManager::RenamePreset(int index, const std::string& newName) {
     WorkspacePreset dummy;
     std::string imguiBlock;
     if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return false;
-    WritePresetFile(preset, imguiBlock);
-
-    return true;
+    return WritePresetFile(preset, imguiBlock);
 }
 
 void WorkspaceManager::SetKeybinding(int index, int vkCode, int modifiers) {
@@ -233,8 +258,12 @@ bool WorkspaceManager::ParsePresetFile(const std::string& filepath,
             std::string val = line.substr(eq + 1);
 
             if (key == "name")               out.name = val;
-            else if (key == "shortcutKey")   out.shortcutKey = std::stoi(val);
-            else if (key == "shortcutModifiers") out.shortcutModifiers = std::stoi(val);
+            else if (key == "shortcutKey") {
+                std::from_chars(val.data(), val.data() + val.size(), out.shortcutKey);
+            }
+            else if (key == "shortcutModifiers") {
+                std::from_chars(val.data(), val.data() + val.size(), out.shortcutModifiers);
+            }
             else if (key == "showEditor")         out.showEditor         = (val == "1");
             else if (key == "showLibrary")        out.showLibrary        = (val == "1");
             else if (key == "showTransport")      out.showTransport      = (val == "1");
