@@ -388,14 +388,21 @@ void UIManager::DrawShaderParameters() {
     bool anyChanged = false;
 
     for (auto& p : preset->params) {
-        ImGui::PushID(&p); // use address; PushID("") hashes to 0 and asserts
+        ImGui::PushID(&p);
+
+        // Check if parameter is being driven by keyframes during playback
+        bool kfDriven = p.timeline && p.timeline->enabled && !p.timeline->keyframes.empty()
+                        && m_app.GetPlaybackState() == PlaybackState::Playing;
+        if (kfDriven) {
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+            ImGui::BeginDisabled();
+        }
 
         switch (p.type) {
 
         case ShaderParamType::Float: {
             float v = p.values[0];
             if (ImGui::SliderFloat(p.label.c_str(), &v, p.min, p.max)) {
-                // Snap to step
                 if (p.step > 0.0f) v = std::round(v / p.step) * p.step;
                 p.values[0] = v;
                 anyChanged = true;
@@ -414,7 +421,6 @@ void UIManager::DrawShaderParameters() {
 
         case ShaderParamType::Long: {
             int idx = static_cast<int>(p.values[0]);
-            // Build null-separated string for ImGui::Combo
             std::string items;
             for (const auto& lbl : p.longLabels) { items += lbl; items += '\0'; }
             items += '\0';
@@ -433,13 +439,10 @@ void UIManager::DrawShaderParameters() {
         }
 
         case ShaderParamType::Point2D: {
-            // Label on its own line
             ImGui::Text("%s", p.label.c_str());
-
             ImVec2 padSize(120.0f, 120.0f);
             ImVec2 padPos = ImGui::GetCursorScreenPos();
             ImGui::InvisibleButton("##pad", padSize);
-
             if (ImGui::IsItemActive()) {
                 ImVec2 mouse = ImGui::GetMousePos();
                 float nx = (mouse.x - padPos.x) / padSize.x;
@@ -450,15 +453,13 @@ void UIManager::DrawShaderParameters() {
                 p.values[1] = p.min + ny * (p.max - p.min);
                 anyChanged = true;
             }
-
-            // Draw pad background and dot
             ImDrawList* draw = ImGui::GetWindowDrawList();
             ImVec2 padEnd(padPos.x + padSize.x, padPos.y + padSize.y);
             draw->AddRectFilled(padPos, padEnd, IM_COL32(40, 40, 40, 255));
             draw->AddRect(padPos, padEnd, IM_COL32(100, 100, 100, 255));
             float range = p.max - p.min;
-            float dotX  = padPos.x + (range > 1e-6f ? (p.values[0] - p.min) / range : 0.0f) * padSize.x;
-            float dotY  = padPos.y + (range > 1e-6f ? (p.values[1] - p.min) / range : 0.0f) * padSize.y;
+            float dotX = padPos.x + (range > 1e-6f ? (p.values[0] - p.min) / range : 0.0f) * padSize.x;
+            float dotY = padPos.y + (range > 1e-6f ? (p.values[1] - p.min) / range : 0.0f) * padSize.y;
             draw->AddCircleFilled(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 200, 50, 255));
             draw->AddCircle(ImVec2(dotX, dotY), 5.0f, IM_COL32(255, 255, 255, 180));
             break;
@@ -473,6 +474,72 @@ void UIManager::DrawShaderParameters() {
         }
 
         } // switch
+
+        if (kfDriven) {
+            ImGui::EndDisabled();
+            ImGui::PopStyleVar();
+        }
+
+        // --- Keyframe toggle (skip Event type) ---
+        if (p.type != ShaderParamType::Event) {
+            ImGui::SameLine();
+            bool hasTimeline = p.timeline.has_value() && p.timeline->enabled;
+            if (hasTimeline) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.6f, 0.1f, 1.0f));
+            std::string kfLabel = hasTimeline ? "KF##kf" : "+KF##kf";
+            if (ImGui::SmallButton(kfLabel.c_str())) {
+                if (!p.timeline.has_value()) {
+                    p.timeline.emplace();
+                }
+                p.timeline->enabled = !p.timeline->enabled;
+            }
+            if (hasTimeline) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle keyframe animation");
+
+            // Keyframe controls when enabled
+            if (p.timeline && p.timeline->enabled) {
+                int paramIdx = static_cast<int>(&p - &preset->params[0]);
+                int valueCount = 1;
+                if (p.type == ShaderParamType::Point2D) valueCount = 2;
+                else if (p.type == ShaderParamType::Color) valueCount = 4;
+
+                // Add keyframe at current time
+                if (ImGui::SmallButton("+ Key")) {
+                    Keyframe kf;
+                    kf.time = m_app.GetPlaybackTime();
+                    for (int i = 0; i < 4; ++i) kf.values[i] = p.values[i];
+                    int kidx = p.timeline->AddKeyframe(kf);
+                    m_selectedKeyframeParam = paramIdx;
+                    m_selectedKeyframeIndex = kidx;
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add keyframe at current time");
+
+                // Keyframe chips
+                ImGui::SameLine();
+                auto& kfs = p.timeline->keyframes;
+                for (int ki = 0; ki < static_cast<int>(kfs.size()); ++ki) {
+                    ImGui::SameLine();
+                    char chipLabel[32];
+                    snprintf(chipLabel, sizeof(chipLabel), "%.1fs##kf%d", kfs[ki].time, ki);
+                    bool isSelected = (m_selectedKeyframeParam == paramIdx && m_selectedKeyframeIndex == ki);
+                    if (isSelected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+                    if (ImGui::SmallButton(chipLabel)) {
+                        m_selectedKeyframeParam = paramIdx;
+                        m_selectedKeyframeIndex = ki;
+                        m_app.SeekTo(kfs[ki].time);
+                    }
+                    if (isSelected) ImGui::PopStyleColor();
+                }
+
+                // Keyframe detail editor (implemented in Task 6)
+                if (m_selectedKeyframeParam == paramIdx &&
+                    m_selectedKeyframeIndex >= 0 &&
+                    m_selectedKeyframeIndex < static_cast<int>(kfs.size()))
+                {
+                    DrawKeyframeDetail(p, *p.timeline, m_selectedKeyframeIndex,
+                                       valueCount, anyChanged);
+                }
+            }
+        }
 
         ImGui::PopID();
     }
@@ -490,6 +557,14 @@ void UIManager::DrawShaderParameters() {
     }
 
     ImGui::End();
+}
+
+void UIManager::DrawKeyframeDetail(ShaderParam& /*param*/, KeyframeTimeline& /*timeline*/,
+                                    int /*keyframeIndex*/, int /*valueCount*/, bool& /*anyChanged*/) {
+    // Stub — full implementation in Task 6
+    ImGui::Indent(16.0f);
+    ImGui::TextDisabled("(Keyframe detail editor — coming soon)");
+    ImGui::Unindent(16.0f);
 }
 
 void UIManager::DrawShaderLibrary() {

@@ -70,6 +70,8 @@ private:
     void DrawShaderParameters();
     void DrawManageWorkspacesModal();
     void DrawWorkspaceKeybindingModal();
+    void DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
+                            int keyframeIndex, int valueCount, bool& anyChanged);
 
     Application& m_app;
     
@@ -116,6 +118,10 @@ private:
     
     // New shader modal
     char m_newShaderName[256] = "";
+
+    // Keyframe editing state
+    int m_selectedKeyframeParam = -1;   // index into preset->params, or -1
+    int m_selectedKeyframeIndex = -1;   // index into timeline->keyframes, or -1
 };
 
 } // namespace SP
