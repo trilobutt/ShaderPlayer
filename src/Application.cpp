@@ -53,6 +53,11 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
                         for (int i = 0; i < 4 && i < static_cast<int>(vals.size()); ++i)
                             param.values[i] = vals[i];
                     }
+                    // Restore saved keyframe timeline
+                    auto kit = configPreset.savedKeyframes.find(param.name);
+                    if (kit != configPreset.savedKeyframes.end()) {
+                        param.timeline = kit->second;
+                    }
                 }
                 m_shaderManager->AddPreset(loadedPreset);
             }

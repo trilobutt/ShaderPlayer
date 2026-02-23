@@ -1,4 +1,5 @@
 #include "ConfigManager.h"
+#include <algorithm>
 #include <fstream>
 
 namespace SP {
@@ -24,6 +25,39 @@ void to_json(nlohmann::json& j, const ShaderPreset& p) {
         }
         j["paramValues"] = paramVals;
     }
+    // Save keyframe timelines keyed by param name
+    nlohmann::json kfObj = nlohmann::json::object();
+    for (const auto& param : p.params) {
+        if (!param.timeline || param.timeline->keyframes.empty()) continue;
+        const auto& tl = *param.timeline;
+        nlohmann::json tlJson;
+        tlJson["enabled"] = tl.enabled;
+        nlohmann::json keys = nlohmann::json::array();
+        for (const auto& kf : tl.keyframes) {
+            nlohmann::json kfJson;
+            kfJson["time"] = kf.time;
+            int count = 1;
+            if (param.type == ShaderParamType::Point2D) count = 2;
+            else if (param.type == ShaderParamType::Color) count = 4;
+            nlohmann::json vals = nlohmann::json::array();
+            for (int i = 0; i < count; ++i) vals.push_back(kf.values[i]);
+            kfJson["values"] = vals;
+            const char* modeStr = "linear";
+            if (kf.mode == InterpolationMode::EaseInOut) modeStr = "easeInOut";
+            else if (kf.mode == InterpolationMode::CubicBezier) modeStr = "cubicBezier";
+            kfJson["mode"] = modeStr;
+            kfJson["handles"] = nlohmann::json{
+                {"outX", kf.handles.outX}, {"outY", kf.handles.outY},
+                {"inX", kf.handles.inX},   {"inY", kf.handles.inY}
+            };
+            keys.push_back(kfJson);
+        }
+        tlJson["keys"] = keys;
+        kfObj[param.name] = tlJson;
+    }
+    if (!kfObj.empty()) {
+        j["keyframes"] = kfObj;
+    }
 }
 
 void from_json(const nlohmann::json& j, ShaderPreset& p) {
@@ -38,6 +72,40 @@ void from_json(const nlohmann::json& j, ShaderPreset& p) {
                 for (const auto& f : vals) v.push_back(f.get<float>());
             }
             p.savedParamValues[name] = std::move(v);
+        }
+    }
+    if (j.contains("keyframes") && j["keyframes"].is_object()) {
+        for (auto& [name, tlJson] : j["keyframes"].items()) {
+            KeyframeTimeline tl;
+            tl.enabled = tlJson.value("enabled", false);
+            if (tlJson.contains("keys") && tlJson["keys"].is_array()) {
+                for (const auto& kfJson : tlJson["keys"]) {
+                    Keyframe kf;
+                    kf.time = kfJson.value("time", 0.0f);
+                    if (kfJson.contains("values") && kfJson["values"].is_array()) {
+                        int i = 0;
+                        for (const auto& v : kfJson["values"]) {
+                            if (i < 4) kf.values[i++] = v.get<float>();
+                        }
+                    }
+                    std::string modeStr = kfJson.value("mode", "linear");
+                    if (modeStr == "easeInOut") kf.mode = InterpolationMode::EaseInOut;
+                    else if (modeStr == "cubicBezier") kf.mode = InterpolationMode::CubicBezier;
+                    else kf.mode = InterpolationMode::Linear;
+                    if (kfJson.contains("handles")) {
+                        const auto& h = kfJson["handles"];
+                        kf.handles.outX = h.value("outX", 0.33f);
+                        kf.handles.outY = h.value("outY", 0.0f);
+                        kf.handles.inX  = h.value("inX",  0.67f);
+                        kf.handles.inY  = h.value("inY",  1.0f);
+                    }
+                    tl.keyframes.push_back(kf);
+                }
+            }
+            // Sort by time just in case
+            std::sort(tl.keyframes.begin(), tl.keyframes.end(),
+                [](const Keyframe& a, const Keyframe& b) { return a.time < b.time; });
+            p.savedKeyframes[name] = std::move(tl);
         }
     }
 }
