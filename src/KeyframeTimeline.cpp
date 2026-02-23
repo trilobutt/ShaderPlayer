@@ -80,6 +80,11 @@ bool KeyframeTimeline::Evaluate(float time, float out[4], int valueCount) const 
 int KeyframeTimeline::AddKeyframe(const Keyframe& kf) {
     auto it = std::lower_bound(keyframes.begin(), keyframes.end(), kf.time,
         [](const Keyframe& k, float t) { return k.time < t; });
+    // If a keyframe exists at (approximately) the same time, overwrite it
+    if (it != keyframes.end() && std::abs(it->time - kf.time) < 1e-4f) {
+        *it = kf;
+        return static_cast<int>(it - keyframes.begin());
+    }
     int idx = static_cast<int>(it - keyframes.begin());
     keyframes.insert(it, kf);
     return idx;

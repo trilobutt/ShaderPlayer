@@ -385,6 +385,12 @@ void UIManager::DrawShaderParameters() {
         return;
     }
 
+    // Reset stale keyframe selection if param index is out of range
+    if (m_selectedKeyframeParam >= static_cast<int>(preset->params.size())) {
+        m_selectedKeyframeParam = -1;
+        m_selectedKeyframeIndex = -1;
+    }
+
     bool anyChanged = false;
 
     for (auto& p : preset->params) {
@@ -498,10 +504,6 @@ void UIManager::DrawShaderParameters() {
             // Keyframe controls when enabled
             if (p.timeline && p.timeline->enabled) {
                 int paramIdx = static_cast<int>(&p - &preset->params[0]);
-                int valueCount = 1;
-                if (p.type == ShaderParamType::Point2D) valueCount = 2;
-                else if (p.type == ShaderParamType::Color) valueCount = 4;
-
                 // Add keyframe at current time
                 if (ImGui::SmallButton("+ Key")) {
                     Keyframe kf;
@@ -536,7 +538,7 @@ void UIManager::DrawShaderParameters() {
                     m_selectedKeyframeIndex < static_cast<int>(kfs.size()))
                 {
                     DrawKeyframeDetail(p, *p.timeline, m_selectedKeyframeIndex,
-                                       valueCount, anyChanged);
+                                       anyChanged);
                 }
             }
         }
@@ -560,7 +562,7 @@ void UIManager::DrawShaderParameters() {
 }
 
 void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
-                                    int keyframeIndex, int valueCount, bool& anyChanged) {
+                                    int keyframeIndex, bool& anyChanged) {
     Keyframe& kf = timeline.keyframes[keyframeIndex];
 
     ImGui::Indent(16.0f);
@@ -589,12 +591,17 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
     switch (param.type) {
     case ShaderParamType::Float: {
         ImGui::SetNextItemWidth(150.0f);
-        ImGui::SliderFloat("Value##kfval", &kf.values[0], param.min, param.max);
+        if (ImGui::SliderFloat("Value##kfval", &kf.values[0], param.min, param.max)) {
+            anyChanged = true;
+        }
         break;
     }
     case ShaderParamType::Bool: {
         bool b = kf.values[0] > 0.5f;
-        if (ImGui::Checkbox("Value##kfval", &b)) kf.values[0] = b ? 1.0f : 0.0f;
+        if (ImGui::Checkbox("Value##kfval", &b)) {
+            kf.values[0] = b ? 1.0f : 0.0f;
+            anyChanged = true;
+        }
         break;
     }
     case ShaderParamType::Long: {
@@ -605,19 +612,22 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
         ImGui::SetNextItemWidth(150.0f);
         if (ImGui::Combo("Value##kfval", &idx, items.c_str())) {
             kf.values[0] = static_cast<float>(idx);
+            anyChanged = true;
         }
         break;
     }
     case ShaderParamType::Color: {
-        ImGui::ColorEdit4("Value##kfval", kf.values);
+        if (ImGui::ColorEdit4("Value##kfval", kf.values)) {
+            anyChanged = true;
+        }
         break;
     }
     case ShaderParamType::Point2D: {
         ImGui::SetNextItemWidth(80.0f);
-        ImGui::InputFloat("X##kfval", &kf.values[0], 0.01f, 0.1f);
+        if (ImGui::InputFloat("X##kfval", &kf.values[0], 0.01f, 0.1f)) anyChanged = true;
         ImGui::SameLine();
         ImGui::SetNextItemWidth(80.0f);
-        ImGui::InputFloat("Y##kfval", &kf.values[1], 0.01f, 0.1f);
+        if (ImGui::InputFloat("Y##kfval", &kf.values[1], 0.01f, 0.1f)) anyChanged = true;
         break;
     }
     default: break;
@@ -684,18 +694,20 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
             draw->AddLine(p3, h2, IM_COL32(255, 100, 100, 200));
             draw->AddCircleFilled(h2, 5.0f, IM_COL32(255, 100, 100, 255));
 
-            // Drag interaction
-            if (ImGui::IsItemActive()) {
+            // Drag interaction — lock handle on mouse-down
+            static int s_dragHandle = -1;
+            if (ImGui::IsItemActivated()) {
+                ImVec2 mouse = ImGui::GetMousePos();
+                float d1 = (mouse.x - h1.x) * (mouse.x - h1.x) + (mouse.y - h1.y) * (mouse.y - h1.y);
+                float d2 = (mouse.x - h2.x) * (mouse.x - h2.x) + (mouse.y - h2.y) * (mouse.y - h2.y);
+                s_dragHandle = (d1 <= d2) ? 0 : 1;
+            }
+            if (ImGui::IsItemActive() && s_dragHandle >= 0) {
                 ImVec2 mouse = ImGui::GetMousePos();
                 float mx = (mouse.x - curvePos.x) / curveSize.x;
                 float my = 1.0f - (mouse.y - curvePos.y) / curveSize.y;
-                mx = std::clamp(mx, 0.0f, 1.0f);  // X clamped to [0,1]
-                // Y unclamped for overshoot
-
-                // Determine which handle is closer to mouse
-                float d1 = (mouse.x - h1.x) * (mouse.x - h1.x) + (mouse.y - h1.y) * (mouse.y - h1.y);
-                float d2 = (mouse.x - h2.x) * (mouse.x - h2.x) + (mouse.y - h2.y) * (mouse.y - h2.y);
-                if (d1 <= d2) {
+                mx = std::clamp(mx, 0.0f, 1.0f);
+                if (s_dragHandle == 0) {
                     kf.handles.outX = mx;
                     kf.handles.outY = my;
                 } else {
@@ -703,6 +715,7 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
                     kf.handles.inY = my;
                 }
             }
+            if (!ImGui::IsItemActive()) s_dragHandle = -1;
         }
 
         // Click on EaseInOut curve → convert to CubicBezier with equivalent handles
@@ -765,6 +778,8 @@ void UIManager::DrawShaderLibrary() {
             // Selectable name — single click activates, double-click opens keybinding modal
             if (ImGui::Selectable(preset->name.c_str(), isActive)) {
                 manager.SetActivePreset(i);
+                m_selectedKeyframeParam = -1;
+                m_selectedKeyframeIndex = -1;
                 m_app.OnParamChanged();
                 m_editor.SetText(preset->source);
             }

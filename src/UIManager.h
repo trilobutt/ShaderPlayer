@@ -71,7 +71,7 @@ private:
     void DrawManageWorkspacesModal();
     void DrawWorkspaceKeybindingModal();
     void DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
-                            int keyframeIndex, int valueCount, bool& anyChanged);
+                            int keyframeIndex, bool& anyChanged);
 
     Application& m_app;
     
