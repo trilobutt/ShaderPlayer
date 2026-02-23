@@ -586,6 +586,38 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
         }
     }
 
+    // Snap-to-playhead button
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Set##kfset")) {
+        float playhead = static_cast<float>(m_app.GetPlaybackTime());
+        Keyframe copy = kf;
+        copy.time = playhead;
+        timeline.RemoveKeyframe(keyframeIndex);
+        int newIdx = timeline.AddKeyframe(copy);
+        m_selectedKeyframeIndex = newIdx;
+        anyChanged = true;
+        ImGui::PopID();
+        ImGui::Unindent(16.0f);
+        return;
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap keyframe to current playhead position");
+
+    // Follow-mode toggle — disabled when no video open (nothing to follow)
+    ImGui::SameLine();
+    bool videoOpen = m_app.GetDecoder().IsOpen();
+    if (!videoOpen) ImGui::BeginDisabled();
+    if (m_keyframeFollowMode)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.6f, 0.1f, 1.0f));
+    if (ImGui::SmallButton("~##kffollow"))
+        m_keyframeFollowMode = !m_keyframeFollowMode;
+    if (m_keyframeFollowMode)
+        ImGui::PopStyleColor();
+    if (!videoOpen) ImGui::EndDisabled();
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(m_keyframeFollowMode
+            ? "Follow mode ON: seeking also moves this keyframe"
+            : "Follow mode OFF: click to link this keyframe to the transport");
+
     // Value editing based on type
     ImGui::SameLine();
     switch (param.type) {
