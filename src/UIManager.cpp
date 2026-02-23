@@ -389,6 +389,7 @@ void UIManager::DrawShaderParameters() {
     if (m_selectedKeyframeParam >= static_cast<int>(preset->params.size())) {
         m_selectedKeyframeParam = -1;
         m_selectedKeyframeIndex = -1;
+        m_keyframeFollowMode    = false;
     }
 
     bool anyChanged = false;
@@ -763,6 +764,7 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
         timeline.RemoveKeyframe(keyframeIndex);
         m_selectedKeyframeIndex = -1;
         m_selectedKeyframeParam = -1;
+        m_keyframeFollowMode    = false;
         anyChanged = true;
     }
 
@@ -814,6 +816,7 @@ void UIManager::DrawShaderLibrary() {
                 manager.SetActivePreset(i);
                 m_selectedKeyframeParam = -1;
                 m_selectedKeyframeIndex = -1;
+                m_keyframeFollowMode    = false;
                 m_app.OnParamChanged();
                 m_editor.SetText(preset->source);
             }
