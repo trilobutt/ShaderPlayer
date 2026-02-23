@@ -559,11 +559,167 @@ void UIManager::DrawShaderParameters() {
     ImGui::End();
 }
 
-void UIManager::DrawKeyframeDetail(ShaderParam& /*param*/, KeyframeTimeline& /*timeline*/,
-                                    int /*keyframeIndex*/, int /*valueCount*/, bool& /*anyChanged*/) {
-    // Stub — full implementation in Task 6
+void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
+                                    int keyframeIndex, int valueCount, bool& anyChanged) {
+    Keyframe& kf = timeline.keyframes[keyframeIndex];
+
     ImGui::Indent(16.0f);
-    ImGui::TextDisabled("(Keyframe detail editor — coming soon)");
+    ImGui::PushID(keyframeIndex + 1000); // avoid ID collision with param widgets
+
+    // Time input
+    ImGui::SetNextItemWidth(100.0f);
+    float editTime = kf.time;
+    if (ImGui::InputFloat("Time##kftime", &editTime, 0.1f, 1.0f, "%.2f s")) {
+        if (editTime != kf.time) {
+            // Re-sort: remove and re-insert to maintain order
+            Keyframe copy = kf;
+            copy.time = editTime;
+            timeline.RemoveKeyframe(keyframeIndex);
+            int newIdx = timeline.AddKeyframe(copy);
+            m_selectedKeyframeIndex = newIdx;
+            // Early return since keyframeIndex is now invalid
+            ImGui::PopID();
+            ImGui::Unindent(16.0f);
+            return;
+        }
+    }
+
+    // Value editing based on type
+    ImGui::SameLine();
+    switch (param.type) {
+    case ShaderParamType::Float: {
+        ImGui::SetNextItemWidth(150.0f);
+        ImGui::SliderFloat("Value##kfval", &kf.values[0], param.min, param.max);
+        break;
+    }
+    case ShaderParamType::Bool: {
+        bool b = kf.values[0] > 0.5f;
+        if (ImGui::Checkbox("Value##kfval", &b)) kf.values[0] = b ? 1.0f : 0.0f;
+        break;
+    }
+    case ShaderParamType::Long: {
+        int idx = static_cast<int>(kf.values[0]);
+        std::string items;
+        for (const auto& lbl : param.longLabels) { items += lbl; items += '\0'; }
+        items += '\0';
+        ImGui::SetNextItemWidth(150.0f);
+        if (ImGui::Combo("Value##kfval", &idx, items.c_str())) {
+            kf.values[0] = static_cast<float>(idx);
+        }
+        break;
+    }
+    case ShaderParamType::Color: {
+        ImGui::ColorEdit4("Value##kfval", kf.values);
+        break;
+    }
+    case ShaderParamType::Point2D: {
+        ImGui::SetNextItemWidth(80.0f);
+        ImGui::InputFloat("X##kfval", &kf.values[0], 0.01f, 0.1f);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(80.0f);
+        ImGui::InputFloat("Y##kfval", &kf.values[1], 0.01f, 0.1f);
+        break;
+    }
+    default: break;
+    }
+
+    // Interpolation mode
+    int modeInt = static_cast<int>(kf.mode);
+    ImGui::SetNextItemWidth(120.0f);
+    if (ImGui::Combo("Lerp##kfmode", &modeInt, "Linear\0Ease In/Out\0Custom Bezier\0")) {
+        InterpolationMode newMode = static_cast<InterpolationMode>(modeInt);
+        // When switching to CubicBezier from EaseInOut, set handles to approximate smoothstep
+        if (newMode == InterpolationMode::CubicBezier && kf.mode == InterpolationMode::EaseInOut) {
+            kf.handles = { 0.42f, 0.0f, 0.58f, 1.0f };
+        }
+        kf.mode = newMode;
+    }
+
+    // Bezier curve editor (inline, ~160x100px)
+    {
+        ImVec2 curveSize(160.0f, 100.0f);
+        ImVec2 curvePos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##curve", curveSize);
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+
+        ImVec2 p0(curvePos.x, curvePos.y + curveSize.y);             // bottom-left = (0,0)
+        ImVec2 p3(curvePos.x + curveSize.x, curvePos.y);             // top-right = (1,1)
+
+        // Background
+        draw->AddRectFilled(curvePos, ImVec2(curvePos.x + curveSize.x, curvePos.y + curveSize.y),
+                            IM_COL32(30, 30, 30, 255));
+        draw->AddRect(curvePos, ImVec2(curvePos.x + curveSize.x, curvePos.y + curveSize.y),
+                      IM_COL32(80, 80, 80, 255));
+
+        // Diagonal reference line
+        draw->AddLine(p0, p3, IM_COL32(60, 60, 60, 255));
+
+        // Determine bezier control points for display
+        float cx1, cy1, cx2, cy2;
+        if (kf.mode == InterpolationMode::Linear) {
+            cx1 = 0.0f; cy1 = 0.0f; cx2 = 1.0f; cy2 = 1.0f;
+        } else if (kf.mode == InterpolationMode::EaseInOut) {
+            cx1 = 0.42f; cy1 = 0.0f; cx2 = 0.58f; cy2 = 1.0f;
+        } else {
+            cx1 = kf.handles.outX; cy1 = kf.handles.outY;
+            cx2 = kf.handles.inX;  cy2 = kf.handles.inY;
+        }
+
+        // Draw curve using bezier
+        ImVec2 cp1(curvePos.x + cx1 * curveSize.x, curvePos.y + (1.0f - cy1) * curveSize.y);
+        ImVec2 cp2(curvePos.x + cx2 * curveSize.x, curvePos.y + (1.0f - cy2) * curveSize.y);
+        draw->AddBezierCubic(p0, cp1, cp2, p3, IM_COL32(220, 180, 50, 255), 2.0f);
+
+        // Draggable handles (only for CubicBezier mode)
+        if (kf.mode == InterpolationMode::CubicBezier) {
+            // Handle 1 (out)
+            ImVec2 h1(curvePos.x + kf.handles.outX * curveSize.x,
+                      curvePos.y + (1.0f - kf.handles.outY) * curveSize.y);
+            draw->AddLine(p0, h1, IM_COL32(100, 180, 255, 200));
+            draw->AddCircleFilled(h1, 5.0f, IM_COL32(100, 180, 255, 255));
+
+            // Handle 2 (in)
+            ImVec2 h2(curvePos.x + kf.handles.inX * curveSize.x,
+                      curvePos.y + (1.0f - kf.handles.inY) * curveSize.y);
+            draw->AddLine(p3, h2, IM_COL32(255, 100, 100, 200));
+            draw->AddCircleFilled(h2, 5.0f, IM_COL32(255, 100, 100, 255));
+
+            // Drag interaction
+            if (ImGui::IsItemActive()) {
+                ImVec2 mouse = ImGui::GetMousePos();
+                float mx = (mouse.x - curvePos.x) / curveSize.x;
+                float my = 1.0f - (mouse.y - curvePos.y) / curveSize.y;
+                mx = std::clamp(mx, 0.0f, 1.0f);  // X clamped to [0,1]
+                // Y unclamped for overshoot
+
+                // Determine which handle is closer to mouse
+                float d1 = (mouse.x - h1.x) * (mouse.x - h1.x) + (mouse.y - h1.y) * (mouse.y - h1.y);
+                float d2 = (mouse.x - h2.x) * (mouse.x - h2.x) + (mouse.y - h2.y) * (mouse.y - h2.y);
+                if (d1 <= d2) {
+                    kf.handles.outX = mx;
+                    kf.handles.outY = my;
+                } else {
+                    kf.handles.inX = mx;
+                    kf.handles.inY = my;
+                }
+            }
+        }
+
+        // Click on EaseInOut curve → convert to CubicBezier with equivalent handles
+        if (kf.mode == InterpolationMode::EaseInOut && ImGui::IsItemClicked()) {
+            kf.mode = InterpolationMode::CubicBezier;
+            kf.handles = { 0.42f, 0.0f, 0.58f, 1.0f };
+        }
+    }
+
+    // Delete button
+    if (ImGui::SmallButton("Delete Keyframe")) {
+        timeline.RemoveKeyframe(keyframeIndex);
+        m_selectedKeyframeIndex = -1;
+        m_selectedKeyframeParam = -1;
+    }
+
+    ImGui::PopID();
     ImGui::Unindent(16.0f);
 }
 
