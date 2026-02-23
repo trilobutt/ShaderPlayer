@@ -102,6 +102,7 @@ add_executable(ShaderPlayer WIN32
     src/UIManager.cpp
     src/ConfigManager.cpp
     src/WorkspaceManager.cpp
+    src/KeyframeTimeline.cpp
 )
 
 target_include_directories(ShaderPlayer PRIVATE
