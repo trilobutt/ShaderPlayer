@@ -284,7 +284,7 @@ All automations live under `.claude/`. Do not edit `config.json` directly — it
 
 Live documentation lookup for D3D11, HLSL, FFmpeg, and ImGui APIs.
 
-**Installed**: `claude mcp add context7 -- npx -y @upstash/context7-mcp` (stored in `.claude.json`)
+**Installed**: `claude mcp add context7 -- cmd /c npx -y @upstash/context7-mcp` (stored in `.claude.json`; Windows requires `cmd /c` wrapper)
 
 **Usage**: Ask Claude to look up API docs mid-task, e.g. "use context7 to check the D3D11_TEXTURE2D_DESC fields" or "look up av_seek_frame parameters". Claude resolves current library docs rather than relying on training data.
 
