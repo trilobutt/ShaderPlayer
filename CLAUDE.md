@@ -219,6 +219,8 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
 - `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame
 - `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
+- Toggle buttons using `PushStyleColor`/`PopStyleColor`: snapshot the bool BEFORE the button call (`bool wasActive = m_flag; if (wasActive) Push...; if (Button(...)) m_flag=!m_flag; if (wasActive) Pop...`). Checking `m_flag` after the button call breaks push/pop symmetry on the click frame.
+- `DrawKeyframeDetail` receives `anyChanged` by reference — set it on ALL mutation paths including early returns, or `OnParamChanged()` won't fire for that edit.
 
 ## VideoEncoder Notes
 
@@ -300,7 +302,11 @@ Per-parameter keyframe animation tied to absolute video time. Each `ShaderParam`
 
 **Persistence** (ConfigManager.cpp): Keyframes serialised as `"keyframes": { "ParamName": { "enabled": true, "keys": [...] } }` in config.json, keyed by param name. Restored via `ShaderPreset::savedKeyframes` on load.
 
-**Important**: `m_selectedKeyframeParam` and `m_selectedKeyframeIndex` (UIManager) must be reset to -1 whenever the active preset changes, to prevent stale indices into a different preset's param/keyframe vectors.
+**Important**: `m_selectedKeyframeParam` and `m_selectedKeyframeIndex` (UIManager) must be reset to -1 whenever the active preset changes, to prevent stale indices into a different preset's param/keyframe vectors. Also reset `m_keyframeFollowMode` at the same sites, and when the KF toggle is disabled for a param.
+
+**Keyframe reposition pattern**: copy the keyframe, call `RemoveKeyframe(idx)`, call `AddKeyframe(copy)`, update `m_selectedKeyframeIndex` with the returned index. Never modify `kf.time` in-place — sorted order is maintained only via remove/re-insert.
+
+**`Application::GetPlaybackTime()` returns `float`** — no cast needed.
 
 ## Claude Code Automations
 
