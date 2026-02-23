@@ -498,6 +498,11 @@ void UIManager::DrawShaderParameters() {
                     p.timeline.emplace();
                 }
                 p.timeline->enabled = !p.timeline->enabled;
+                if (!p.timeline->enabled) {
+                    m_selectedKeyframeParam = -1;
+                    m_selectedKeyframeIndex = -1;
+                    m_keyframeFollowMode    = false;
+                }
             }
             if (hasTimeline) ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle keyframe animation");
@@ -580,6 +585,7 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
             timeline.RemoveKeyframe(keyframeIndex);
             int newIdx = timeline.AddKeyframe(copy);
             m_selectedKeyframeIndex = newIdx;
+            anyChanged = true;
             // Early return since keyframeIndex is now invalid
             ImGui::PopID();
             ImGui::Unindent(16.0f);
