@@ -416,6 +416,44 @@ void Application::OnParamChanged() {
     }
 }
 
+void Application::EvaluateKeyframes() {
+    ShaderPreset* preset = m_shaderManager->GetActivePreset();
+    if (!preset) return;
+
+    bool anyChanged = false;
+
+    for (auto& p : preset->params) {
+        if (!p.timeline || !p.timeline->enabled) continue;
+
+        int valueCount = 1;
+        if (p.type == ShaderParamType::Point2D) valueCount = 2;
+        else if (p.type == ShaderParamType::Color) valueCount = 4;
+
+        // For Bool/Long: step interpolation (snap to nearest keyframe, no lerp).
+        // Evaluate still returns lerped values; we snap afterwards.
+        float interpolated[4] = {};
+        if (p.timeline->Evaluate(m_playbackTime, interpolated, valueCount)) {
+            bool changed = false;
+            for (int i = 0; i < valueCount; ++i) {
+                float val = interpolated[i];
+                // Step types: snap to 0 or 1 (bool) or round to int (long)
+                if (p.type == ShaderParamType::Bool)
+                    val = (val >= 0.5f) ? 1.0f : 0.0f;
+                else if (p.type == ShaderParamType::Long)
+                    val = std::round(val);
+
+                if (p.values[i] != val) {
+                    p.values[i] = val;
+                    changed = true;
+                }
+            }
+            if (changed) anyChanged = true;
+        }
+    }
+
+    if (anyChanged) OnParamChanged();
+}
+
 void Application::RenderFrame() {
     // Upload current video frame
     if (!m_currentFrame.data[0].empty()) {
@@ -424,6 +462,9 @@ void Application::RenderFrame() {
 
     // Set shader uniforms
     m_renderer.SetShaderTime(m_playbackTime);
+
+    // Evaluate keyframe animations at current playback time
+    EvaluateKeyframes();
 
     // Set up D3D11 pipeline and clear backbuffer to black
     m_renderer.BeginFrame();

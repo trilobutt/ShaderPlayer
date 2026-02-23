@@ -40,6 +40,7 @@ public:
     void TogglePlayback();
     void SeekTo(double seconds);
     PlaybackState GetPlaybackState() const { return m_playbackState; }
+    float GetPlaybackTime() const { return m_playbackTime; }
 
     // Shader operations
     bool CompileCurrentShader(const std::string& source);
@@ -91,6 +92,7 @@ private:
     void HandleDroppedFiles(HDROP hDrop);
     void HandleKeyboardShortcuts(UINT vkCode);
     static void PackParamValues(const ShaderPreset& preset, float out[16]);
+    void EvaluateKeyframes();
 
     // Frame processing
     void ProcessFrame();
