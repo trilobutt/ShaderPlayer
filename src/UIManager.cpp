@@ -883,6 +883,25 @@ void UIManager::DrawTransportControls() {
             ImGui::SetNextItemWidth(400);
             if (ImGui::SliderFloat("##timeline", &currentTime, 0.0f, duration, "%.1f s")) {
                 m_app.SeekTo(currentTime);
+
+                // Route to selected keyframe when follow mode active or Shift held
+                bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                if ((m_keyframeFollowMode || shiftHeld) && m_selectedKeyframeParam >= 0 && m_selectedKeyframeIndex >= 0) {
+                    ShaderPreset* activePreset = m_app.GetShaderManager().GetActivePreset();
+                    if (activePreset &&
+                        m_selectedKeyframeParam < static_cast<int>(activePreset->params.size())) {
+                        auto& kfParam = activePreset->params[m_selectedKeyframeParam];
+                        if (kfParam.timeline && kfParam.timeline->enabled &&
+                            m_selectedKeyframeIndex < static_cast<int>(kfParam.timeline->keyframes.size())) {
+                            // Re-sort by removing and reinserting at new time
+                            Keyframe copy = kfParam.timeline->keyframes[m_selectedKeyframeIndex];
+                            copy.time = currentTime;
+                            kfParam.timeline->RemoveKeyframe(m_selectedKeyframeIndex);
+                            m_selectedKeyframeIndex = kfParam.timeline->AddKeyframe(copy);
+                            m_app.OnParamChanged();
+                        }
+                    }
+                }
             }
 
             // Draw keyframe markers for the currently-selected parameter
