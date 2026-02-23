@@ -213,6 +213,13 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - Static locals in modal draw functions persist across sessions; use an `s_wasOpen` bool sentinel to reset edge-detection state when a modal reopens
 - `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
 - `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame
+- `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
+
+## VideoEncoder Notes
+
+- `time_base = {1, fps*1000}` → one frame = **1000 time_base units**. PTS must be `frameIndex * 1000LL`, not `frameIndex`. Getting this wrong produces a valid-but-broken file where all frames are crammed into ~2ms, which players display as a frozen single frame.
+- `RenderToTexture()` leaves the active RT as `m_renderTextureRTV` (not the backbuffer). Call `BeginFrame()` after to restore the backbuffer RT; otherwise ImGui's save/restore will lock in the render texture as the RT for the rest of the frame.
+- Recording capture must happen **after** `RenderToDisplay()` (video pipeline state active) and **before** any subsequent `BeginFrame()` that might alter the video texture or cbuffer. Gate submission on `m_newVideoFrame` so the encoder receives exactly one frame per decoded video frame — not one per display frame.
 
 ## ShaderManager API
 

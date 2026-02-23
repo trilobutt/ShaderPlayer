@@ -611,12 +611,38 @@ void UIManager::DrawTransportControls() {
             ImGui::Text("No video loaded");
         }
 
-        // Recording indicator
+        // Record / Stop button
+        ImGui::SameLine();
         if (m_app.GetEncoder().IsRecording()) {
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.7f, 0.1f, 0.1f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.2f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.5f, 0.0f, 0.0f, 1.0f));
+            if (ImGui::Button("Stop##rec", ImVec2(50, 30))) {
+                m_app.StopRecording();
+            }
+            ImGui::PopStyleColor(3);
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), " [REC]");
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "[REC]");
             ImGui::SameLine();
-            ImGui::Text("%lld frames", m_app.GetEncoder().GetFramesEncoded());
+            ImGui::Text("%lld", m_app.GetEncoder().GetFramesEncoded());
+        } else {
+            if (ImGui::Button("Rec##rec", ImVec2(50, 30))) {
+                RecordingSettings settings;
+                settings.outputPath = m_recordingPath;
+                settings.codec = (m_recordingCodec == 0) ? "libx264" : "prores_ks";
+                settings.bitrate = m_recordingBitrate * 1000000;
+                settings.proresProfile = m_proresProfile;
+                m_app.StartRecording(settings);
+            }
+        }
+
+        // Recording settings panel toggle
+        ImGui::SameLine();
+        if (ImGui::Button("...##recsettings", ImVec2(24, 30))) {
+            m_showRecording = !m_showRecording;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Recording settings");
         }
     }
     ImGui::End();
@@ -624,7 +650,14 @@ void UIManager::DrawTransportControls() {
 
 void UIManager::DrawRecordingPanel() {
     if (ImGui::Begin("Recording Settings", &m_showRecording)) {
-        ImGui::InputText("Output Path", m_recordingPath, sizeof(m_recordingPath));
+        ImGui::Text("Output Path");
+        float browseW = 80.0f;
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - browseW - ImGui::GetStyle().ItemSpacing.x);
+        ImGui::InputText("##outputPath", m_recordingPath, sizeof(m_recordingPath));
+        ImGui::SameLine();
+        if (ImGui::Button("Browse...", ImVec2(browseW, 0))) {
+            m_app.OpenRecordingOutputDialog(m_recordingPath, sizeof(m_recordingPath));
+        }
         
         ImGui::Combo("Codec", &m_recordingCodec, "H.264 (MP4)\0ProRes (MOV)\0");
         

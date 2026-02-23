@@ -50,6 +50,7 @@ public:
     // Recording
     bool StartRecording(const RecordingSettings& settings);
     void StopRecording();
+    void OpenRecordingOutputDialog(char* pathBuf, size_t bufSize);
 
     // Configuration
     void SaveConfig();
@@ -119,6 +120,7 @@ private:
     double m_frameDuration = 1.0 / 30.0;
     float m_playbackTime = 0.0f;
     bool m_eventResetPending = false;
+    bool m_newVideoFrame = false;
 };
 
 } // namespace SP

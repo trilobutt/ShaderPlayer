@@ -277,7 +277,8 @@ void VideoEncoder::EncoderThread() {
             m_frame->data, m_frame->linesize
         );
 
-        m_frame->pts = m_frameIndex++;
+        // time_base = {1, fps*1000}, so one frame = 1000 time_base units
+        m_frame->pts = static_cast<int64_t>(m_frameIndex++) * 1000LL;
 
         if (EncodeFrame(m_frame)) {
             m_framesEncoded++;

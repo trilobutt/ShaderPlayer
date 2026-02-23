@@ -356,6 +356,8 @@ void Application::ProcessFrame() {
     auto now = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(now - m_lastFrameTime).count();
 
+    m_newVideoFrame = false;
+
     // Check for shader file changes
     m_shaderManager->CheckForChanges();
 
@@ -363,6 +365,7 @@ void Application::ProcessFrame() {
     if (m_playbackState == PlaybackState::Playing && m_decoder.IsOpen()) {
         if (elapsed >= m_frameDuration) {
             if (m_decoder.DecodeNextFrame(m_currentFrame)) {
+                m_newVideoFrame = true;
                 m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
             } else {
                 // End of video, loop
@@ -427,6 +430,22 @@ void Application::RenderFrame() {
     // Render video+shader to the display texture; ImGui::Image picks it up from there
     m_renderer.RenderToDisplay();
 
+    // Capture recording frame here, BEFORE ImGui renders. ImGui overwrites all D3D11
+    // pipeline state (VS, PS, CBs, SRVs), so RenderToTexture must run while the video
+    // pipeline state set by BeginFrame() is still active. Only capture on new video
+    // frames to match the encoder's configured framerate.
+    if (m_encoder.IsRecording() && m_newVideoFrame) {
+        if (m_renderer.RenderToTexture()) {
+            std::vector<uint8_t> frameData;
+            int width, height;
+            if (m_renderer.CopyRenderTargetToStaging(frameData, width, height)) {
+                m_encoder.SubmitFrame(frameData, width, height);
+            }
+        }
+        // RenderToTexture changes the active RT and viewport; restore before ImGui
+        m_renderer.BeginFrame();
+    }
+
     // Render UI
     m_uiManager->BeginFrame();
     m_uiManager->Render();
@@ -444,20 +463,6 @@ void Application::RenderFrame() {
             float packed[16] = {};
             PackParamValues(*preset, packed);
             m_renderer.SetCustomUniforms(packed, 16);
-        }
-    }
-
-    // If recording, capture frame
-    if (m_encoder.IsRecording() && !m_currentFrame.data[0].empty()) {
-        // Pipeline state is already configured from the BeginFrame() call above.
-        // RenderToTexture() sets its own render target and viewport, so no second
-        // BeginFrame() is needed (and calling it would clear the visible backbuffer).
-        if (m_renderer.RenderToTexture()) {
-            std::vector<uint8_t> frameData;
-            int width, height;
-            if (m_renderer.CopyRenderTargetToStaging(frameData, width, height)) {
-                m_encoder.SubmitFrame(frameData, width, height);
-            }
         }
     }
 
@@ -669,6 +674,18 @@ void Application::ScanFolderDialog() {
         }
     }
     pDialog->Release();
+}
+
+void Application::OpenRecordingOutputDialog(char* pathBuf, size_t bufSize) {
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = "MP4 Video\0*.mp4\0MOV Video\0*.mov\0All Files\0*.*\0";
+    ofn.lpstrFile = pathBuf;
+    ofn.nMaxFile = static_cast<DWORD>(bufSize);
+    ofn.lpstrDefExt = "mp4";
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    GetSaveFileNameA(&ofn);
 }
 
 bool Application::StartRecording(const RecordingSettings& settings) {
