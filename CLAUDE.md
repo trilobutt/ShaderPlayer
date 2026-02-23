@@ -24,7 +24,12 @@ src/
 ├── main.cpp              - WinMain: CoInitializeEx (COM required for IFileOpenDialog),
 │                           DPI awareness, Application lifetime
 ├── Common.h              - Shared types: VideoFrame, ShaderPreset, RecordingSettings,
-│                           AppConfig (shaderDirectory default = "shaders"), PlaybackState
+│                           AppConfig (shaderDirectory default = "shaders"), PlaybackState,
+│                           Keyframe, KeyframeTimeline, BezierHandles, InterpolationMode
+├── KeyframeTimeline.cpp  - KeyframeTimeline method implementations: Evaluate() (cubic
+│                           bezier, smoothstep, linear interpolation with binary search),
+│                           AddKeyframe() (sorted insert, overwrites duplicates),
+│                           RemoveKeyframe() (bounds-checked erase).
 ├── Application.{cpp,h}   - Central coordinator. Owns all other components. Drives
 │                           ProcessFrame() (video decode) + RenderFrame() (D3D + ImGui)
 │                           each tick. Handles WndProc, drag-drop (.hlsl → shader,
@@ -277,11 +282,25 @@ Parameters exceeding 16 floats total are skipped with a warning appended to `Sha
 - `ShaderParam::values[4]` holds current values; `defaultValues[4]` holds parsed defaults.
 - On any widget change: `Application::OnParamChanged()` packs all `params` into a `float[16]` scratch buffer at their `cbufferOffset`s, then calls `D3D11Renderer::SetCustomUniforms`. Effect visible on next `BeginFrame`.
 - `event` type: set `values[0] = 1.0f` on button press; a one-frame flag in `Application` zeros it after the next `RenderFrame` submission.
-- No per-frame CPU cost — `SetCustomUniforms` called only on user interaction and on shader activation.
+- No per-frame CPU cost — `SetCustomUniforms` called only on user interaction and on shader activation. Exception: during keyframe playback, `OnParamChanged` fires every frame for animated parameters (the interpolated value changes each frame).
 
 ### Persistence
 
-`ConfigManager` serialises only `ShaderParam::values` (not metadata) to `config.json`. On load, parsed params matched by `name` to restore saved values; unmatched params use `defaultValues`.
+`ConfigManager` serialises `ShaderParam::values` and keyframe timelines to `config.json`. On load, parsed params matched by `name` to restore saved values and keyframes; unmatched params use `defaultValues`.
+
+### Keyframe Animation
+
+Per-parameter keyframe animation tied to absolute video time. Each `ShaderParam` has an `std::optional<KeyframeTimeline>` (nullopt until user enables keyframing via the KF toggle).
+
+**Data model** (Common.h): `KeyframeTimeline` holds a sorted `std::vector<Keyframe>`. Each `Keyframe` has `time` (seconds), `values[4]`, `InterpolationMode` (Linear/EaseInOut/CubicBezier), and `BezierHandles` (two control points for cubic bezier curves).
+
+**Evaluation pipeline** (Application.cpp): `EvaluateKeyframes()` runs in `RenderFrame()` after `SetShaderTime` and before `BeginFrame`. For each animated parameter, it calls `KeyframeTimeline::Evaluate()` at `m_playbackTime`, writes interpolated values to `param.values[]`, then calls `OnParamChanged()`. Bool/Long params use step interpolation (snap after lerp). Event params are not keyframeable.
+
+**UI** (UIManager.cpp): KF toggle button per param (except Event). When enabled: "+ Key" button adds a keyframe at current playback time, timestamp chips seek on click, detail panel shows time/value editors, interpolation mode combo, and a 160x100px inline bezier curve editor with draggable control points. Widgets are disabled during keyframe playback. Diamond markers appear on the transport timeline for the selected parameter.
+
+**Persistence** (ConfigManager.cpp): Keyframes serialised as `"keyframes": { "ParamName": { "enabled": true, "keys": [...] } }` in config.json, keyed by param name. Restored via `ShaderPreset::savedKeyframes` on load.
+
+**Important**: `m_selectedKeyframeParam` and `m_selectedKeyframeIndex` (UIManager) must be reset to -1 whenever the active preset changes, to prevent stale indices into a different preset's param/keyframe vectors.
 
 ## Claude Code Automations
 
