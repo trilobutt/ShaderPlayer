@@ -606,11 +606,12 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
     ImGui::SameLine();
     bool videoOpen = m_app.GetDecoder().IsOpen();
     if (!videoOpen) ImGui::BeginDisabled();
-    if (m_keyframeFollowMode)
+    bool wasFollowActive = m_keyframeFollowMode;
+    if (wasFollowActive)
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.6f, 0.1f, 1.0f));
     if (ImGui::SmallButton("~##kffollow"))
         m_keyframeFollowMode = !m_keyframeFollowMode;
-    if (m_keyframeFollowMode)
+    if (wasFollowActive)
         ImGui::PopStyleColor();
     if (!videoOpen) ImGui::EndDisabled();
     if (ImGui::IsItemHovered())
@@ -762,6 +763,7 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
         timeline.RemoveKeyframe(keyframeIndex);
         m_selectedKeyframeIndex = -1;
         m_selectedKeyframeParam = -1;
+        anyChanged = true;
     }
 
     ImGui::PopID();
