@@ -190,6 +190,11 @@ LRESULT Application::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
         return 0;
 
     case WM_KEYDOWN: {
+        // Bit 30 of lParam = previous key state: 1 means auto-repeat, ignore it.
+        // Without this, holding Space fires TogglePlayback multiple times, leaving
+        // the player in the wrong state (e.g. intended pause → ends up playing).
+        if (lParam & (1 << 30)) return 0;
+
         UINT vk = static_cast<UINT>(wParam);
         // F-keys and modifier-key combos always fire so panel toggles and user
         // shader keybinds work even when the editor has focus.
@@ -751,6 +756,8 @@ bool Application::StartRecording(const RecordingSettings& settings) {
 
 void Application::StopRecording() {
     if (m_encoder.IsRecording()) {
+        // Non-blocking: signals the encoder thread to drain its queue and exit.
+        // Flush, file close, and resource free all happen on that thread.
         m_encoder.StopRecording();
         m_uiManager->ShowNotification("Recording stopped");
     }

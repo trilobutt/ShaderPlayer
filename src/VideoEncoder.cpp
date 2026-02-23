@@ -11,13 +11,30 @@ VideoEncoder::VideoEncoder() {
 }
 
 VideoEncoder::~VideoEncoder() {
-    StopRecording();
+    // Signal any running encoder thread to stop.
+    if (m_recording.load()) {
+        m_recording = false;
+        m_stopRequested = true;
+        m_queueCV.notify_all();
+    }
+    // Join before freeing m_packet: the encoder thread uses m_packet in
+    // EncodeFrame/FlushEncoder, so we must not free it until the thread exits.
+    if (m_encoderThread.joinable()) {
+        m_encoderThread.join();
+    }
     av_packet_free(&m_packet);
 }
 
 bool VideoEncoder::StartRecording(const RecordingSettings& settings, int sourceWidth, int sourceHeight, double sourceFPS) {
     if (m_recording.load()) {
         return false;  // Already recording
+    }
+
+    // A previous recording may still be finalising (draining queue, flushing
+    // codec, closing file) on the encoder thread. Join before touching any
+    // shared state (m_stopRequested, m_frameIndex, FFmpeg resource pointers).
+    if (m_encoderThread.joinable()) {
+        m_encoderThread.join();
     }
 
     // Use source dimensions/fps if not specified
@@ -45,43 +62,12 @@ bool VideoEncoder::StartRecording(const RecordingSettings& settings, int sourceW
 void VideoEncoder::StopRecording() {
     if (!m_recording.load()) return;
 
+    // Signal the encoder thread to drain its queue and exit. The thread itself
+    // handles flush, file close, and resource free — so this call returns
+    // immediately and does not block the main thread.
+    m_recording = false;
     m_stopRequested = true;
     m_queueCV.notify_all();
-
-    if (m_encoderThread.joinable()) {
-        m_encoderThread.join();
-    }
-
-    FlushEncoder();
-
-    // Write trailer and close
-    if (m_formatCtx) {
-        av_write_trailer(m_formatCtx);
-        
-        if (!(m_formatCtx->oformat->flags & AVFMT_NOFILE)) {
-            avio_closep(&m_formatCtx->pb);
-        }
-        avformat_free_context(m_formatCtx);
-        m_formatCtx = nullptr;
-    }
-
-    if (m_codecCtx) {
-        avcodec_free_context(&m_codecCtx);
-        m_codecCtx = nullptr;
-    }
-
-    if (m_swsCtx) {
-        sws_freeContext(m_swsCtx);
-        m_swsCtx = nullptr;
-    }
-
-    if (m_frame) {
-        av_frame_free(&m_frame);
-        m_frame = nullptr;
-    }
-
-    m_videoStream = nullptr;
-    m_recording = false;
 }
 
 bool VideoEncoder::InitEncoder(const RecordingSettings& settings, int width, int height, double fps) {
@@ -284,6 +270,36 @@ void VideoEncoder::EncoderThread() {
             m_framesEncoded++;
         }
     }
+
+    // Queue drained. Flush buffered frames out of the codec, write the file
+    // trailer, and free all FFmpeg resources. This runs on the encoder thread
+    // so the main thread is never blocked by these operations.
+    FlushEncoder();
+
+    if (m_formatCtx) {
+        av_write_trailer(m_formatCtx);
+        if (!(m_formatCtx->oformat->flags & AVFMT_NOFILE)) {
+            avio_closep(&m_formatCtx->pb);
+        }
+        avformat_free_context(m_formatCtx);
+        m_formatCtx = nullptr;
+    }
+    if (m_codecCtx) {
+        avcodec_free_context(&m_codecCtx);
+        m_codecCtx = nullptr;
+    }
+    if (m_swsCtx) {
+        sws_freeContext(m_swsCtx);
+        m_swsCtx = nullptr;
+    }
+    if (m_frame) {
+        av_frame_free(&m_frame);
+        m_frame = nullptr;
+    }
+    m_videoStream = nullptr;
+    // Reset stop flag last, after all work is done. StartRecording() joins this
+    // thread before touching any shared state, so the reset is safe.
+    m_stopRequested = false;
 }
 
 bool VideoEncoder::EncodeFrame(AVFrame* frame) {
