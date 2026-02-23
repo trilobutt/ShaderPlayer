@@ -122,6 +122,7 @@ private:
     // Keyframe editing state
     int m_selectedKeyframeParam = -1;   // index into preset->params, or -1
     int m_selectedKeyframeIndex = -1;   // index into timeline->keyframes, or -1
+    bool m_keyframeFollowMode   = false; // transport seek also moves selected keyframe
 };
 
 } // namespace SP
