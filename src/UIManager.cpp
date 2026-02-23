@@ -835,7 +835,33 @@ void UIManager::DrawTransportControls() {
             if (ImGui::SliderFloat("##timeline", &currentTime, 0.0f, duration, "%.1f s")) {
                 m_app.SeekTo(currentTime);
             }
-            
+
+            // Draw keyframe markers for the currently-selected parameter
+            if (m_selectedKeyframeParam >= 0) {
+                ShaderPreset* activePreset = m_app.GetShaderManager().GetActivePreset();
+                if (activePreset && m_selectedKeyframeParam < static_cast<int>(activePreset->params.size())) {
+                    auto& kfParam = activePreset->params[m_selectedKeyframeParam];
+                    if (kfParam.timeline && kfParam.timeline->enabled) {
+                        ImVec2 sliderMin = ImGui::GetItemRectMin();
+                        ImVec2 sliderMax = ImGui::GetItemRectMax();
+                        float sliderW = sliderMax.x - sliderMin.x;
+                        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+                        for (const auto& keyframe : kfParam.timeline->keyframes) {
+                            float frac = (duration > 0.0f) ? keyframe.time / duration : 0.0f;
+                            float x = sliderMin.x + frac * sliderW;
+                            float cy = (sliderMin.y + sliderMax.y) * 0.5f;
+                            float sz = 4.0f;
+                            // Diamond marker
+                            drawList->AddQuadFilled(
+                                ImVec2(x, cy - sz), ImVec2(x + sz, cy),
+                                ImVec2(x, cy + sz), ImVec2(x - sz, cy),
+                                IM_COL32(220, 180, 50, 200));
+                        }
+                    }
+                }
+            }
+
             ImGui::SameLine();
             ImGui::Text("/ %.1f s", duration);
         } else {
