@@ -38,6 +38,36 @@ class VideoEncoder;
 class UIManager;
 class ConfigManager;
 
+// Keyframe interpolation
+enum class InterpolationMode { Linear, EaseInOut, CubicBezier };
+
+struct BezierHandles {
+    float outX = 0.33f, outY = 0.0f;  // control point leaving this keyframe (normalised 0-1)
+    float inX  = 0.67f, inY  = 1.0f;  // control point entering next keyframe (normalised 0-1)
+};
+
+struct Keyframe {
+    float time = 0.0f;              // absolute video time in seconds
+    float values[4] = {};           // same layout as ShaderParam::values
+    InterpolationMode mode = InterpolationMode::Linear;
+    BezierHandles handles;
+};
+
+struct KeyframeTimeline {
+    bool enabled = false;
+    std::vector<Keyframe> keyframes; // sorted by time
+
+    // Evaluate interpolated value at given time. Writes to out[0..valueCount-1].
+    // Returns true if a value was written (timeline enabled and non-empty).
+    bool Evaluate(float time, float out[4], int valueCount) const;
+
+    // Insert keyframe maintaining sort order by time. Returns index of inserted keyframe.
+    int AddKeyframe(const Keyframe& kf);
+
+    // Remove keyframe at index.
+    void RemoveKeyframe(int index);
+};
+
 enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event };
 
 struct ShaderParam {
@@ -52,6 +82,7 @@ struct ShaderParam {
     float step = 0.01f;
     std::vector<std::string> longLabels; // Dropdown labels for type=Long
     int cbufferOffset = 0;          // Float index into custom[16]; set at parse time
+    std::optional<KeyframeTimeline> timeline;  // nullopt until user enables keyframing
 };
 
 // Frame data structure
@@ -78,6 +109,7 @@ struct ShaderPreset {
     // Persistence bridge: saved values keyed by param name, restored after re-parse.
     // Format: { "PixelSize": [8.0], "Tint": [1.0, 0.8, 0.6, 1.0] }
     std::unordered_map<std::string, std::vector<float>> savedParamValues;
+    std::unordered_map<std::string, KeyframeTimeline> savedKeyframes;
 };
 
 struct WorkspacePreset {
