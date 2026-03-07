@@ -236,6 +236,15 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 ## Application API
 
 - `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F6, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding.
+- `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
+
+## AppConfig Persistence Pattern
+
+Adding a new config field requires three changes: default value in `Common.h` (`AppConfig` struct), entry in `to_json`, and a `if (j.contains(...))` guard in `from_json` — both in `ConfigManager.cpp`.
+
+## VideoDecoder API
+
+`VideoDecoder` exposes `GetFPS()`, `GetFrameCount()`, `GetDuration()`, `GetCurrentTime()` — sufficient for any frame-based UI without new API. `Keyframe::time` and all playback state is always stored in seconds; display layers convert via `fps`. Never store frame numbers in the data model.
 
 ## C++ / Dependency Gotchas
 

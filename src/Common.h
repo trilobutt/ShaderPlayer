@@ -145,7 +145,8 @@ struct AppConfig {
     std::string lastOpenedVideo;
     std::string shaderDirectory = "shaders";
     std::string layoutsDirectory = "layouts";
-    
+    bool timeDisplayFrames = false;  // true = show frame numbers; false = show seconds
+
     // UI layout
     float editorPanelWidth = 500.0f;
     float libraryPanelHeight = 200.0f;

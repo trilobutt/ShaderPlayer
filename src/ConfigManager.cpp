@@ -147,7 +147,8 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"libraryPanelHeight", c.libraryPanelHeight},
         {"showEditor", c.showEditor},
         {"showLibrary", c.showLibrary},
-        {"showTransport", c.showTransport}
+        {"showTransport", c.showTransport},
+        {"timeDisplayFrames", c.timeDisplayFrames}
     };
 }
 
@@ -164,6 +165,7 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("showEditor")) j.at("showEditor").get_to(c.showEditor);
     if (j.contains("showLibrary")) j.at("showLibrary").get_to(c.showLibrary);
     if (j.contains("showTransport")) j.at("showTransport").get_to(c.showTransport);
+    if (j.contains("timeDisplayFrames")) j.at("timeDisplayFrames").get_to(c.timeDisplayFrames);
 }
 
 ConfigManager::ConfigManager() = default;

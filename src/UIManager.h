@@ -122,6 +122,9 @@ private:
     // ImGui ini path — must outlive the ImGui context (io.IniFilename is a raw ptr)
     std::string m_iniFilePath;
 
+    // Monospace font for the shader editor (Consolas; null = use default)
+    ImFont* m_editorFont = nullptr;
+
     // Keyframe editing state
     int m_selectedKeyframeParam = -1;   // index into preset->params, or -1
     int m_selectedKeyframeIndex = -1;   // index into timeline->keyframes, or -1

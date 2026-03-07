@@ -37,12 +37,153 @@ bool UIManager::Initialize(HWND hwnd, ID3D11Device* device, ID3D11DeviceContext*
         io.IniFilename = m_iniFilePath.c_str();
     }
 
-    // Setup style
-    ImGui::StyleColorsDark();
+    // Fonts — DPI-aware sizes so the UI is legible at 4K.
+    // Tahoma: the authentic Windows XP UI font.
+    // Consolas: monospace for the shader editor.
+    // Both ship with every modern Windows install.
+    {
+        const float dpiScale    = ImGui_ImplWin32_GetDpiScaleForHwnd(hwnd);
+        const float uiSize      = std::round(15.0f * dpiScale);
+        const float monoSize    = std::round(14.0f * dpiScale);
+
+        ImFontConfig cfg;
+        cfg.OversampleH = 2;
+        cfg.OversampleV = 2;
+        ImFont* tahoma = io.Fonts->AddFontFromFileTTF(
+            "C:\\Windows\\Fonts\\tahoma.ttf", uiSize, &cfg);
+        if (!tahoma)
+            io.Fonts->AddFontDefault();
+
+        ImFontConfig cfgMono;
+        cfgMono.OversampleH = 2;
+        cfgMono.OversampleV = 2;
+        m_editorFont = io.Fonts->AddFontFromFileTTF(
+            "C:\\Windows\\Fonts\\consola.ttf", monoSize, &cfgMono);
+        if (!m_editorFont)
+            m_editorFont = io.Fonts->AddFontFromFileTTF(
+                "C:\\Windows\\Fonts\\cour.ttf", monoSize, &cfgMono);
+        // null is safe — PushFont(nullptr) reverts to default
+    }
+
+    // ── Windows XP "Silver" dark theme ──────────────────────────────────────
+    // High-contrast near-black backgrounds, XP silver/gray buttons with visible
+    // 1px borders (the "raised" look), muted blue accent for interactive handles.
+    ImGui::StyleColorsDark();   // reset to known baseline first
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 4.0f;
-    style.FrameRounding = 2.0f;
-    style.GrabRounding = 2.0f;
+
+    // Geometry — XP's characteristic slight rounding with visible borders
+    style.WindowRounding    = 3.0f;
+    style.ChildRounding     = 2.0f;
+    style.FrameRounding     = 2.0f;
+    style.PopupRounding     = 3.0f;
+    style.ScrollbarRounding = 2.0f;
+    style.GrabRounding      = 2.0f;
+    style.TabRounding       = 2.0f;
+    style.WindowBorderSize  = 1.0f;
+    style.FrameBorderSize   = 1.0f;   // gives inputs the XP recessed-border look
+    style.PopupBorderSize   = 1.0f;
+    style.WindowPadding     = ImVec2(8.0f, 6.0f);
+    style.FramePadding      = ImVec2(5.0f, 3.0f);
+    style.ItemSpacing       = ImVec2(6.0f, 4.0f);
+    style.ItemInnerSpacing  = ImVec2(4.0f, 4.0f);
+    style.ScrollbarSize     = 14.0f;
+    style.GrabMinSize       = 10.0f;
+
+    ImVec4* c = style.Colors;
+
+    // Background — near black, no colour cast
+    c[ImGuiCol_WindowBg]          = ImVec4(0.094f, 0.094f, 0.094f, 1.00f); // #181818
+    c[ImGuiCol_ChildBg]           = ImVec4(0.071f, 0.071f, 0.071f, 1.00f); // #121212
+    c[ImGuiCol_PopupBg]           = ImVec4(0.118f, 0.118f, 0.118f, 0.97f); // #1E1E1E
+
+    // Borders — medium gray, clearly visible for the XP "depth" feel
+    c[ImGuiCol_Border]            = ImVec4(0.353f, 0.353f, 0.353f, 1.00f); // #5A5A5A
+    c[ImGuiCol_BorderShadow]      = ImVec4(0.000f, 0.000f, 0.000f, 0.00f);
+    c[ImGuiCol_Separator]         = ImVec4(0.275f, 0.275f, 0.275f, 1.00f); // #464646
+    c[ImGuiCol_SeparatorHovered]  = ImVec4(0.459f, 0.459f, 0.459f, 1.00f);
+    c[ImGuiCol_SeparatorActive]   = ImVec4(0.357f, 0.608f, 0.867f, 1.00f); // XP blue accent
+
+    // Title bars — slightly lighter than window bg; active title gets XP teal-blue
+    c[ImGuiCol_TitleBg]           = ImVec4(0.137f, 0.137f, 0.137f, 1.00f); // #232323
+    c[ImGuiCol_TitleBgActive]     = ImVec4(0.161f, 0.161f, 0.161f, 1.00f); // #292929
+    c[ImGuiCol_TitleBgCollapsed]  = ImVec4(0.094f, 0.094f, 0.094f, 0.75f);
+
+    // Menu bar — just a hair lighter than window bg
+    c[ImGuiCol_MenuBarBg]         = ImVec4(0.122f, 0.122f, 0.122f, 1.00f); // #1F1F1F
+
+    // Frames — recessed/inset (darker than window bg)
+    c[ImGuiCol_FrameBg]           = ImVec4(0.047f, 0.047f, 0.047f, 1.00f); // #0C0C0C
+    c[ImGuiCol_FrameBgHovered]    = ImVec4(0.157f, 0.188f, 0.220f, 1.00f); // slight blue tint on hover
+    c[ImGuiCol_FrameBgActive]     = ImVec4(0.118f, 0.157f, 0.204f, 1.00f);
+
+    // Scrollbar
+    c[ImGuiCol_ScrollbarBg]       = ImVec4(0.059f, 0.059f, 0.059f, 1.00f);
+    c[ImGuiCol_ScrollbarGrab]     = ImVec4(0.251f, 0.251f, 0.251f, 1.00f); // #404040
+    c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.357f, 0.357f, 0.357f, 1.00f);
+    c[ImGuiCol_ScrollbarGrabActive]  = ImVec4(0.357f, 0.608f, 0.867f, 1.00f); // XP blue on drag
+
+    // Slider & grab — muted XP blue, not overwhelming
+    c[ImGuiCol_SliderGrab]        = ImVec4(0.271f, 0.510f, 0.769f, 1.00f); // #456EC4
+    c[ImGuiCol_SliderGrabActive]  = ImVec4(0.357f, 0.608f, 0.867f, 1.00f); // #5B9BDD
+
+    // Checkmarks — same accent blue
+    c[ImGuiCol_CheckMark]         = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+
+    // Buttons — XP silver: medium gray raised, brightens on hover, darkens on press
+    c[ImGuiCol_Button]            = ImVec4(0.220f, 0.220f, 0.220f, 1.00f); // #383838
+    c[ImGuiCol_ButtonHovered]     = ImVec4(0.310f, 0.310f, 0.310f, 1.00f); // #4F4F4F
+    c[ImGuiCol_ButtonActive]      = ImVec4(0.137f, 0.137f, 0.137f, 1.00f); // #232323 (pressed)
+
+    // Headers (list selection, tree nodes)
+    c[ImGuiCol_Header]            = ImVec4(0.196f, 0.302f, 0.416f, 1.00f); // XP selection blue
+    c[ImGuiCol_HeaderHovered]     = ImVec4(0.224f, 0.365f, 0.510f, 1.00f);
+    c[ImGuiCol_HeaderActive]      = ImVec4(0.157f, 0.251f, 0.353f, 1.00f);
+
+    // Resize grip
+    c[ImGuiCol_ResizeGrip]        = ImVec4(0.353f, 0.353f, 0.353f, 0.50f);
+    c[ImGuiCol_ResizeGripHovered] = ImVec4(0.459f, 0.459f, 0.459f, 1.00f);
+    c[ImGuiCol_ResizeGripActive]  = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+
+    // Tabs — match the button gray palette
+    c[ImGuiCol_Tab]               = ImVec4(0.157f, 0.157f, 0.157f, 1.00f); // #282828
+    c[ImGuiCol_TabHovered]        = ImVec4(0.271f, 0.271f, 0.271f, 1.00f);
+    c[ImGuiCol_TabSelected]       = ImVec4(0.220f, 0.220f, 0.220f, 1.00f); // matches button
+    c[ImGuiCol_TabSelectedOverline] = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+    c[ImGuiCol_TabDimmed]         = ImVec4(0.110f, 0.110f, 0.110f, 1.00f);
+    c[ImGuiCol_TabDimmedSelected] = ImVec4(0.157f, 0.157f, 0.157f, 1.00f);
+    c[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.353f, 0.353f, 0.353f, 1.00f);
+
+    // Docking
+    c[ImGuiCol_DockingPreview]    = ImVec4(0.357f, 0.608f, 0.867f, 0.55f);
+    c[ImGuiCol_DockingEmptyBg]    = ImVec4(0.059f, 0.059f, 0.059f, 1.00f);
+
+    // Text — near white for maximum contrast on dark background
+    c[ImGuiCol_Text]              = ImVec4(0.918f, 0.918f, 0.918f, 1.00f); // #EAEAEA
+    c[ImGuiCol_TextDisabled]      = ImVec4(0.412f, 0.412f, 0.412f, 1.00f); // #696969
+    c[ImGuiCol_TextSelectedBg]    = ImVec4(0.196f, 0.302f, 0.416f, 0.65f);
+
+    // Plot
+    c[ImGuiCol_PlotLines]         = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+    c[ImGuiCol_PlotLinesHovered]  = ImVec4(0.529f, 0.765f, 0.969f, 1.00f);
+    c[ImGuiCol_PlotHistogram]     = ImVec4(0.271f, 0.510f, 0.769f, 1.00f);
+    c[ImGuiCol_PlotHistogramHovered] = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+
+    // Table
+    c[ImGuiCol_TableHeaderBg]     = ImVec4(0.196f, 0.196f, 0.196f, 1.00f);
+    c[ImGuiCol_TableBorderStrong] = ImVec4(0.353f, 0.353f, 0.353f, 1.00f);
+    c[ImGuiCol_TableBorderLight]  = ImVec4(0.220f, 0.220f, 0.220f, 1.00f);
+    c[ImGuiCol_TableRowBg]        = ImVec4(0.000f, 0.000f, 0.000f, 0.00f);
+    c[ImGuiCol_TableRowBgAlt]     = ImVec4(1.000f, 1.000f, 1.000f, 0.04f);
+
+    // Drag-drop
+    c[ImGuiCol_DragDropTarget]    = ImVec4(0.357f, 0.608f, 0.867f, 0.90f);
+
+    // Nav / focus
+    c[ImGuiCol_NavHighlight]      = ImVec4(0.357f, 0.608f, 0.867f, 1.00f);
+    c[ImGuiCol_NavWindowingHighlight] = ImVec4(1.000f, 1.000f, 1.000f, 0.70f);
+    c[ImGuiCol_NavWindowingDimBg] = ImVec4(0.800f, 0.800f, 0.800f, 0.20f);
+    c[ImGuiCol_ModalWindowDimBg]  = ImVec4(0.000f, 0.000f, 0.000f, 0.55f);
+    // ────────────────────────────────────────────────────────────────────────
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(hwnd);
@@ -368,8 +509,10 @@ void UIManager::DrawShaderEditor() {
             ImGui::Separator();
         }
 
-        // Text editor
+        // Text editor — push monospace font if loaded
+        if (m_editorFont) ImGui::PushFont(m_editorFont);
         m_editor.Render("ShaderCode");
+        if (m_editorFont) ImGui::PopFont();
         
         if (m_editor.IsTextChanged()) {
             m_editorNeedsCompile = true;
@@ -534,10 +677,16 @@ void UIManager::DrawShaderParameters() {
                 // Keyframe chips
                 ImGui::SameLine();
                 auto& kfs = p.timeline->keyframes;
+                bool frameMode = m_app.GetConfig().timeDisplayFrames;
+                double fps     = m_app.GetDecoder().GetFPS();
                 for (int ki = 0; ki < static_cast<int>(kfs.size()); ++ki) {
                     ImGui::SameLine();
                     char chipLabel[32];
-                    snprintf(chipLabel, sizeof(chipLabel), "%.1fs##kf%d", kfs[ki].time, ki);
+                    if (frameMode && fps > 0.0)
+                        snprintf(chipLabel, sizeof(chipLabel), "%df##kf%d",
+                                 static_cast<int>(kfs[ki].time * fps + 0.5), ki);
+                    else
+                        snprintf(chipLabel, sizeof(chipLabel), "%.1fs##kf%d", kfs[ki].time, ki);
                     bool isSelected = (m_selectedKeyframeParam == paramIdx && m_selectedKeyframeIndex == ki);
                     if (isSelected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
                     if (ImGui::SmallButton(chipLabel)) {
@@ -584,23 +733,35 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
     ImGui::Indent(16.0f);
     ImGui::PushID(keyframeIndex + 1000); // avoid ID collision with param widgets
 
-    // Time input
+    // Time input — shows seconds or frame number depending on user's display mode
     ImGui::SetNextItemWidth(100.0f);
-    float editTime = kf.time;
-    if (ImGui::InputFloat("Time##kftime", &editTime, 0.1f, 1.0f, "%.2f s")) {
-        if (editTime != kf.time) {
-            // Re-sort: remove and re-insert to maintain order
-            Keyframe copy = kf;
-            copy.time = editTime;
-            timeline.RemoveKeyframe(keyframeIndex);
-            int newIdx = timeline.AddKeyframe(copy);
-            m_selectedKeyframeIndex = newIdx;
-            anyChanged = true;
-            // Early return since keyframeIndex is now invalid
-            ImGui::PopID();
-            ImGui::Unindent(16.0f);
-            return;
+    bool frameMode = m_app.GetConfig().timeDisplayFrames;
+    double fps     = m_app.GetDecoder().GetFPS();
+    bool timeChanged = false;
+    float newTime = kf.time;
+    if (frameMode && fps > 0.0) {
+        int editFrame = static_cast<int>(kf.time * fps + 0.5);
+        if (ImGui::InputInt("Frame##kftime", &editFrame, 1, 10)) {
+            if (editFrame < 0) editFrame = 0;
+            newTime = static_cast<float>(editFrame) / static_cast<float>(fps);
+            if (newTime != kf.time) timeChanged = true;
         }
+    } else {
+        float editTime = kf.time;
+        if (ImGui::InputFloat("Time##kftime", &editTime, 0.1f, 1.0f, "%.2f s")) {
+            if (editTime != kf.time) { newTime = editTime; timeChanged = true; }
+        }
+    }
+    if (timeChanged) {
+        Keyframe copy = kf;
+        copy.time = newTime;
+        timeline.RemoveKeyframe(keyframeIndex);
+        int newIdx = timeline.AddKeyframe(copy);
+        m_selectedKeyframeIndex = newIdx;
+        anyChanged = true;
+        ImGui::PopID();
+        ImGui::Unindent(16.0f);
+        return;
     }
 
     // Snap-to-playhead button
@@ -897,10 +1058,32 @@ void UIManager::DrawTransportControls() {
         // Timeline slider
         if (decoder.IsOpen()) {
             float currentTime = static_cast<float>(decoder.GetCurrentTime());
-            float duration = static_cast<float>(decoder.GetDuration());
-            
+            float duration    = static_cast<float>(decoder.GetDuration());
+            double fps        = decoder.GetFPS();
+            int64_t frameCount = decoder.GetFrameCount();
+            bool& frameMode   = m_app.GetConfig().timeDisplayFrames;
+
             ImGui::SetNextItemWidth(400);
-            if (ImGui::SliderFloat("##timeline", &currentTime, 0.0f, duration, "%.1f s")) {
+            bool sliderMoved = false;
+            if (frameMode && fps > 0.0 && frameCount > 0) {
+                // Frame-number slider
+                int currentFrame = static_cast<int>(currentTime * fps + 0.5);
+                int maxFrame     = static_cast<int>(frameCount) - 1;
+                if (maxFrame < 0) maxFrame = 0;
+                char frameFmt[32];
+                snprintf(frameFmt, sizeof(frameFmt), "f %%d / %d", maxFrame);
+                if (ImGui::SliderInt("##timeline", &currentFrame, 0, maxFrame, frameFmt)) {
+                    currentTime = static_cast<float>(currentFrame) / static_cast<float>(fps);
+                    sliderMoved = true;
+                }
+            } else {
+                // Seconds slider
+                if (ImGui::SliderFloat("##timeline", &currentTime, 0.0f, duration, "%.2f s")) {
+                    sliderMoved = true;
+                }
+            }
+
+            if (sliderMoved) {
                 m_app.SeekTo(currentTime);
 
                 // Route to selected keyframe when follow mode active or Shift held
@@ -912,7 +1095,6 @@ void UIManager::DrawTransportControls() {
                         auto& kfParam = activePreset->params[m_selectedKeyframeParam];
                         if (kfParam.timeline && kfParam.timeline->enabled &&
                             m_selectedKeyframeIndex < static_cast<int>(kfParam.timeline->keyframes.size())) {
-                            // Re-sort by removing and reinserting at new time
                             Keyframe copy = kfParam.timeline->keyframes[m_selectedKeyframeIndex];
                             copy.time = currentTime;
                             kfParam.timeline->RemoveKeyframe(m_selectedKeyframeIndex);
@@ -939,7 +1121,6 @@ void UIManager::DrawTransportControls() {
                             float x = sliderMin.x + frac * sliderW;
                             float cy = (sliderMin.y + sliderMax.y) * 0.5f;
                             float sz = 4.0f;
-                            // Diamond marker
                             drawList->AddQuadFilled(
                                 ImVec2(x, cy - sz), ImVec2(x + sz, cy),
                                 ImVec2(x, cy + sz), ImVec2(x - sz, cy),
@@ -949,8 +1130,22 @@ void UIManager::DrawTransportControls() {
                 }
             }
 
+            // Duration label + s/f toggle
             ImGui::SameLine();
-            ImGui::Text("/ %.1f s", duration);
+            if (frameMode && fps > 0.0)
+                ImGui::Text("/ %d f", static_cast<int>(frameCount) - 1);
+            else
+                ImGui::Text("/ %.2f s", duration);
+
+            ImGui::SameLine();
+            bool wasFrameMode = frameMode;
+            if (wasFrameMode) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.9f, 1.0f));
+            if (ImGui::SmallButton(wasFrameMode ? "f##tmode" : "s##tmode")) {
+                frameMode = !frameMode;
+                m_app.SaveConfig();
+            }
+            if (wasFrameMode) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(wasFrameMode ? "Switch to seconds" : "Switch to frames");
         } else {
             ImGui::Text("No video loaded");
         }
