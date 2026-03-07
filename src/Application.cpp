@@ -27,6 +27,12 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
         return false;
     }
 
+    // Generate initial noise texture (bound globally as t1/s1 for all shaders)
+    {
+        const auto& n = m_configManager.GetConfig().noise;
+        m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
+    }
+
     // Create shader manager
     m_shaderManager = std::make_unique<ShaderManager>(m_renderer);
     m_shaderManager->EnableFileWatching(true);
@@ -776,6 +782,12 @@ void Application::SaveConfig() {
     }
 
     m_configManager.Save(ConfigManager::GetDefaultConfigPath());
+}
+
+void Application::RegenerateNoise() {
+    const auto& n = m_configManager.GetConfig().noise;
+    m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
+    SaveConfig();
 }
 
 std::string Application::GetKeyName(int vkCode) const {

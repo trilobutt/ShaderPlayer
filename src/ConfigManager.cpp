@@ -148,7 +148,9 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"showEditor", c.showEditor},
         {"showLibrary", c.showLibrary},
         {"showTransport", c.showTransport},
-        {"timeDisplayFrames", c.timeDisplayFrames}
+        {"timeDisplayFrames", c.timeDisplayFrames},
+        {"noiseScale", c.noise.scale},
+        {"noiseTextureSize", c.noise.textureSize}
     };
 }
 
@@ -166,6 +168,8 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("showLibrary")) j.at("showLibrary").get_to(c.showLibrary);
     if (j.contains("showTransport")) j.at("showTransport").get_to(c.showTransport);
     if (j.contains("timeDisplayFrames")) j.at("timeDisplayFrames").get_to(c.timeDisplayFrames);
+    if (j.contains("noiseScale"))       j.at("noiseScale").get_to(c.noise.scale);
+    if (j.contains("noiseTextureSize")) j.at("noiseTextureSize").get_to(c.noise.textureSize);
 }
 
 ConfigManager::ConfigManager() = default;

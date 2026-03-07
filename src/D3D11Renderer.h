@@ -47,6 +47,11 @@ public:
     void SetShaderResolution(float width, float height);
     void SetCustomUniforms(const float* data, size_t floatCount);
 
+    // Noise texture — generates Perlin (R) + Voronoi (G) into a tiling texture
+    // bound globally as t1 / s1 for all pixel shaders.
+    bool UpdateNoiseTexture(float scale, int texSize);
+    ID3D11ShaderResourceView* GetNoiseSRV() const { return m_noiseSRV.Get(); }
+
     // Accessors
     ID3D11Device* GetDevice() const { return m_device.Get(); }
     ID3D11DeviceContext* GetContext() const { return m_context.Get(); }
@@ -98,6 +103,11 @@ private:
     ComPtr<ID3D11SamplerState> m_sampler;
     ComPtr<ID3D11BlendState> m_blendState;
     ComPtr<ID3D11RasterizerState> m_rasterizerState;
+
+    // Noise texture (t1) + wrap sampler (s1)
+    ComPtr<ID3D11Texture2D>          m_noiseTexture;
+    ComPtr<ID3D11ShaderResourceView> m_noiseSRV;
+    ComPtr<ID3D11SamplerState>       m_wrapSampler;
 
     // Constant buffer data
     struct alignas(16) ShaderConstants {

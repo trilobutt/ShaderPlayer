@@ -136,6 +136,12 @@ struct RecordingSettings {
     int proresProfile = 2;  // 0=proxy, 1=LT, 2=422, 3=HQ
 };
 
+// Noise texture settings — controls the globally-bound t1 noise texture
+struct NoiseSettings {
+    float scale       = 4.0f;   // frequency multiplier (higher = more repetitions)
+    int   textureSize = 512;    // texture dimensions (power of 2)
+};
+
 // Application configuration
 struct AppConfig {
     std::vector<ShaderPreset> shaderPresets;
@@ -146,6 +152,9 @@ struct AppConfig {
     std::string shaderDirectory = "shaders";
     std::string layoutsDirectory = "layouts";
     bool timeDisplayFrames = false;  // true = show frame numbers; false = show seconds
+
+    // Noise generator
+    NoiseSettings noise;
 
     // UI layout
     float editorPanelWidth = 500.0f;

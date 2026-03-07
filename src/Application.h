@@ -55,6 +55,9 @@ public:
 
     // Configuration
     void SaveConfig();
+
+    // Noise generator — regenerates the global t1 noise texture from current config
+    void RegenerateNoise();
     AppConfig& GetConfig() { return m_configManager.GetConfig(); }
     const AppConfig& GetConfig() const { return m_configManager.GetConfig(); }
 

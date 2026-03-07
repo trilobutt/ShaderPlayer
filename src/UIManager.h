@@ -72,6 +72,7 @@ private:
     void DrawWorkspaceKeybindingModal();
     void DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
                             int keyframeIndex, bool& anyChanged);
+    void DrawNoisePanel();
 
     Application& m_app;
     
@@ -124,6 +125,9 @@ private:
 
     // Monospace font for the shader editor (Consolas; null = use default)
     ImFont* m_editorFont = nullptr;
+
+    // Noise generator panel
+    bool m_showNoisePanel = false;
 
     // Keyframe editing state
     int m_selectedKeyframeParam = -1;   // index into preset->params, or -1

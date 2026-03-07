@@ -94,6 +94,9 @@ void D3D11Renderer::Shutdown() {
     m_displayTexture.Reset();
     m_displayRTV.Reset();
     m_displaySRV.Reset();
+    m_noiseTexture.Reset();
+    m_noiseSRV.Reset();
+    m_wrapSampler.Reset();
     m_vertexShader.Reset();
     m_passthroughPS.Reset();
     m_activePS.Reset();
@@ -315,6 +318,17 @@ bool D3D11Renderer::CreateShaderResources() {
     samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
     hr = m_device->CreateSamplerState(&samplerDesc, &m_sampler);
+    if (FAILED(hr)) return false;
+
+    // Wrap sampler for noise texture (s1)
+    D3D11_SAMPLER_DESC wrapDesc = {};
+    wrapDesc.Filter   = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    wrapDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    wrapDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    wrapDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    wrapDesc.MaxLOD   = D3D11_FLOAT32_MAX;
+
+    hr = m_device->CreateSamplerState(&wrapDesc, &m_wrapSampler);
     if (FAILED(hr)) return false;
 
     // Create blend state (no blending, opaque)
@@ -587,6 +601,12 @@ void D3D11Renderer::BeginFrame() {
     m_context->PSSetShaderResources(0, 1, m_videoSRV.GetAddressOf());
     m_context->PSSetSamplers(0, 1, m_sampler.GetAddressOf());
 
+    // Bind noise texture + wrap sampler globally (shaders that use them declare t1/s1)
+    if (m_noiseSRV)
+        m_context->PSSetShaderResources(1, 1, m_noiseSRV.GetAddressOf());
+    if (m_wrapSampler)
+        m_context->PSSetSamplers(1, 1, m_wrapSampler.GetAddressOf());
+
     m_context->RSSetState(m_rasterizerState.Get());
     m_context->OMSetBlendState(m_blendState.Get(), nullptr, 0xFFFFFFFF);
 }
@@ -666,6 +686,133 @@ void D3D11Renderer::SetShaderResolution(float width, float height) {
 void D3D11Renderer::SetCustomUniforms(const float* data, size_t floatCount) {
     size_t copyCount = std::min(floatCount, size_t(16));
     memcpy(m_constants.custom, data, copyCount * sizeof(float));
+}
+
+// ---------------------------------------------------------------------------
+// Noise texture generation (CPU-side Perlin + Voronoi, stored in R+G channels)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Improved smoothstep (Ken Perlin's quintic)
+static float quintic(float t) {
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// Pseudo-random gradient dot product for Perlin noise
+static float gradDot(int ix, int iy, float fx, float fy) {
+    uint32_t h = static_cast<uint32_t>(ix) * 1619u + static_cast<uint32_t>(iy) * 31337u;
+    h ^= h >> 13;
+    h *= 0xbf58476du;
+    h ^= h >> 31;
+    switch (h & 3) {
+        case 0: return  fx + fy;
+        case 1: return -fx + fy;
+        case 2: return  fx - fy;
+        case 3: return -fx - fy;
+    }
+    return 0.0f;
+}
+
+static float perlinNoise(float x, float y) {
+    int xi = static_cast<int>(floorf(x));
+    int yi = static_cast<int>(floorf(y));
+    float xf = x - static_cast<float>(xi);
+    float yf = y - static_cast<float>(yi);
+    float u  = quintic(xf);
+    float v  = quintic(yf);
+
+    float n00 = gradDot(xi,     yi,     xf,     yf    );
+    float n10 = gradDot(xi + 1, yi,     xf - 1, yf    );
+    float n01 = gradDot(xi,     yi + 1, xf,     yf - 1);
+    float n11 = gradDot(xi + 1, yi + 1, xf - 1, yf - 1);
+
+    float lx0 = n00 + u * (n10 - n00);
+    float lx1 = n01 + u * (n11 - n01);
+    return (lx0 + v * (lx1 - lx0)) * 0.5f + 0.5f;  // map [-1,1] → [0,1]
+}
+
+// Hash giving a float in [0,1] for a cell feature point coordinate
+static float cellHash(uint32_t ix, uint32_t iy, uint32_t seed) {
+    uint32_t h = ix * 1619u + iy * 31337u + seed * 6271u;
+    h ^= h >> 13;
+    h *= 0xbf58476du;
+    h ^= h >> 31;
+    return static_cast<float>(h & 0xFFFFu) / 65535.0f;
+}
+
+static float voronoiNoise(float x, float y) {
+    int xi = static_cast<int>(floorf(x));
+    int yi = static_cast<int>(floorf(y));
+    float minDist = 1e10f;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            int cx = xi + dx;
+            int cy = yi + dy;
+            float px = static_cast<float>(cx) + cellHash(static_cast<uint32_t>(cx), static_cast<uint32_t>(cy), 0u);
+            float py = static_cast<float>(cy) + cellHash(static_cast<uint32_t>(cx), static_cast<uint32_t>(cy), 1u);
+            float d  = sqrtf((x - px) * (x - px) + (y - py) * (y - py));
+            if (d < minDist) minDist = d;
+        }
+    }
+    return (std::min)(minDist, 1.0f);
+}
+
+} // anonymous namespace
+
+bool D3D11Renderer::UpdateNoiseTexture(float scale, int texSize) {
+    if (!m_device) return false;
+    texSize = (std::max)(texSize, 64);
+
+    // Generate Perlin in R, Voronoi in G (inverted so cells are bright centers)
+    std::vector<uint8_t> pixels(static_cast<size_t>(texSize) * texSize * 4);
+
+    for (int y = 0; y < texSize; ++y) {
+        for (int x = 0; x < texSize; ++x) {
+            float nx = (x + 0.5f) / static_cast<float>(texSize) * scale;
+            float ny = (y + 0.5f) / static_cast<float>(texSize) * scale;
+
+            float p = perlinNoise(nx, ny);
+            float v = 1.0f - voronoiNoise(nx, ny);  // invert: bright centres
+
+            p = (std::max)(0.0f, (std::min)(1.0f, p));
+            v = (std::max)(0.0f, (std::min)(1.0f, v));
+
+            uint8_t* px       = &pixels[(static_cast<size_t>(y) * texSize + x) * 4];
+            px[0] = static_cast<uint8_t>(p * 255.0f);  // R = Perlin
+            px[1] = static_cast<uint8_t>(v * 255.0f);  // G = Voronoi
+            px[2] = 0;
+            px[3] = 255;
+        }
+    }
+
+    m_noiseTexture.Reset();
+    m_noiseSRV.Reset();
+
+    D3D11_TEXTURE2D_DESC desc = {};
+    desc.Width            = static_cast<UINT>(texSize);
+    desc.Height           = static_cast<UINT>(texSize);
+    desc.MipLevels        = 1;
+    desc.ArraySize        = 1;
+    desc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage            = D3D11_USAGE_IMMUTABLE;
+    desc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA initData = {};
+    initData.pSysMem     = pixels.data();
+    initData.SysMemPitch = static_cast<UINT>(texSize * 4);
+
+    HRESULT hr = m_device->CreateTexture2D(&desc, &initData, &m_noiseTexture);
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format                    = desc.Format;
+    srvDesc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels       = 1;
+
+    hr = m_device->CreateShaderResourceView(m_noiseTexture.Get(), &srvDesc, &m_noiseSRV);
+    return SUCCEEDED(hr);
 }
 
 } // namespace SP

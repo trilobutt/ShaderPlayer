@@ -264,6 +264,10 @@ void UIManager::Render() {
         DrawRecordingPanel();
     }
 
+    if (m_showNoisePanel) {
+        DrawNoisePanel();
+    }
+
     DrawNotifications();
     
     if (m_showKeybindingModal) {
@@ -351,6 +355,7 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Transport Controls", "F3", &m_showTransport);
             ImGui::MenuItem("Recording Panel", "F4", &m_showRecording);
             ImGui::MenuItem("Keybindings", "F6", &m_showKeybindingsPanel);
+            ImGui::MenuItem("Noise Generator", nullptr, &m_showNoisePanel);
 
             ImGui::Separator();
             if (ImGui::BeginMenu("Workspace Presets")) {
@@ -1715,6 +1720,42 @@ void UIManager::DrawWorkspaceKeybindingModal() {
         m_showWorkspaceKeybindingModal = false;
         s_wasOpen = false;
     }
+}
+
+void UIManager::DrawNoisePanel() {
+    ImGui::SetNextWindowSize(ImVec2(320, 200), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Noise Generator", &m_showNoisePanel)) {
+        ImGui::End();
+        return;
+    }
+
+    ImGui::TextDisabled("Generates a tiling noise texture bound globally as t1/s1.");
+    ImGui::TextDisabled("R channel = Perlin,  G channel = Voronoi.");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    NoiseSettings& ns = m_app.GetConfig().noise;
+    bool changed = false;
+
+    changed |= ImGui::SliderFloat("Scale", &ns.scale, 1.0f, 32.0f, "%.1f");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Frequency of noise in the texture (higher = more repetitions).");
+
+    const char* sizeLabels[] = { "256", "512", "1024" };
+    const int   sizeLUT[]    = { 256, 512, 1024 };
+    int sizeIdx = 1; // default 512
+    for (int i = 0; i < 3; ++i) { if (sizeLUT[i] == ns.textureSize) { sizeIdx = i; break; } }
+    if (ImGui::Combo("Texture Size", &sizeIdx, sizeLabels, 3)) {
+        ns.textureSize = sizeLUT[sizeIdx];
+        changed = true;
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("Regenerate", ImVec2(-1, 0)) || changed) {
+        m_app.RegenerateNoise();
+    }
+
+    ImGui::End();
 }
 
 } // namespace SP
