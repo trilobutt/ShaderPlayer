@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "LED panel effect. Each pixel cell is split into three RGB sub-pixels separated by a dark mask. Alternate columns are staggered vertically by half a cell, mimicking real panel layouts.",
     "INPUTS": [
         { "NAME": "PixelSize",    "LABEL": "Cell Size",     "TYPE": "float", "DEFAULT": 12.0, "MIN": 4.0,  "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "MaskStagger",  "LABEL": "Stagger",       "TYPE": "bool",  "DEFAULT": true },

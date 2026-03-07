@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Classic halftone dot effect. Each pixelated cell contains a circle whose radius scales with luminance. Inspired by CMYK print halftoning.",
     "INPUTS": [
         { "NAME": "PixelSize",   "LABEL": "Pixel Size",    "TYPE": "float", "DEFAULT": 16.0, "MIN": 2.0,  "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "InvertDots",  "LABEL": "Invert Dots",   "TYPE": "bool",  "DEFAULT": false },

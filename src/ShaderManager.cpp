@@ -282,9 +282,8 @@ void ShaderManager::ScanDirectory(const std::string& directory) {
 
             if (!alreadyLoaded) {
                 ShaderPreset preset;
-                if (LoadShaderFromFile(filepath, preset)) {
-                    AddPreset(preset);
-                }
+                LoadShaderFromFile(filepath, preset);
+                AddPreset(preset);
             }
         }
     }
@@ -380,7 +379,15 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
 
             if (p.type == ShaderParamType::Long && input.contains("VALUES")) {
                 for (const auto& v : input["VALUES"])
-                    p.longLabels.push_back(v.get<std::string>());
+                    p.longValues.push_back(v.is_number_integer() ? v.get<int>() : static_cast<int>(v.get<float>()));
+                // Use LABELS for display strings if present, otherwise stringify the VALUES
+                if (input.contains("LABELS")) {
+                    for (const auto& lbl : input["LABELS"])
+                        p.longLabels.push_back(lbl.get<std::string>());
+                } else {
+                    for (int iv : p.longValues)
+                        p.longLabels.push_back(std::to_string(iv));
+                }
             }
 
             // Parse DEFAULT

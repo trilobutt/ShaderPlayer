@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "SDF-based pixel patterns. Renders a chosen 2D shape (circle, cross, square, or diamond) inside each pixelated cell. Size modulated by luma. Inspired by @hahajohnx.",
     "INPUTS": [
         { "NAME": "PixelSize",    "LABEL": "Pixel Size",   "TYPE": "float", "DEFAULT": 16.0, "MIN": 4.0,  "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "PatternType",  "LABEL": "Pattern",      "TYPE": "long",  "DEFAULT": 0,    "VALUES": [0,1,2,3], "LABELS": ["Circle","Cross","Square","Diamond"] },

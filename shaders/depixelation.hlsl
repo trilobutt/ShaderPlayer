@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Progressive depixelation. Starts fully pixelated (2^Levels block size) and steps down level-by-level to full resolution, driven by the time uniform. Useful for reveals, transitions, and retro aesthetics.",
     "INPUTS": [
         { "NAME": "Levels",   "LABEL": "Pixel Levels", "TYPE": "long",  "DEFAULT": 4, "VALUES": [2,3,4,5,6], "LABELS": ["2","3","4","5","6"] },
         { "NAME": "Speed",    "LABEL": "Speed",        "TYPE": "float", "DEFAULT": 0.3, "MIN": 0.05, "MAX": 4.0 },

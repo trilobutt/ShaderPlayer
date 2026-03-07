@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Japanese receipt-style effect. Each pixelated cell shows a horizontal black bar whose width is proportional to darkness. Inspired by @samdape.",
     "INPUTS": [
         { "NAME": "PixelSize",  "LABEL": "Pixel Size",      "TYPE": "float", "DEFAULT": 16.0, "MIN": 2.0, "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "BarMargin",  "LABEL": "Bar Margin",      "TYPE": "float", "DEFAULT": 0.05, "MIN": 0.0, "MAX": 0.3  },

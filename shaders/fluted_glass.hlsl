@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Fluted glass effect. Vertical cylindrical ridges distort the image with sine-based refraction. Blinn-Phong specular highlights run along each ridge peak. Optional frost (t1 noise offset) and chromatic aberration.",
     "INPUTS": [
         { "NAME": "FluteCount",    "LABEL": "Flute Count",    "TYPE": "long",   "DEFAULT": 16,   "VALUES": [4,8,12,16,24,32], "LABELS": ["4","8","12","16","24","32"] },
         { "NAME": "DistortionAmt", "LABEL": "Distortion",     "TYPE": "float",  "DEFAULT": 0.6,  "MIN": 0.0, "MAX": 2.0  },

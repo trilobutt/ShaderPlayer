@@ -543,6 +543,15 @@ void UIManager::DrawShaderParameters() {
         return;
     }
 
+    // Noise generator shortcut — shown when shader samples the global noise texture
+    if (preset->source.find("noiseTexture") != std::string::npos) {
+        if (ImGui::SmallButton("Noise Generator..."))
+            m_showNoisePanel = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("This shader uses the global noise texture (t1).\nOpen the Noise Generator to adjust scale and regenerate.");
+        ImGui::Separator();
+    }
+
     // Reset stale keyframe selection if param index is out of range
     if (m_selectedKeyframeParam >= static_cast<int>(preset->params.size())) {
         m_selectedKeyframeParam = -1;
@@ -591,12 +600,19 @@ void UIManager::DrawShaderParameters() {
         }
 
         case ShaderParamType::Long: {
-            int idx = static_cast<int>(p.values[0]);
+            int currentVal = static_cast<int>(p.values[0]);
+            int idx = 0;
+            if (!p.longValues.empty()) {
+                for (int i = 0; i < static_cast<int>(p.longValues.size()); ++i)
+                    if (p.longValues[i] == currentVal) { idx = i; break; }
+            } else {
+                idx = currentVal;
+            }
             std::string items;
             for (const auto& lbl : p.longLabels) { items += lbl; items += '\0'; }
             items += '\0';
             if (ImGui::Combo(p.label.c_str(), &idx, items.c_str())) {
-                p.values[0] = static_cast<float>(idx);
+                p.values[0] = static_cast<float>(p.longValues.empty() ? idx : p.longValues[idx]);
                 anyChanged = true;
             }
             break;
@@ -841,13 +857,20 @@ void UIManager::DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timelin
         break;
     }
     case ShaderParamType::Long: {
-        int idx = static_cast<int>(kf.values[0]);
+        int currentVal = static_cast<int>(kf.values[0]);
+        int idx = 0;
+        if (!param.longValues.empty()) {
+            for (int i = 0; i < static_cast<int>(param.longValues.size()); ++i)
+                if (param.longValues[i] == currentVal) { idx = i; break; }
+        } else {
+            idx = currentVal;
+        }
         std::string items;
         for (const auto& lbl : param.longLabels) { items += lbl; items += '\0'; }
         items += '\0';
         ImGui::SetNextItemWidth(150.0f);
         if (ImGui::Combo("Value##kfval", &idx, items.c_str())) {
-            kf.values[0] = static_cast<float>(idx);
+            kf.values[0] = static_cast<float>(param.longValues.empty() ? idx : param.longValues[idx]);
             anyChanged = true;
         }
         break;
@@ -1010,6 +1033,8 @@ void UIManager::DrawShaderLibrary() {
                 ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "*");
             } else {
                 ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "!");
+                if (ImGui::IsItemHovered() && !preset->compileError.empty())
+                    ImGui::SetTooltip("%s", preset->compileError.c_str());
             }
             ImGui::SameLine();
 

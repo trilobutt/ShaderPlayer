@@ -117,6 +117,23 @@ Included shaders in `shaders/`:
 - `sharpen.hlsl` - Convolution-based sharpening
 - `false_colour.hlsl` - Luminance-based false colour mapping
 - `pixelate.hlsl` - Pixelation with optional grid overlay; demonstrates all ISF widget types
+- `receipt_bars.hlsl`, `halftone.hlsl`, `pixel_sdf.hlsl`, `pixel_matrix.hlsl`, `ascii_noise.hlsl` — luma-based pixelated pattern effects
+- `led_panel.hlsl`, `crochet.hlsl`, `lego_bricks.hlsl`, `fluted_glass.hlsl`, `depixelation.hlsl` — advanced stylised effects
+
+### Global Noise Texture (t1 / s1)
+
+`D3D11Renderer::BeginFrame()` always binds a CPU-generated noise texture at `t1` (WRAP sampler at `s1`). **R = Perlin gradient noise. G = Voronoi F1 (inverted — bright at cell centres).** All shaders must declare both even if unused:
+
+```hlsl
+Texture2D noiseTexture : register(t1);
+SamplerState noiseSampler : register(s1);   // WRAP addressing
+```
+
+- `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called at startup and via `Application::RegenerateNoise()`.
+- UI: View → Noise Generator (`UIManager::DrawNoisePanel` / `m_showNoisePanel`).
+- Config: `AppConfig::noise` (`NoiseSettings { float scale; int textureSize; }`), persisted as `noiseScale`/`noiseTextureSize` in `config.json`.
+- Noise UV pattern for per-cell variation: `cellCoord / 64.0 + cellUv * (freq / 64.0)` — unique slice per cell, `freq` scales zoom.
+- HSV helpers (`rgb2hsv`/`hsv2rgb`) used by some shaders — copy the compact float4-swizzle implementation from `crochet.hlsl` or `lego_bricks.hlsl`.
 
 ## Build Instructions
 
@@ -240,6 +257,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 
 - `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F6, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding.
 - `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
+- `RegenerateNoise()` — reads `AppConfig::noise`, calls `D3D11Renderer::UpdateNoiseTexture`, saves config. Use this; do not call `UpdateNoiseTexture` directly.
 
 ## AppConfig Persistence Pattern
 
@@ -264,9 +282,11 @@ See `docs/shader-parameter-guide.md` for the author-facing reference. Technical 
 
 `ShaderManager::ParseISFParams(const std::string& source)` extracts parameter metadata:
 1. Find first `/*{` in source; extract up to matching `}*/`.
-2. Parse body with nlohmann/json; silent failure returns empty vector (no crash, no compile failure).
+2. Parse body with nlohmann/json; silent failure (throw) returns empty vector — this IS a compile failure: empty params generates no `#define` aliases, causing undeclared identifier errors in `D3DCompile`. The shader is silently dropped by `ScanDirectory`.
 3. Iterate `"INPUTS"` array; construct `ShaderParam` per entry with `cbufferOffset` assigned sequentially.
 4. Called from `CompilePreset` and `RecompilePreset` before `D3DCompile` — updates `preset.params`.
+
+ISF `long` parameters: `VALUES` array contains **integers** (the actual selectable values), `LABELS` contains **strings** (display text). Never call `get<string>()` on `VALUES`. `ShaderParam::longValues` (parallel to `longLabels`) stores these int values; the Long combo UI maps combo index→value via `longValues[idx]` and stores the actual int (not the index) into `values[0]`.
 
 The ISF block is **not stripped** — HLSL ignores block comments. No source modification required.
 
@@ -290,6 +310,8 @@ Parameters packed into `custom[16]` (= `float4 custom[4]`) sequentially:
 - `color`: 4 floats, aligned to next multiple-of-4 offset
 
 Parameters exceeding 16 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
+
+**Diagnosing missing shaders**: if a shader doesn't appear after Scan Folder, it has a compile error. Check `ShaderPreset::compileError` in the debugger — no UI currently surfaces this field.
 
 ### Value Storage and GPU Upload
 

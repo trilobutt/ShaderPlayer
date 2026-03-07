@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Noise-based ASCII-style pattern. Each pixelated cell shows procedural noise from the global noise texture (t1). Luma determines the density of the noise pattern, mimicking character weight. R channel = Perlin, G channel = Voronoi. Inspired by @darkroomdevs.",
     "INPUTS": [
         { "NAME": "PixelSize",   "LABEL": "Pixel Size",    "TYPE": "float", "DEFAULT": 16.0,  "MIN": 4.0, "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "NoiseType",   "LABEL": "Noise Type",    "TYPE": "long",  "DEFAULT": 0, "VALUES": [0,1], "LABELS": ["Perlin","Voronoi"] },

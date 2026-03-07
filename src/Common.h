@@ -81,6 +81,7 @@ struct ShaderParam {
     float max  = 1.0f;
     float step = 0.01f;
     std::vector<std::string> longLabels; // Dropdown labels for type=Long
+    std::vector<int>         longValues; // Selectable int values for type=Long (parallel to longLabels)
     int cbufferOffset = 0;          // Float index into custom[16]; set at parse time
     std::optional<KeyframeTimeline> timeline;  // nullopt until user enables keyframing
 };

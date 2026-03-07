@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Woven crochet fabric illusion. Each pixel cell contains a rotated ellipse whose orientation alternates per cell, coloured by the video. Noise from the global texture adds yarn-like edge roughness; per-cell hue variation gives plastic colour variation.",
     "INPUTS": [
         { "NAME": "PixelSize",     "LABEL": "Cell Size",      "TYPE": "float", "DEFAULT": 14.0, "MIN": 4.0,  "MAX": 48.0, "STEP": 1.0 },
         { "NAME": "EllipseAngle",  "LABEL": "Stitch Angle",   "TYPE": "float", "DEFAULT": 35.0, "MIN": 0.0,  "MAX": 80.0 },

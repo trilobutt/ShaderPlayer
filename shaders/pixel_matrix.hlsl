@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Threshold matrix pixel patterns. Luma is compared against an 8x8 fixed matrix to fill each cell with stylised patterns: diagonal stripes, a sine-wave, or Bayer ordered dither. Inspired by @hahajohnx.",
     "INPUTS": [
         { "NAME": "PixelSize",    "LABEL": "Pixel Size",  "TYPE": "float", "DEFAULT": 16.0, "MIN": 8.0, "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "PatternType",  "LABEL": "Pattern",     "TYPE": "long",  "DEFAULT": 0, "VALUES": [0,1,2], "LABELS": ["Stripes","Sine Wave","Bayer Dither"] },

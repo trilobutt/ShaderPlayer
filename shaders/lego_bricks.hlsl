@@ -1,5 +1,4 @@
 /*{
-    "DESCRIPTION": "Lego mosaic effect. Colour-quantises each pixelated cell, adds a dark border simulating brick edges, and renders a 3D-lit circular stud using Blinn-Phong shading. Optional global hue shift for stylised palettes.",
     "INPUTS": [
         { "NAME": "PixelSize",      "LABEL": "Brick Size",     "TYPE": "float",  "DEFAULT": 18.0, "MIN": 8.0,  "MAX": 64.0, "STEP": 1.0 },
         { "NAME": "ColourLevels",   "LABEL": "Colour Steps",   "TYPE": "long",   "DEFAULT": 8,    "VALUES": [4,6,8,12,16], "LABELS": ["4","6","8","12","16"] },
