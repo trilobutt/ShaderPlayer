@@ -1,5 +1,13 @@
+/*{
+    "INPUTS": [
+        {"NAME": "Strength", "LABEL": "Strength", "TYPE": "float",
+         "MIN": 0.0, "MAX": 5.0, "DEFAULT": 1.0}
+    ]
+}*/
+
 // Sharpen (Unsharp Mask)
-// Enhances edge detail
+// Enhances edge detail via a 3x3 Laplacian kernel
+// Strength: 0 = passthrough, higher = more aggressive
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -19,22 +27,17 @@ struct PS_INPUT {
 };
 
 float4 main(PS_INPUT input) : SV_TARGET {
-    float2 texelSize = 1.0 / videoResolution;
+    float2 texel = 1.0 / videoResolution;
     float2 uv = input.uv;
-    
-    // Sharpening strength
-    float strength = 1.0;
-    
-    // 3x3 sharpen kernel
-    float4 center = videoTexture.Sample(videoSampler, uv) * (1.0 + 4.0 * strength);
-    float4 top = videoTexture.Sample(videoSampler, uv + float2(0, -texelSize.y)) * -strength;
-    float4 bottom = videoTexture.Sample(videoSampler, uv + float2(0, texelSize.y)) * -strength;
-    float4 left = videoTexture.Sample(videoSampler, uv + float2(-texelSize.x, 0)) * -strength;
-    float4 right = videoTexture.Sample(videoSampler, uv + float2(texelSize.x, 0)) * -strength;
-    
-    float4 result = center + top + bottom + left + right;
+
+    float4 c      = videoTexture.Sample(videoSampler, uv) * (1.0 + 4.0 * Strength);
+    float4 top    = videoTexture.Sample(videoSampler, uv + float2(0, -texel.y)) * -Strength;
+    float4 bottom = videoTexture.Sample(videoSampler, uv + float2(0,  texel.y)) * -Strength;
+    float4 left   = videoTexture.Sample(videoSampler, uv + float2(-texel.x, 0)) * -Strength;
+    float4 right  = videoTexture.Sample(videoSampler, uv + float2( texel.x, 0)) * -Strength;
+
+    float4 result = c + top + bottom + left + right;
     result.rgb = saturate(result.rgb);
     result.a = 1.0;
-    
     return result;
 }

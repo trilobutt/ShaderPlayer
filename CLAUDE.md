@@ -221,6 +221,9 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
 - Toggle buttons using `PushStyleColor`/`PopStyleColor`: snapshot the bool BEFORE the button call (`bool wasActive = m_flag; if (wasActive) Push...; if (Button(...)) m_flag=!m_flag; if (wasActive) Pop...`). Checking `m_flag` after the button call breaks push/pop symmetry on the click frame.
 - `DrawKeyframeDetail` receives `anyChanged` by reference — set it on ALL mutation paths including early returns, or `OnParamChanged()` won't fire for that edit.
+- `ImGui::ArrowButton("##id", ImGuiDir_Left/Right/Up/Down)` renders a built-in arrow button — use instead of Unicode arrows (default font is ASCII-only)
+- `ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)` — required to show tooltips on disabled widgets; plain `IsItemHovered()` returns false when the item is disabled
+- Use `memcmp(a, b, N * sizeof(float)) == 0` for float-array equality checks (e.g. "is value at default"); reliable for exact IEEE 754 round-trips between storage and comparison
 
 ## VideoEncoder Notes
 

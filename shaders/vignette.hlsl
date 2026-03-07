@@ -1,5 +1,19 @@
+/*{
+    "INPUTS": [
+        {"NAME": "Intensity",      "LABEL": "Intensity",   "TYPE": "float",
+         "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.5},
+        {"NAME": "Softness",       "LABEL": "Softness",    "TYPE": "float",
+         "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.4},
+        {"NAME": "VignetteColor",  "LABEL": "Colour",      "TYPE": "color",
+         "DEFAULT": [0.0, 0.0, 0.0, 1.0]}
+    ]
+}*/
+
 // Vignette Effect
-// Darkens the edges of the frame
+// Darkens (or tints) the edges of the frame
+// Intensity: edge darkness strength
+// Softness: how gradual the falloff is
+// Colour: vignette tint colour (default black)
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -19,17 +33,12 @@ struct PS_INPUT {
 };
 
 float4 main(PS_INPUT input) : SV_TARGET {
-    float4 color = videoTexture.Sample(videoSampler, input.uv);
-    
-    // Vignette parameters
-    float intensity = 0.5;   // How dark the edges get
-    float softness = 0.4;    // How gradual the falloff is
-    
-    // Calculate vignette
-    float2 center = input.uv - 0.5;
-    float dist = length(center);
-    float vignette = 1.0 - smoothstep(softness, softness + 0.3, dist) * intensity;
-    
-    color.rgb *= vignette;
-    return color;
+    float4 col = videoTexture.Sample(videoSampler, input.uv);
+
+    float2 centered = input.uv - 0.5;
+    float dist = length(centered);
+    float vignette = smoothstep(Softness, Softness + 0.3, dist) * Intensity;
+
+    col.rgb = lerp(col.rgb, VignetteColor.rgb, vignette);
+    return col;
 }
