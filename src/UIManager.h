@@ -119,6 +119,9 @@ private:
     // New shader modal
     char m_newShaderName[256] = "";
 
+    // ImGui ini path — must outlive the ImGui context (io.IniFilename is a raw ptr)
+    std::string m_iniFilePath;
+
     // Keyframe editing state
     int m_selectedKeyframeParam = -1;   // index into preset->params, or -1
     int m_selectedKeyframeIndex = -1;   // index into timeline->keyframes, or -1

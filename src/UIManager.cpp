@@ -27,6 +27,16 @@ bool UIManager::Initialize(HWND hwnd, ID3D11Device* device, ID3D11DeviceContext*
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+    // Pin imgui.ini next to the exe regardless of CWD (Desktop shortcuts set CWD to Desktop)
+    {
+        char exePath[MAX_PATH] = {};
+        GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+        char* lastSlash = strrchr(exePath, '\\');
+        if (lastSlash) *(lastSlash + 1) = '\0';
+        m_iniFilePath = std::string(exePath) + "imgui.ini";
+        io.IniFilename = m_iniFilePath.c_str();
+    }
+
     // Setup style
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
