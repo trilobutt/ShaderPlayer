@@ -548,6 +548,12 @@ void UIManager::DrawShaderParameters() {
     bool anyChanged = false;
 
     for (auto& p : preset->params) {
+        if (&p != &preset->params[0]) {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+
         ImGui::PushID(&p);
 
         // Check if parameter is being driven by keyframes during playback
@@ -638,6 +644,20 @@ void UIManager::DrawShaderParameters() {
         if (kfDriven) {
             ImGui::EndDisabled();
             ImGui::PopStyleVar();
+        }
+
+        // --- Per-parameter reset button (skip Event type) ---
+        if (p.type != ShaderParamType::Event) {
+            ImGui::SameLine();
+            bool atDefault = (memcmp(p.values, p.defaultValues, 4 * sizeof(float)) == 0);
+            if (atDefault) ImGui::BeginDisabled();
+            if (ImGui::ArrowButton("##reset", ImGuiDir_Left)) {
+                std::copy(p.defaultValues, p.defaultValues + 4, p.values);
+                anyChanged = true;
+            }
+            if (atDefault) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Reset to default");
         }
 
         // --- Keyframe toggle (skip Event type) ---
