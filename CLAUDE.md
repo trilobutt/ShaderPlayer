@@ -76,6 +76,13 @@ src/
 │                           (GetDefaultConfigPath uses GetModuleFileNameA). Serialises
 │                           AppConfig including shaderPresets (filepath + shortcutKey)
 │                           and shaderDirectory.
+├── VideoOutputWindow.{cpp,h} - Second Win32 HWND + IDXGISwapChain on the same D3D11
+│                               device. BlitAndPresent() copies m_displayTexture to the
+│                               window each frame via D3D11Renderer::BlitDisplayTo().
+│                               Opened/closed via View → Video Output Window (F7).
+│                               Queries IDXGIFactory2 from the existing device — no
+│                               cross-adapter copy. WndProc handles WM_SIZE (ResizeBuffers)
+│                               and WM_CLOSE (sets m_hwnd = nullptr, no PostQuitMessage).
 └── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
                               exe for `.ini` files (custom [WorkspacePreset] header +
                               verbatim ImGui ini blob). Index 0 = built-in Default
@@ -194,8 +201,11 @@ Each frame:
 1. `UploadVideoFrame()` — maps video texture and DMA-copies current VideoFrame (RGBA8)
 2. `BeginFrame()` — updates cbuffer, clears backbuffer, sets **entire** PS pipeline state including `m_activePS`
 3. `RenderToDisplay()` — changes RT to `m_displayTexture`, calls `Draw(3,0)`, restores backbuffer RT
-4. ImGui render pass — `ImGui::Image(GetDisplaySRV(), ...)` composites the processed frame
-5. `Present(vsync=true)`
+4. `VideoOutputWindow::BlitAndPresent()` (if open) — calls `BlitDisplayTo()` then presents the second swap chain
+5. ImGui render pass — `ImGui::Image(GetDisplaySRV(), ...)` composites the processed frame
+6. `Present(vsync=true)`
+
+`BlitDisplayTo(rtv, w, h)` — draws `m_displaySRV` via passthrough PS into the given RTV, then restores main backbuffer RT, main viewport, `m_activePS`, and `m_videoSRV` as t0. Safe to call between `RenderToDisplay()` and recording capture.
 
 `EndFrame()` (draws fullscreen triangle to backbuffer) is intentionally not called — the video is displayed via `ImGui::Image`, not a direct backbuffer draw.
 
@@ -264,7 +274,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 
 ## Application API
 
-- `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F6, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding.
+- `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F7, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding. Reserved F-keys: F1 Editor, F2 Library, F3 Transport, F4 Recording, F5 Compile, F6 Keybindings, F7 Video Output Window, F9 Record toggle.
 - `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
 - `RegenerateNoise()` — reads `AppConfig::noise`, calls `D3D11Renderer::UpdateNoiseTexture`, saves config. Use this; do not call `UpdateNoiseTexture` directly.
 
