@@ -9,6 +9,7 @@
 #include "ConfigManager.h"
 #include "WorkspaceManager.h"
 #include "VideoOutputWindow.h"
+#include "SpoutOutput.h"
 
 namespace SP {
 
@@ -64,6 +65,11 @@ public:
     // Video output window — separate OS window for screen-sharing
     void ToggleVideoOutputWindow();
     bool IsVideoOutputWindowOpen() const { return m_videoOutputWindow.IsOpen(); }
+
+    // Spout output — GPU texture sharing with Spout-aware receivers
+    void SetSpoutEnabled(bool enabled);
+    bool IsSpoutEnabled() const { return m_spoutOutput.IsEnabled(); }
+    void SetSpoutSenderName(const std::string& name);
 
     // Noise generator — regenerates the global t1 noise texture from current config
     void RegenerateNoise();
@@ -127,6 +133,7 @@ private:
     ConfigManager m_configManager;
     std::unique_ptr<WorkspaceManager> m_workspaceManager;
     VideoOutputWindow m_videoOutputWindow;
+    SpoutOutput m_spoutOutput;
 
     // State
     PlaybackState m_playbackState = PlaybackState::Stopped;

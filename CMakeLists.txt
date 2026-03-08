@@ -74,6 +74,45 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+FetchContent_Declare(
+    spout2
+    GIT_REPOSITORY https://github.com/leadedge/Spout2.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+# Use EXCLUDE_FROM_ALL / SOURCE_SUBDIR trick: declare a dummy subdir so
+# MakeAvailable doesn't recurse into Spout2's CMakeLists (which builds GL libs
+# we don't need and has WIN32_LEAN_AND_MEAN conflicts).
+FetchContent_GetProperties(spout2)
+if(NOT spout2_POPULATED)
+    FetchContent_Populate(spout2)  # downloads sources, sets spout2_SOURCE_DIR
+endif()
+
+set(SPOUT_DX_DIR  ${spout2_SOURCE_DIR}/SPOUTSDK/SpoutDirectX/SpoutDX)
+set(SPOUT_GL_DIR  ${spout2_SOURCE_DIR}/SPOUTSDK/SpoutGL)
+
+add_library(spout_lib STATIC
+    ${SPOUT_DX_DIR}/SpoutDX.cpp
+    ${SPOUT_GL_DIR}/SpoutDirectX.cpp
+    ${SPOUT_GL_DIR}/SpoutSenderNames.cpp
+    ${SPOUT_GL_DIR}/SpoutSharedMemory.cpp
+    ${SPOUT_GL_DIR}/SpoutUtils.cpp
+    ${SPOUT_GL_DIR}/SpoutFrameCount.cpp
+    ${SPOUT_GL_DIR}/SpoutCopy.cpp
+)
+target_include_directories(spout_lib PUBLIC
+    ${SPOUT_DX_DIR}
+    ${SPOUT_GL_DIR}
+)
+target_link_libraries(spout_lib PRIVATE d3d11 dxgi winmm)
+# Suppress warnings; also undefine WIN32_LEAN_AND_MEAN so SpoutFrameCount.cpp
+# can pull in <mmsystem.h> for timeGetDevCaps/timeBeginPeriod/timeEndPeriod.
+if(MSVC)
+    target_compile_options(spout_lib PRIVATE /W0 /UWIN32_LEAN_AND_MEAN)
+else()
+    target_compile_options(spout_lib PRIVATE -w)
+endif()
+
 # ImGui library
 add_library(imgui_lib STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -104,6 +143,7 @@ add_executable(ShaderPlayer WIN32
     src/WorkspaceManager.cpp
     src/KeyframeTimeline.cpp
     src/VideoOutputWindow.cpp
+    src/SpoutOutput.cpp
 )
 
 target_include_directories(ShaderPlayer PRIVATE
@@ -114,6 +154,7 @@ target_include_directories(ShaderPlayer PRIVATE
 target_link_libraries(ShaderPlayer PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
+    spout_lib
     d3d11
     d3dcompiler
     dxgi

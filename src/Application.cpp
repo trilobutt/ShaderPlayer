@@ -34,6 +34,13 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
         m_renderer.SetGenerativeResolution(cfg.generativeWidth, cfg.generativeHeight);
     }
 
+    // Initialise Spout sender (non-fatal — Spout may not be installed on this machine)
+    if (m_spoutOutput.Initialize(m_renderer.GetDevice())) {
+        const auto& cfg = m_configManager.GetConfig();
+        m_spoutOutput.SetSenderName(cfg.spoutSenderName);
+        m_spoutOutput.SetEnabled(cfg.spoutEnabled);
+    }
+
     // Create shader manager
     m_shaderManager = std::make_unique<ShaderManager>(m_renderer);
     m_shaderManager->EnableFileWatching(true);
@@ -111,7 +118,8 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
 void Application::Shutdown() {
     StopRecording();
     SaveConfig();
-    
+
+    m_spoutOutput.Shutdown();
     m_uiManager.reset();
     m_shaderManager.reset();
     m_renderer.Shutdown();
@@ -292,6 +300,9 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         return;
     case VK_F7:
         ToggleVideoOutputWindow();
+        return;
+    case VK_F8:
+        if (m_uiManager) m_uiManager->ToggleSpoutPanel();
         return;
     case VK_F9:
         if (m_encoder.IsRecording()) {
@@ -529,6 +540,9 @@ void Application::RenderFrame() {
     // Blit processed output to the detached video window (if open)
     if (m_videoOutputWindow.IsOpen())
         m_videoOutputWindow.BlitAndPresent(m_renderer);
+
+    // Share processed frame via Spout (GPU texture copy; does not block the pipeline)
+    m_spoutOutput.SendFrame(m_renderer.GetDisplayTexture());
 
     // Capture recording frame here, BEFORE ImGui renders. ImGui overwrites all D3D11
     // pipeline state (VS, PS, CBs, SRVs), so RenderToTexture must run while the video
@@ -868,6 +882,18 @@ void Application::ToggleVideoOutputWindow() {
         m_videoOutputWindow.Open(m_renderer.GetDevice(), m_renderer.GetContext());
 }
 
+void Application::SetSpoutEnabled(bool enabled) {
+    m_configManager.GetConfig().spoutEnabled = enabled;
+    m_spoutOutput.SetEnabled(enabled);
+    SaveConfig();
+}
+
+void Application::SetSpoutSenderName(const std::string& name) {
+    m_configManager.GetConfig().spoutSenderName = name;
+    m_spoutOutput.SetSenderName(name);
+    SaveConfig();
+}
+
 void Application::RegenerateNoise() {
     const auto& n = m_configManager.GetConfig().noise;
     m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
@@ -930,6 +956,7 @@ std::string Application::FindBindingConflict(int vkCode, int modifiers,
         case VK_F5:     return "reserved for Compile (F5)";
         case VK_F6:     return "reserved for Toggle Keybindings (F6)";
         case VK_F7:     return "reserved for Video Output Window (F7)";
+        case VK_F8:     return "reserved for Spout Output panel (F8)";
         case VK_F9:     return "reserved for Start/Stop Recording (F9)";
         }
     }

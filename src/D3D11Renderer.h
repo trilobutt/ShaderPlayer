@@ -40,7 +40,10 @@ public:
 
     // Render to display texture (for ImGui::Image preview)
     void RenderToDisplay();
-    ID3D11ShaderResourceView* GetDisplaySRV() const { return m_displaySRV.Get(); }
+    ID3D11ShaderResourceView* GetDisplaySRV()    const { return m_displaySRV.Get(); }
+    ID3D11Texture2D*          GetDisplayTexture() const { return m_displayTexture.Get(); }
+    int GetDisplayWidth()  const { return m_displayWidth; }
+    int GetDisplayHeight() const { return m_displayHeight; }
 
     // Blit the already-processed display texture into an external RTV (e.g. a second
     // swap chain window).  Restores the main backbuffer RT and active PS afterwards.

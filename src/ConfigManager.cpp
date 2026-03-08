@@ -156,7 +156,9 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"noiseScale", c.noise.scale},
         {"noiseTextureSize", c.noise.textureSize},
         {"generativeWidth",   c.generativeWidth},
-        {"generativeHeight",  c.generativeHeight}
+        {"generativeHeight",  c.generativeHeight},
+        {"spoutEnabled",      c.spoutEnabled},
+        {"spoutSenderName",   c.spoutSenderName}
     };
 }
 
@@ -178,6 +180,8 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("noiseTextureSize")) j.at("noiseTextureSize").get_to(c.noise.textureSize);
     if (j.contains("generativeWidth"))  j.at("generativeWidth").get_to(c.generativeWidth);
     if (j.contains("generativeHeight")) j.at("generativeHeight").get_to(c.generativeHeight);
+    if (j.contains("spoutEnabled"))     j.at("spoutEnabled").get_to(c.spoutEnabled);
+    if (j.contains("spoutSenderName"))  j.at("spoutSenderName").get_to(c.spoutSenderName);
 }
 
 ConfigManager::ConfigManager() = default;

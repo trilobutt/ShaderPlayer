@@ -167,6 +167,10 @@ struct AppConfig {
     int generativeHeight = 1080;
 
 
+    // Spout output
+    bool        spoutEnabled    = false;
+    std::string spoutSenderName = "ShaderPlayer";
+
     // UI layout
     float editorPanelWidth = 500.0f;
     float libraryPanelHeight = 200.0f;

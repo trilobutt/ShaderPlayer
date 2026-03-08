@@ -270,6 +270,10 @@ void UIManager::Render() {
         DrawNoisePanel();
     }
 
+    if (m_showSpoutPanel) {
+        DrawSpoutPanel();
+    }
+
     DrawCaptureDialog();
 
     DrawNotifications();
@@ -371,6 +375,7 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Recording Panel", "F4", &m_showRecording);
             ImGui::MenuItem("Keybindings", "F6", &m_showKeybindingsPanel);
             ImGui::MenuItem("Noise Generator", nullptr, &m_showNoisePanel);
+            ImGui::MenuItem("Spout Output", "F8", &m_showSpoutPanel);
 
             ImGui::Separator();
             const bool outWinOpen = m_app.IsVideoOutputWindowOpen();
@@ -1952,6 +1957,40 @@ void UIManager::DrawNoisePanel() {
     if (ImGui::Button("Regenerate", ImVec2(-1, 0)) || changed) {
         m_app.RegenerateNoise();
     }
+
+    ImGui::End();
+}
+
+void UIManager::DrawSpoutPanel() {
+    ImGui::SetNextWindowSize(ImVec2(340, 180), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Spout Output", &m_showSpoutPanel)) {
+        ImGui::End();
+        return;
+    }
+
+    bool enabled = m_app.IsSpoutEnabled();
+    if (ImGui::Checkbox("Send via Spout", &enabled))
+        m_app.SetSpoutEnabled(enabled);
+
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    AppConfig& cfg = m_app.GetConfig();
+
+    char nameBuf[128] = {};
+    strncpy_s(nameBuf, cfg.spoutSenderName.c_str(), sizeof(nameBuf) - 1);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::InputText("##spoutName", nameBuf, sizeof(nameBuf), ImGuiInputTextFlags_EnterReturnsTrue))
+        m_app.SetSpoutSenderName(nameBuf);
+    ImGui::TextDisabled("Sender name (Enter to apply)");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::TextWrapped("Receivers: Resolume, MadMapper, OBS (Spout2 plugin), SpoutCam (virtual webcam).");
+    ImGui::Spacing();
+    if (ImGui::Button("Get SpoutCam (virtual webcam)..."))
+        ShellExecuteA(nullptr, "open", "https://github.com/leadedge/SpoutCam/releases/latest", nullptr, nullptr, SW_SHOWNORMAL);
 
     ImGui::End();
 }

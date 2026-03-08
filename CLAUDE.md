@@ -239,6 +239,16 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `Stop()` / `SeekToTime(0.0)` called on a live source fails silently — harmless, no special guard needed.
 - Transport: show LIVE badge + wall-clock elapsed + Stop button instead of the scrubber when `decoder.IsLiveCapture()`.
 
+## Spout2 Integration (SpoutOutput)
+
+`SpoutOutput.h/.cpp` — pImpl wrapper around `spoutDX` sender. Initialised in `Application::Initialize()` after D3D, called in `RenderFrame()` after `RenderToDisplay()` + `BlitAndPresent()`, before the recording path. Opt-in: `AppConfig::spoutEnabled` defaults false.
+
+### Spout2 SDK build notes (CMakeLists.txt)
+
+- Repo folder is `SPOUTSDK` (no underscore). DX11 API: `SPOUTSDK/SpoutDirectX/SpoutDX/`. Core impl: `SPOUTSDK/SpoutGL/` (SpoutDirectX, SpoutSenderNames, SpoutSharedMemory, SpoutUtils, SpoutFrameCount, SpoutCopy).
+- Use `FetchContent_Populate` (not `FetchContent_MakeAvailable`) — MakeAvailable runs Spout2's own CMakeLists which builds GL targets that fail with `WIN32_LEAN_AND_MEAN`.
+- `SpoutFrameCount.cpp` needs `<mmsystem.h>` (timeGetDevCaps etc.). Fix: `/UWIN32_LEAN_AND_MEAN` on spout_lib compile options + explicit `winmm` link.
+
 ## Known Limitations
 
 - Windows-only (Direct3D 11 requirement)
@@ -274,7 +284,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 
 ## Application API
 
-- `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F7, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding. Reserved F-keys: F1 Editor, F2 Library, F3 Transport, F4 Recording, F5 Compile, F6 Keybindings, F7 Video Output Window, F9 Record toggle.
+- `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F7, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding. Reserved F-keys: F1 Editor, F2 Library, F3 Transport, F4 Recording, F5 Compile, F6 Keybindings, F7 Video Output Window, F8 Spout Output, F9 Record toggle.
 - `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
 - `RegenerateNoise()` — reads `AppConfig::noise`, calls `D3D11Renderer::UpdateNoiseTexture`, saves config. Use this; do not call `UpdateNoiseTexture` directly.
 

@@ -49,6 +49,7 @@ public:
     void ToggleTransport()        { m_showTransport        = !m_showTransport; }
     void ToggleRecording()        { m_showRecording        = !m_showRecording; }
     void ToggleKeybindingsPanel() { m_showKeybindingsPanel = !m_showKeybindingsPanel; }
+    void ToggleSpoutPanel()       { m_showSpoutPanel       = !m_showSpoutPanel; }
 
     // Apply a full set of panel visibility flags (used by workspace preset load).
     void ApplyVisibility(bool showEditor, bool showLibrary, bool showTransport,
@@ -78,6 +79,7 @@ private:
                             int keyframeIndex, bool& anyChanged);
     void DrawNoisePanel();
     void DrawCaptureDialog();
+    void DrawSpoutPanel();
 
     Application& m_app;
     
@@ -133,6 +135,9 @@ private:
 
     // Noise generator panel
     bool m_showNoisePanel = false;
+
+    // Spout output panel
+    bool m_showSpoutPanel = false;
 
     // Capture / stream dialog
     bool m_showCaptureDialog = false;
