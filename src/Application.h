@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Common.h"
+#include "AudioAnalyzer.h"
 #include "VideoDecoder.h"
 #include "D3D11Renderer.h"
 #include "ShaderManager.h"
@@ -74,6 +75,10 @@ public:
     // Noise generator — regenerates the global t1 noise texture from current config
     void RegenerateNoise();
 
+    // Audio analysis settings (beat sensitivity, smoothing, etc.)
+    void UpdateAudioSettings();
+    const AudioData& GetAudioData() const { return m_audioData; }
+
     // Generative resolution — applies config.generativeWidth/Height to the renderer
     void ApplyGenerativeResolution();
     AppConfig& GetConfig() { return m_configManager.GetConfig(); }
@@ -125,7 +130,9 @@ private:
     int m_windowHeight = 720;
 
     // Components
-    VideoDecoder m_decoder;
+    AudioAnalyzer m_audioAnalyzer;
+    AudioData     m_audioData;
+    VideoDecoder  m_decoder;
     D3D11Renderer m_renderer;
     std::unique_ptr<ShaderManager> m_shaderManager;
     VideoEncoder m_encoder;

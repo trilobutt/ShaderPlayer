@@ -18,6 +18,7 @@ void to_json(nlohmann::json& j, const ShaderPreset& p) {
     if (!p.params.empty()) {
         nlohmann::json paramVals = nlohmann::json::object();
         for (const auto& param : p.params) {
+            if (param.type == ShaderParamType::AudioBand) continue;  // live data, not persisted
             nlohmann::json vals = nlohmann::json::array();
             int count = 1;
             if (param.type == ShaderParamType::Point2D) count = 2;
@@ -30,6 +31,7 @@ void to_json(nlohmann::json& j, const ShaderPreset& p) {
     // Save keyframe timelines keyed by param name
     nlohmann::json kfObj = nlohmann::json::object();
     for (const auto& param : p.params) {
+        if (param.type == ShaderParamType::AudioBand) continue;
         if (!param.timeline || param.timeline->keyframes.empty()) continue;
         const auto& tl = *param.timeline;
         nlohmann::json tlJson;
@@ -157,8 +159,11 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"noiseTextureSize", c.noise.textureSize},
         {"generativeWidth",   c.generativeWidth},
         {"generativeHeight",  c.generativeHeight},
-        {"spoutEnabled",      c.spoutEnabled},
-        {"spoutSenderName",   c.spoutSenderName}
+        {"spoutEnabled",         c.spoutEnabled},
+        {"spoutSenderName",      c.spoutSenderName},
+        {"audioBeatSensitivity", c.audio.beatSensitivity},
+        {"audioBeatDecay",       c.audio.beatDecay},
+        {"audioSmoothing",       c.audio.smoothing}
     };
 }
 
@@ -180,8 +185,11 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("noiseTextureSize")) j.at("noiseTextureSize").get_to(c.noise.textureSize);
     if (j.contains("generativeWidth"))  j.at("generativeWidth").get_to(c.generativeWidth);
     if (j.contains("generativeHeight")) j.at("generativeHeight").get_to(c.generativeHeight);
-    if (j.contains("spoutEnabled"))     j.at("spoutEnabled").get_to(c.spoutEnabled);
-    if (j.contains("spoutSenderName"))  j.at("spoutSenderName").get_to(c.spoutSenderName);
+    if (j.contains("spoutEnabled"))         j.at("spoutEnabled").get_to(c.spoutEnabled);
+    if (j.contains("spoutSenderName"))      j.at("spoutSenderName").get_to(c.spoutSenderName);
+    if (j.contains("audioBeatSensitivity")) j.at("audioBeatSensitivity").get_to(c.audio.beatSensitivity);
+    if (j.contains("audioBeatDecay"))       j.at("audioBeatDecay").get_to(c.audio.beatDecay);
+    if (j.contains("audioSmoothing"))       j.at("audioSmoothing").get_to(c.audio.smoothing);
 }
 
 ConfigManager::ConfigManager() = default;

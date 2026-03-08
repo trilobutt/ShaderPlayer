@@ -107,6 +107,9 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
         OpenVideo(m_configManager.GetConfig().lastOpenedVideo);
     }
 
+    // Apply audio DSP settings from config
+    m_audioAnalyzer.UpdateSettings(m_configManager.GetConfig().audio);
+
     m_lastFrameTime = std::chrono::steady_clock::now();
 
     // Upload initial param values to GPU if a preset is already active
@@ -411,9 +414,20 @@ void Application::ProcessFrame() {
                     if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                         m_newVideoFrame = true;
                         m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
+
+                        // Feed audio samples decoded alongside this video frame to the analyzer.
+                        if (m_decoder.HasAudio()) {
+                            constexpr int kAudioBuf = 16384;
+                            static float audioBuf[kAudioBuf];
+                            int got = m_decoder.DrainAudioSamples(audioBuf, kAudioBuf);
+                            if (got > 0)
+                                m_audioAnalyzer.FeedSamples(audioBuf, got, 1,
+                                                            m_decoder.GetAudioSampleRate());
+                        }
                     } else {
                         // End of video, loop
                         m_decoder.SeekToTime(0.0);
+                        m_audioAnalyzer.Reset();
                     }
                     m_lastFrameTime = now;
                 }
@@ -433,6 +447,7 @@ void Application::ProcessFrame() {
 /*static*/ void Application::PackParamValues(const ShaderPreset& preset, float out[16]) {
     std::fill(out, out + 16, 0.0f);
     for (const auto& p : preset.params) {
+        if (p.type == ShaderParamType::AudioBand) continue;  // Lives in b1, not custom[]
         const int off = p.cbufferOffset;
         switch (p.type) {
         case ShaderParamType::Float:
@@ -532,6 +547,14 @@ void Application::RenderFrame() {
         }
     }
 
+    // Push latest audio analysis to GPU (b1 cbuffer + t3 spectrum texture).
+    if (m_decoder.HasAudio()) {
+        m_audioAnalyzer.GetData(m_audioData);
+        m_renderer.SetAudioData(&m_audioData);
+    } else {
+        m_renderer.SetAudioData(nullptr);
+    }
+
     // Set up D3D11 pipeline and clear backbuffer to black
     m_renderer.BeginFrame();
     // Render video+shader to the display texture; ImGui::Image picks it up from there
@@ -605,6 +628,7 @@ void Application::CloseVideo() {
     Stop();
     m_decoder.Close();
     m_currentFrame = VideoFrame{};
+    m_audioAnalyzer.Reset();
 }
 
 void Application::OpenVideoDialog() {
@@ -676,6 +700,7 @@ void Application::SeekTo(double seconds) {
         m_decoder.SeekToTime(seconds);
         m_decoder.DecodeNextFrame(m_currentFrame);
         m_playbackTime = static_cast<float>(seconds);
+        m_audioAnalyzer.Reset();
     }
 }
 
@@ -891,6 +916,11 @@ void Application::SetSpoutEnabled(bool enabled) {
 void Application::SetSpoutSenderName(const std::string& name) {
     m_configManager.GetConfig().spoutSenderName = name;
     m_spoutOutput.SetSenderName(name);
+    SaveConfig();
+}
+
+void Application::UpdateAudioSettings() {
+    m_audioAnalyzer.UpdateSettings(m_configManager.GetConfig().audio);
     SaveConfig();
 }
 

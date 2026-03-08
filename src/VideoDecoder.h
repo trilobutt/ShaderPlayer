@@ -10,6 +10,7 @@ extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_d3d11va.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 }
 
 namespace SP {
@@ -46,6 +47,15 @@ public:
     double GetCurrentTime() const { return m_currentTime; }
     AVPixelFormat GetPixelFormat() const { return m_pixelFormat; }
     std::string GetCodecName() const { return m_codecName; }
+
+    // Audio stream (optional — not all videos have audio)
+    bool HasAudio() const { return m_audioStreamIdx >= 0; }
+    int  GetAudioSampleRate() const { return m_audioSampleRate; }
+    int  GetAudioChannels()   const { return m_audioChannels; }
+
+    // Drain accumulated decoded audio samples (mono float, interleaved if channels>1
+    // but we always emit mono after SWR conversion). Returns number of floats written.
+    int DrainAudioSamples(float* buf, int maxFloats);
     
     // Hardware acceleration
     bool IsHardwareAccelerated() const { return m_hwDeviceCtx != nullptr; }
@@ -55,6 +65,9 @@ private:
     bool InitHardwareDecoder(ID3D11Device* device);
     bool ConvertFrame(AVFrame* frame, VideoFrame& outFrame);
     void FlushDecoder();
+    void OpenAudioStream();   // Called from Open(); non-fatal if no audio stream
+    void CloseAudioStream();
+    void DecodeAudioPacket(); // Sends m_packet to audio codec, drains frames into m_audioPending
 
     AVFormatContext* m_formatCtx = nullptr;
     AVCodecContext* m_codecCtx = nullptr;
@@ -78,6 +91,15 @@ private:
     // For YUV to RGB conversion
     AVPixelFormat m_outputFormat = AV_PIX_FMT_RGBA;
     std::vector<uint8_t> m_conversionBuffer;
+
+    // Audio stream (optional)
+    int              m_audioStreamIdx  = -1;
+    int              m_audioSampleRate = 0;
+    int              m_audioChannels   = 0;
+    AVCodecContext*  m_audioCtx        = nullptr;
+    SwrContext*      m_swrCtx          = nullptr;
+    AVFrame*         m_audioFrame      = nullptr;
+    std::vector<float> m_audioPending; // accumulated mono-float samples awaiting drain
 };
 
 } // namespace SP

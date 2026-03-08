@@ -80,6 +80,7 @@ private:
     void DrawNoisePanel();
     void DrawCaptureDialog();
     void DrawSpoutPanel();
+    void DrawAudioPanel();
 
     Application& m_app;
     
@@ -138,6 +139,9 @@ private:
 
     // Spout output panel
     bool m_showSpoutPanel = false;
+
+    // Audio monitor panel
+    bool m_showAudioPanel = false;
 
     // Capture / stream dialog
     bool m_showCaptureDialog = false;

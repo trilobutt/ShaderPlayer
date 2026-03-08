@@ -35,6 +35,12 @@ src/
 │                           each tick. Handles WndProc, drag-drop (.hlsl → shader,
 │                           other → video), keyboard shortcuts, file dialogs including
 │                           ScanFolderDialog() (IFileOpenDialog + FOS_PICKFOLDERS).
+├── AudioAnalyzer.{cpp,h} - Pure DSP class. Owns KissFFT plan, ring buffer (2048
+│                           samples), Hann window, and beat history. Fed by
+│                           VideoDecoder::DrainAudioSamples() in Application::
+│                           ProcessFrame(). Outputs AudioData (rms/bass/mid/high/
+│                           beat/spectralCentroid + 256-bin spectrum). No threads.
+│                           Reset() on seek/close/EOF loop.
 ├── VideoDecoder.{cpp,h}  - FFmpeg wrapper: Open/Close, DecodeNextFrame() → VideoFrame
 │                           (RGBA8 in data[0]), SeekToTime(). Blocking decode, called
 │                           from main thread in ProcessFrame().
@@ -117,6 +123,9 @@ float4 main(PS_INPUT input) : SV_TARGET { ... }
 ```
 
 Included shaders in `shaders/`:
+- `audio_spectrum.hlsl` - Spectrum bar visualiser with beat flash (SHADER_TYPE: "audio")
+- `audio_bass_pulse.hlsl` - Bass-reactive chromatic aberration + beat flash on video (SHADER_TYPE: "audio")
+- `audio_waveform.hlsl` - Spectrum waveform overlay on video (SHADER_TYPE: "audio")
 - `passthrough.hlsl` - Direct video pass-through (no effect)
 - `grayscale.hlsl` - Luminance-based desaturation
 - `vignette.hlsl` - Radial darkening
@@ -126,6 +135,19 @@ Included shaders in `shaders/`:
 - `pixelate.hlsl` - Pixelation with optional grid overlay; demonstrates all ISF widget types
 - `receipt_bars.hlsl`, `halftone.hlsl`, `pixel_sdf.hlsl`, `pixel_matrix.hlsl`, `ascii_noise.hlsl` — luma-based pixelated pattern effects
 - `led_panel.hlsl`, `crochet.hlsl`, `lego_bricks.hlsl`, `fluted_glass.hlsl`, `depixelation.hlsl` — advanced stylised effects
+
+### Audio Data (b1 / t3)
+
+`D3D11Renderer::BeginFrame()` always binds `AudioConstants` cbuffer at `b1` and a 1×256 `R32_FLOAT` DYNAMIC spectrum texture at `t3`. Updated each frame via `SetAudioData(const AudioData*)` (pass nullptr when no audio → zeros). Audio shaders do **not** declare these manually — preamble injection handles it automatically.
+
+`AudioConstants` layout (must match `D3D11Renderer::AudioConstants`):
+```hlsl
+cbuffer AudioConstants : register(b1) {
+    float audioRms; float audioBass; float audioMid; float audioHigh;
+    float audioBeat; float audioSpectralCentroid; float _audioPad[2];
+};
+Texture2D spectrumTexture : register(t3);  // 1×256, sample at float2(x, 0.5)
+```
 
 ### Global Noise Texture (t1 / s1)
 
@@ -252,7 +274,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 ## Known Limitations
 
 - Windows-only (Direct3D 11 requirement)
-- No audio playback currently implemented
+- No audio **playback** (audio is decoded and analysed for shader reactivity; playback through speakers is not implemented)
 - ProRes support depends on FFmpeg build configuration
 - Recording framerate matches playback framerate (no arbitrary output rates)
 
@@ -287,6 +309,8 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F7, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding. Reserved F-keys: F1 Editor, F2 Library, F3 Transport, F4 Recording, F5 Compile, F6 Keybindings, F7 Video Output Window, F8 Spout Output, F9 Record toggle.
 - `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
 - `RegenerateNoise()` — reads `AppConfig::noise`, calls `D3D11Renderer::UpdateNoiseTexture`, saves config. Use this; do not call `UpdateNoiseTexture` directly.
+- `GetAudioData()` returns `const AudioData&` — live band/spectrum values; used by UIManager for AudioBand ProgressBar meters.
+- `UpdateAudioSettings()` — writes `AppConfig::audio` from UI sliders to `m_audioAnalyzer`, then calls `SaveConfig()`.
 
 ## AppConfig Persistence Pattern
 
@@ -296,11 +320,16 @@ Adding a new config field requires three changes: default value in `Common.h` (`
 
 `VideoDecoder` exposes `GetFPS()`, `GetFrameCount()`, `GetDuration()`, `GetCurrentTime()` — sufficient for any frame-based UI without new API. `Keyframe::time` and all playback state is always stored in seconds; display layers convert via `fps`. Never store frame numbers in the data model.
 
+Audio stream support: `HasAudio()`, `GetAudioSampleRate()`, `DrainAudioSamples(buf, maxFloats)`. `OpenAudioStream()` called internally during `Open()`. Uses libswresample: `swr_alloc_set_opts2` with `AV_CHANNEL_LAYOUT_MONO` + `AV_SAMPLE_FMT_FLTP` handles all source channel counts. Decoded samples accumulate in `m_audioPending`; `DrainAudioSamples` copies and erases consumed floats. Audio packets in the decode loop call `DecodeAudioPacket()` + `continue` instead of being dropped.
+
 ## C++ / Dependency Gotchas
 
+- KissFFT `.c` files require `LANGUAGES CXX C` in the CMake `project()` declaration — omitting `C` causes a linker language error on the static lib target.
+- KissFFT include: use `#include <kiss_fftr.h>` (angle-bracket), not quoted — the kissfft root is on the include path via `target_include_directories`.
+- PowerShell `Set-Content -Encoding UTF8` writes a BOM that fxc rejects with a parse error. Use `[System.IO.File]::WriteAllText($path, $content, [System.Text.Encoding]::ASCII)` when writing HLSL to temp files for fxc validation.
 - `nlohmann/json.hpp` is ~25,000 lines — include it only in `.cpp` files, never in headers
 - nlohmann/json `try/catch` must wrap the full processing loop, not just `json::parse` — `get<>()` and `value()` throw `type_error` on type mismatches
-- HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.)
+- HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.) or HLSL reserved words (`line`, `point`, `triangle`, `linear`, `sample`, etc.)
 - `std::stoi` throws `std::invalid_argument`/`std::out_of_range` on malformed input — use `std::from_chars` (C++17, `<charconv>`) for parsing untrusted file content; it is noexcept and leaves the output unchanged on failure
 
 ## Shader Parameter System
@@ -308,6 +337,8 @@ Adding a new config field requires three changes: default value in `Common.h` (`
 See `docs/shader-parameter-guide.md` for the author-facing reference. Technical notes for development:
 
 ### ISF JSON Block Parsing
+
+`SHADER_TYPE` values: `"generative"` (sets `isGenerative`), `"audio"` (sets `isAudio`), absent/other = video effect. Shader Library shows three sections: AUDIO REACTIVE (`isAudio`), GENERATIVE (`isGenerative`), VIDEO EFFECTS (neither). `isAudio` shaders use AudioBand inputs, have `SHADER_TYPE: "audio"` in the ISF block, and receive auto-injected audio preamble.
 
 `ShaderManager::ParseISFParams(const std::string& source)` extracts parameter metadata:
 1. Find first `/*{` in source; extract up to matching `}*/`.
@@ -328,6 +359,7 @@ After parsing, a `#define` preamble is prepended to the source passed to `D3DCom
 - `long`: `#define Name int(custom[idx].comp)`
 - `point2d` (2 floats, even-aligned): `#define Name float2(custom[idx].ab, custom[idx].cd)`
 - `color` (4 floats, 4-aligned): `#define Name custom[idx]`
+- `audio` (AudioBand): `cbufferOffset = -1`, consumes NO `custom[]` slot. `"BAND"` field maps to: `"rms"→audioRms`, `"bass"→audioBass`, `"mid"→audioMid`, `"high"→audioHigh`, `"beat"→audioBeat`, `"centroid"→audioSpectralCentroid`. Preamble auto-injects the `AudioConstants` cbuffer + `spectrumTexture` declaration when any AudioBand param is present. AudioBand params show as read-only `ProgressBar` in the UI; not persisted to config; not keyframeable.
 
 The original source on disk is never modified.
 

@@ -48,7 +48,7 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
     for (const auto& p : preset.params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
-    preset.params = ParseISFParams(preset.source, &preset.isGenerative);
+    preset.params = ParseISFParams(preset.source, &preset.isGenerative, &preset.isAudio);
 
     for (auto& p : preset.params) {
         auto it = saved.find(p.name);
@@ -86,7 +86,9 @@ bool ShaderManager::RecompilePreset(int index) {
     for (const auto& p : m_presets[index].params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
-    m_presets[index].params = ParseISFParams(m_presets[index].source, &m_presets[index].isGenerative);
+    m_presets[index].params = ParseISFParams(m_presets[index].source,
+                                              &m_presets[index].isGenerative,
+                                              &m_presets[index].isAudio);
 
     for (auto& p : m_presets[index].params) {
         auto it = saved.find(p.name);
@@ -123,7 +125,9 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
         // ISF defaults), then patches param.values from savedParamValues, then calls
         // AddPreset. Skipping re-parse here preserves those restored user values.
         if (m_presets.back().params.empty()) {
-            m_presets.back().params = ParseISFParams(m_presets.back().source, &m_presets.back().isGenerative);
+            m_presets.back().params = ParseISFParams(m_presets.back().source,
+                                                      &m_presets.back().isGenerative,
+                                                      &m_presets.back().isAudio);
         }
         std::string preamble = BuildDefinesPreamble(m_presets.back().params);
         m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error);
@@ -172,7 +176,9 @@ void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
     
-    m_presets[index].params = ParseISFParams(preset.source, &m_presets[index].isGenerative);
+    m_presets[index].params = ParseISFParams(preset.source,
+                                              &m_presets[index].isGenerative,
+                                              &m_presets[index].isAudio);
     std::string preamble = BuildDefinesPreamble(m_presets[index].params);
 
     if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
@@ -334,7 +340,9 @@ float4 main(PS_INPUT input) : SV_TARGET {
 )";
 }
 
-std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source, bool* outIsGenerative) {
+std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source,
+                                                         bool* outIsGenerative,
+                                                         bool* outIsAudio) {
     // Find the ISF block: /*{ ... }*/
     const std::string openTag  = "/*{";
     const std::string closeTag = "}*/";
@@ -355,8 +363,9 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
     try {
         nlohmann::json j = nlohmann::json::parse(jsonText);
 
-        if (outIsGenerative)
-            *outIsGenerative = (j.value("SHADER_TYPE", std::string{}) == "generative");
+        const std::string shaderType = j.value("SHADER_TYPE", std::string{});
+        if (outIsGenerative) *outIsGenerative = (shaderType == "generative");
+        if (outIsAudio)      *outIsAudio      = (shaderType == "audio");
 
         if (!j.contains("INPUTS") || !j["INPUTS"].is_array()) return {};
 
@@ -374,7 +383,14 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
             else if (typeStr == "color")   p.type = ShaderParamType::Color;
             else if (typeStr == "point2d") p.type = ShaderParamType::Point2D;
             else if (typeStr == "event")   p.type = ShaderParamType::Event;
-            else continue;  // Unknown type; skip
+            else if (typeStr == "audio") {
+                // AudioBand params alias to AudioConstants (b1) — consume no custom[] slot.
+                p.type       = ShaderParamType::AudioBand;
+                p.audioBand  = input.value("BAND", std::string{"rms"});
+                p.cbufferOffset = -1;
+                params.push_back(std::move(p));
+                continue;  // Skip cbuffer alignment/offset logic below.
+            } else continue;  // Unknown type; skip
 
             p.min  = input.value("MIN",  0.0f);
             p.max  = input.value("MAX",  1.0f);
@@ -442,8 +458,39 @@ std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& 
     static constexpr char comp[] = "xyzw";
     std::string preamble;
 
+    // If any AudioBand param is present, prepend the AudioConstants cbuffer declaration
+    // and the spectrum texture so the shader doesn't have to declare them manually.
+    bool hasAudio = false;
     for (const auto& p : params) {
-        if (p.cbufferOffset >= 16) continue;
+        if (p.type == ShaderParamType::AudioBand) { hasAudio = true; break; }
+    }
+    if (hasAudio) {
+        preamble +=
+            "cbuffer AudioConstants : register(b1) {\n"
+            "    float audioRms; float audioBass; float audioMid; float audioHigh;\n"
+            "    float audioBeat; float audioSpectralCentroid; float audioPad0; float audioPad1;\n"
+            "};\n"
+            "Texture2D spectrumTexture : register(t3);\n";
+    }
+
+    for (const auto& p : params) {
+        if (p.type == ShaderParamType::AudioBand) {
+            // Map band name to the corresponding AudioConstants field.
+            static const std::unordered_map<std::string, std::string> bandMap = {
+                {"rms",      "audioRms"},
+                {"bass",     "audioBass"},
+                {"mid",      "audioMid"},
+                {"high",     "audioHigh"},
+                {"beat",     "audioBeat"},
+                {"centroid", "audioSpectralCentroid"},
+            };
+            auto it = bandMap.find(p.audioBand);
+            if (it != bandMap.end())
+                preamble += "#define " + p.name + " " + it->second + "\n";
+            continue;
+        }
+
+        if (p.cbufferOffset < 0 || p.cbufferOffset >= 16) continue;
         int idx  = p.cbufferOffset / 4;
         int c    = p.cbufferOffset % 4;
         std::string slot = "custom[" + std::to_string(idx) + "].";
@@ -468,6 +515,8 @@ std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& 
             // color is 4-aligned, so c==0 always
             preamble += "#define " + p.name + " custom[" + std::to_string(idx) + "]\n";
             break;
+        case ShaderParamType::AudioBand:
+            break;  // Already handled above.
         }
     }
 

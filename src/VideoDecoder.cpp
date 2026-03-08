@@ -5,11 +5,12 @@
 namespace SP {
 
 VideoDecoder::VideoDecoder() {
-    m_frame = av_frame_alloc();
-    m_hwFrame = av_frame_alloc();
-    m_packet = av_packet_alloc();
-    
-    if (!m_frame || !m_hwFrame || !m_packet) {
+    m_frame      = av_frame_alloc();
+    m_hwFrame    = av_frame_alloc();
+    m_audioFrame = av_frame_alloc();
+    m_packet     = av_packet_alloc();
+
+    if (!m_frame || !m_hwFrame || !m_audioFrame || !m_packet) {
         throw std::runtime_error("Failed to allocate FFmpeg structures");
     }
 }
@@ -18,6 +19,7 @@ VideoDecoder::~VideoDecoder() {
     Close();
     av_frame_free(&m_frame);
     av_frame_free(&m_hwFrame);
+    av_frame_free(&m_audioFrame);
     av_packet_free(&m_packet);
 }
 
@@ -106,10 +108,14 @@ bool VideoDecoder::Open(const std::string& filepath) {
     int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
     m_conversionBuffer.resize(bufferSize + 64);
 
+    // Open audio stream (non-fatal — many videos have no audio).
+    OpenAudioStream();
+
     return true;
 }
 
 void VideoDecoder::Close() {
+    CloseAudioStream();
     FlushDecoder();
     
     if (m_swsCtx) {
@@ -132,7 +138,10 @@ void VideoDecoder::Close() {
         m_formatCtx = nullptr;
     }
 
-    m_videoStreamIdx = -1;
+    m_videoStreamIdx  = -1;
+    m_audioStreamIdx  = -1;
+    m_audioSampleRate = 0;
+    m_audioChannels   = 0;
     m_width = 0;
     m_height = 0;
     m_fps = 0.0;
@@ -142,6 +151,7 @@ void VideoDecoder::Close() {
     m_pixelFormat = AV_PIX_FMT_NONE;
     m_codecName.clear();
     m_conversionBuffer.clear();
+    m_audioPending.clear();
     m_isLiveCapture = false;
 }
 
@@ -207,12 +217,15 @@ bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
 }
 
 void VideoDecoder::FlushDecoder() {
-    if (m_codecCtx) {
+    if (m_codecCtx)
         avcodec_flush_buffers(m_codecCtx);
-    }
+    if (m_audioCtx)
+        avcodec_flush_buffers(m_audioCtx);
     av_frame_unref(m_frame);
     av_frame_unref(m_hwFrame);
+    av_frame_unref(m_audioFrame);
     av_packet_unref(m_packet);
+    m_audioPending.clear();
 }
 
 bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
@@ -245,7 +258,7 @@ bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
             return false;  // Error
         }
 
-        // Read next packet
+        // Read next packet; also decode audio packets encountered along the way.
         while (true) {
             ret = av_read_frame(m_formatCtx, m_packet);
             if (ret < 0) {
@@ -264,6 +277,10 @@ bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
                     return false;
                 }
                 break;
+            } else if (m_packet->stream_index == m_audioStreamIdx && m_audioCtx) {
+                DecodeAudioPacket();
+                // Don't break — keep reading until we find a video packet.
+                continue;
             }
             av_packet_unref(m_packet);
         }
@@ -355,6 +372,98 @@ bool VideoDecoder::SeekToFrame(int64_t frameNumber) {
     if (m_fps <= 0) return false;
     double seconds = static_cast<double>(frameNumber) / m_fps;
     return SeekToTime(seconds);
+}
+
+int VideoDecoder::DrainAudioSamples(float* buf, int maxFloats) {
+    int available = static_cast<int>(m_audioPending.size());
+    int toCopy = std::min(available, maxFloats);
+    if (toCopy > 0) {
+        std::copy(m_audioPending.begin(), m_audioPending.begin() + toCopy, buf);
+        m_audioPending.erase(m_audioPending.begin(), m_audioPending.begin() + toCopy);
+    }
+    return toCopy;
+}
+
+void VideoDecoder::OpenAudioStream() {
+    if (!m_formatCtx) return;
+
+    int idx = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    if (idx < 0) return;  // No audio stream — silent video.
+
+    const AVCodec* codec = avcodec_find_decoder(m_formatCtx->streams[idx]->codecpar->codec_id);
+    if (!codec) return;
+
+    m_audioCtx = avcodec_alloc_context3(codec);
+    if (!m_audioCtx) return;
+
+    if (avcodec_parameters_to_context(m_audioCtx, m_formatCtx->streams[idx]->codecpar) < 0) {
+        avcodec_free_context(&m_audioCtx);
+        return;
+    }
+
+    if (avcodec_open2(m_audioCtx, codec, nullptr) < 0) {
+        avcodec_free_context(&m_audioCtx);
+        return;
+    }
+
+    m_audioStreamIdx  = idx;
+    m_audioSampleRate = m_audioCtx->sample_rate;
+    m_audioChannels   = m_audioCtx->ch_layout.nb_channels;
+
+    // Set up swresample: decode native format/layout → mono planar float.
+    // This handles all source channel counts (stereo, 5.1, etc.) via downmix.
+    AVChannelLayout monoLayout = AV_CHANNEL_LAYOUT_MONO;
+    if (swr_alloc_set_opts2(&m_swrCtx,
+            &monoLayout,              AV_SAMPLE_FMT_FLTP, m_audioSampleRate,
+            &m_audioCtx->ch_layout,   m_audioCtx->sample_fmt, m_audioSampleRate,
+            0, nullptr) < 0 || !m_swrCtx || swr_init(m_swrCtx) < 0) {
+        swr_free(&m_swrCtx);
+        avcodec_free_context(&m_audioCtx);
+        m_audioStreamIdx = -1;
+    }
+}
+
+void VideoDecoder::CloseAudioStream() {
+    if (m_swrCtx) {
+        swr_free(&m_swrCtx);
+    }
+    if (m_audioCtx) {
+        avcodec_free_context(&m_audioCtx);
+    }
+    m_audioStreamIdx  = -1;
+    m_audioSampleRate = 0;
+    m_audioChannels   = 0;
+    m_audioPending.clear();
+}
+
+void VideoDecoder::DecodeAudioPacket() {
+    // m_packet is already filled with an audio packet.
+    if (avcodec_send_packet(m_audioCtx, m_packet) < 0) {
+        av_packet_unref(m_packet);
+        return;
+    }
+    av_packet_unref(m_packet);
+
+    // Drain all decoded frames.
+    while (avcodec_receive_frame(m_audioCtx, m_audioFrame) == 0) {
+        // Convert to mono float via SWR.
+        // Output is planar float (AV_SAMPLE_FMT_FLTP), channel 0 = mono mix.
+        int outSamples = swr_get_out_samples(m_swrCtx, m_audioFrame->nb_samples);
+        if (outSamples <= 0) {
+            av_frame_unref(m_audioFrame);
+            continue;
+        }
+        // Allocate temporary output buffer.
+        std::vector<float> tmp(outSamples);
+        uint8_t* outBuf = reinterpret_cast<uint8_t*>(tmp.data());
+        int converted = swr_convert(m_swrCtx, &outBuf, outSamples,
+                                    const_cast<const uint8_t**>(m_audioFrame->data),
+                                    m_audioFrame->nb_samples);
+        // SWR outputs mono (AV_CHANNEL_LAYOUT_MONO), so tmp holds the mono plane.
+        if (converted > 0)
+            m_audioPending.insert(m_audioPending.end(), tmp.begin(), tmp.begin() + converted);
+        av_frame_unref(m_audioFrame);
+    }
 }
 
 bool VideoDecoder::InitHardwareDecoder(ID3D11Device* device) {

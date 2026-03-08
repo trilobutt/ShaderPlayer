@@ -274,6 +274,10 @@ void UIManager::Render() {
         DrawSpoutPanel();
     }
 
+    if (m_showAudioPanel) {
+        DrawAudioPanel();
+    }
+
     DrawCaptureDialog();
 
     DrawNotifications();
@@ -376,6 +380,7 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Keybindings", "F6", &m_showKeybindingsPanel);
             ImGui::MenuItem("Noise Generator", nullptr, &m_showNoisePanel);
             ImGui::MenuItem("Spout Output", "F8", &m_showSpoutPanel);
+            ImGui::MenuItem("Audio Monitor", nullptr, &m_showAudioPanel);
 
             ImGui::Separator();
             const bool outWinOpen = m_app.IsVideoOutputWindowOpen();
@@ -705,6 +710,26 @@ void UIManager::DrawShaderParameters() {
             break;
         }
 
+        case ShaderParamType::AudioBand: {
+            // Read-only live meter — value comes from GPU-side audio analysis.
+            const AudioData& ad = m_app.GetAudioData();
+            float liveVal = 0.0f;
+            if      (p.audioBand == "bass")     liveVal = ad.bass;
+            else if (p.audioBand == "mid")      liveVal = ad.mid;
+            else if (p.audioBand == "high")     liveVal = ad.high;
+            else if (p.audioBand == "rms")      liveVal = ad.rms;
+            else if (p.audioBand == "beat")     liveVal = ad.beat;
+            else if (p.audioBand == "centroid") liveVal = ad.spectralCentroid;
+            // Colour the bar: beat = orange, others = default
+            if (p.audioBand == "beat" && liveVal > 0.1f)
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(1.0f, 0.6f, 0.1f, 1.0f));
+            ImGui::ProgressBar(liveVal, ImVec2(-1.0f, 0.0f), p.label.c_str());
+            if (p.audioBand == "beat" && liveVal > 0.1f)
+                ImGui::PopStyleColor();
+            // No anyChanged — AudioBand params are driven by the audio pipeline, not user input.
+            break;
+        }
+
         } // switch
 
         if (kfDriven) {
@@ -712,8 +737,8 @@ void UIManager::DrawShaderParameters() {
             ImGui::PopStyleVar();
         }
 
-        // --- Per-parameter reset button (skip Event type) ---
-        if (p.type != ShaderParamType::Event) {
+        // --- Per-parameter reset button (skip Event and AudioBand) ---
+        if (p.type != ShaderParamType::Event && p.type != ShaderParamType::AudioBand) {
             ImGui::SameLine();
             bool atDefault = (memcmp(p.values, p.defaultValues, 4 * sizeof(float)) == 0);
             if (atDefault) ImGui::BeginDisabled();
@@ -726,8 +751,8 @@ void UIManager::DrawShaderParameters() {
                 ImGui::SetTooltip("Reset to default");
         }
 
-        // --- Keyframe toggle (skip Event type) ---
-        if (p.type != ShaderParamType::Event) {
+        // --- Keyframe toggle (skip Event and AudioBand — both are non-user-driven) ---
+        if (p.type != ShaderParamType::Event && p.type != ShaderParamType::AudioBand) {
             ImGui::SameLine();
             bool hasTimeline = p.timeline.has_value() && p.timeline->enabled;
             if (hasTimeline) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.6f, 0.1f, 1.0f));
@@ -1089,12 +1114,14 @@ void UIManager::DrawShaderLibrary() {
         auto& manager = m_app.GetShaderManager();
         const int presetCount = manager.GetPresetCount();
 
-        // Count generative vs video shaders to decide which section headers to show
-        int generativeCount = 0, videoCount = 0;
+        // Count by category to decide which section headers to show.
+        int audioCount = 0, generativeCount = 0, videoCount = 0;
         for (int i = 0; i < presetCount; ++i) {
             const auto* p = manager.GetPreset(i);
             if (!p) continue;
-            if (p->isGenerative) ++generativeCount; else ++videoCount;
+            if      (p->isAudio)      ++audioCount;
+            else if (p->isGenerative) ++generativeCount;
+            else                      ++videoCount;
         }
 
         // Draw a single preset row at index i.
@@ -1153,6 +1180,16 @@ void UIManager::DrawShaderLibrary() {
             ImGui::PopID();
         };
 
+        // AUDIO REACTIVE section
+        if (audioCount > 0) {
+            ImGui::Separator();
+            ImGui::TextDisabled("AUDIO REACTIVE");
+            for (int i = 0; i < presetCount; ++i) {
+                const auto* p = manager.GetPreset(i);
+                if (p && p->isAudio) drawPreset(i);
+            }
+        }
+
         // GENERATIVE section
         if (generativeCount > 0) {
             ImGui::Separator();
@@ -1169,7 +1206,7 @@ void UIManager::DrawShaderLibrary() {
             ImGui::TextDisabled("VIDEO EFFECTS");
             for (int i = 0; i < presetCount; ++i) {
                 const auto* p = manager.GetPreset(i);
-                if (p && !p->isGenerative) drawPreset(i);
+                if (p && !p->isGenerative && !p->isAudio) drawPreset(i);
             }
         }
 
@@ -1991,6 +2028,79 @@ void UIManager::DrawSpoutPanel() {
     ImGui::Spacing();
     if (ImGui::Button("Get SpoutCam (virtual webcam)..."))
         ShellExecuteA(nullptr, "open", "https://github.com/leadedge/SpoutCam/releases/latest", nullptr, nullptr, SW_SHOWNORMAL);
+
+    ImGui::End();
+}
+
+void UIManager::DrawAudioPanel() {
+    ImGui::SetNextWindowSize(ImVec2(360, 340), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Audio Monitor", &m_showAudioPanel)) {
+        ImGui::End();
+        return;
+    }
+
+    const bool hasAudio = m_app.GetDecoder().HasAudio();
+    if (!hasAudio) {
+        ImGui::TextDisabled("No audio stream in current video.");
+        ImGui::End();
+        return;
+    }
+
+    const AudioData& ad = m_app.GetAudioData();
+
+    // Band meters
+    ImGui::TextDisabled("LEVELS");
+    ImGui::ProgressBar(ad.rms,  ImVec2(-1, 0), "RMS");
+    ImGui::ProgressBar(ad.bass, ImVec2(-1, 0), "Bass");
+    ImGui::ProgressBar(ad.mid,  ImVec2(-1, 0), "Mid");
+    ImGui::ProgressBar(ad.high, ImVec2(-1, 0), "High");
+
+    // Beat indicator
+    ImGui::Spacing();
+    ImGui::TextDisabled("BEAT");
+    if (ad.beat > 0.1f)
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(1.0f, 0.6f, 0.1f, 1.0f));
+    ImGui::ProgressBar(ad.beat, ImVec2(-1, 0), "Beat");
+    if (ad.beat > 0.1f)
+        ImGui::PopStyleColor();
+
+    // Mini spectrum
+    ImGui::Spacing();
+    ImGui::TextDisabled("SPECTRUM");
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    const float  sw = ImGui::GetContentRegionAvail().x;
+    const float  sh = 60.0f;
+    dl->AddRectFilled(p0, ImVec2(p0.x + sw, p0.y + sh), IM_COL32(20, 20, 20, 255));
+    const int bins = AudioData::kSpectrumBins;
+    const float barW = sw / bins;
+    for (int i = 0; i < bins; ++i) {
+        float h = ad.spectrum[i] * sh;
+        float x0 = p0.x + i * barW;
+        ImU32 col = IM_COL32(
+            static_cast<int>(40  + 180 * ad.spectrum[i]),
+            static_cast<int>(100 + 80  * (1.0f - ad.spectrum[i])),
+            static_cast<int>(200 - 150 * ad.spectrum[i]),
+            255);
+        dl->AddRectFilled(ImVec2(x0, p0.y + sh - h), ImVec2(x0 + barW - 1.0f, p0.y + sh), col);
+    }
+    ImGui::Dummy(ImVec2(sw, sh));
+
+    // DSP settings
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextDisabled("DSP SETTINGS");
+    AudioSettings& as = m_app.GetConfig().audio;
+    bool changed = false;
+    changed |= ImGui::SliderFloat("Beat Sensitivity", &as.beatSensitivity, 1.0f, 4.0f, "%.2f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Threshold = sensitivity x rolling-average bass energy.");
+    changed |= ImGui::SliderFloat("Beat Decay", &as.beatDecay, 0.5f, 0.99f, "%.2f");
+    changed |= ImGui::SliderFloat("Smoothing", &as.smoothing, 0.0f, 0.95f, "%.2f");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("0 = no smoothing (raw), 0.95 = very slow response.");
+    if (changed)
+        m_app.UpdateAudioSettings();
 
     ImGui::End();
 }

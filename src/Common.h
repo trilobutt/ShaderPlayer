@@ -68,7 +68,7 @@ struct KeyframeTimeline {
     void RemoveKeyframe(int index);
 };
 
-enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event };
+enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event, AudioBand };
 
 struct ShaderParam {
     std::string name;               // HLSL identifier; used for #define alias
@@ -82,7 +82,8 @@ struct ShaderParam {
     float step = 0.01f;
     std::vector<std::string> longLabels; // Dropdown labels for type=Long
     std::vector<int>         longValues; // Selectable int values for type=Long (parallel to longLabels)
-    int cbufferOffset = 0;          // Float index into custom[16]; set at parse time
+    int cbufferOffset = 0;          // Float index into custom[16]; set at parse time; -1 for AudioBand
+    std::string audioBand;          // For AudioBand: "bass"|"mid"|"high"|"rms"|"beat"|"centroid"
     std::optional<KeyframeTimeline> timeline;  // nullopt until user enables keyframing
 };
 
@@ -106,6 +107,7 @@ struct ShaderPreset {
     int shortcutModifiers = 0;  // MOD_CONTROL, MOD_SHIFT, etc.
     bool isValid = false;
     bool isGenerative = false;  // True if SHADER_TYPE = "generative" in ISF block
+    bool isAudio = false;       // True if SHADER_TYPE = "audio" in ISF block
     int   blendMode   = 0;      // 0=Off, 1=Normal, 2=Add, 3=Multiply, 4=Screen,
                                 //   5=Overlay, 6=Soft Light, 7=Difference,
                                 //   8=Exclusion, 9=Darken, 10=Lighten
@@ -142,6 +144,26 @@ struct RecordingSettings {
     int proresProfile = 2;  // 0=proxy, 1=LT, 2=422, 3=HQ
 };
 
+// Live audio analysis output — written by AudioAnalyzer after each FFT pass,
+// read by Application each render frame.
+struct AudioData {
+    float rms             = 0.0f;  // Overall RMS [0,1]
+    float bass            = 0.0f;  // 20-250 Hz [0,1]
+    float mid             = 0.0f;  // 250-4000 Hz [0,1]
+    float high            = 0.0f;  // 4000-20000 Hz [0,1]
+    float beat            = 0.0f;  // Decaying pulse on onset [0,1]
+    float spectralCentroid = 0.0f; // Normalised centre of mass [0,1]
+    static constexpr int kSpectrumBins = 256;
+    float spectrum[kSpectrumBins] = {};  // Normalised per-bin magnitudes [0,1]
+};
+
+// DSP tuning — stored in config.json, editable from the Audio Monitor panel.
+struct AudioSettings {
+    float beatSensitivity = 1.5f;  // Threshold = sensitivity * rolling-average bass energy
+    float beatDecay       = 0.92f; // Multiplicative per-frame decay of beat pulse
+    float smoothing       = 0.3f;  // EMA coefficient: 0 = no smoothing, 1 = frozen
+};
+
 // Noise texture settings — controls the globally-bound t1 noise texture
 struct NoiseSettings {
     float scale       = 4.0f;   // frequency multiplier (higher = more repetitions)
@@ -166,6 +188,9 @@ struct AppConfig {
     int generativeWidth  = 1920;
     int generativeHeight = 1080;
 
+
+    // Audio analysis DSP settings
+    AudioSettings audio;
 
     // Spout output
     bool        spoutEnabled    = false;

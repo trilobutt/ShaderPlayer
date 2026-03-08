@@ -59,6 +59,10 @@ public:
     bool UpdateNoiseTexture(float scale, int texSize);
     ID3D11ShaderResourceView* GetNoiseSRV() const { return m_noiseSRV.Get(); }
 
+    // Audio data — cbuffer b1 + spectrum texture t3 (1×256 R32_FLOAT).
+    // Pass nullptr to zero both (used when no audio is available).
+    void SetAudioData(const AudioData* data);
+
     // Generative resolution — used as the render target size when no video is loaded.
     void SetGenerativeResolution(int width, int height);
     int GetGenerativeWidth()  const { return m_generativeWidth; }
@@ -133,6 +137,22 @@ private:
     ComPtr<ID3D11Texture2D>          m_noiseTexture;
     ComPtr<ID3D11ShaderResourceView> m_noiseSRV;
     ComPtr<ID3D11SamplerState>       m_wrapSampler;
+
+    // Audio cbuffer (b1) + spectrum texture (t3, 1×256 R32_FLOAT DYNAMIC)
+    ComPtr<ID3D11Buffer>             m_audioConstantBuffer;
+    ComPtr<ID3D11Texture2D>          m_spectrumTexture;
+    ComPtr<ID3D11ShaderResourceView> m_spectrumSRV;
+
+    struct alignas(16) AudioConstants {
+        float rms;
+        float bass;
+        float mid;
+        float high;
+        float beat;
+        float spectralCentroid;
+        float padding[2];
+    };
+    AudioConstants m_audioConstants = {};
 
     // Constant buffer data
     struct alignas(16) ShaderConstants {

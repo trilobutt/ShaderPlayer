@@ -424,6 +424,36 @@ bool D3D11Renderer::CreateShaderResources() {
     rasterDesc.CullMode = D3D11_CULL_NONE;
 
     hr = m_device->CreateRasterizerState(&rasterDesc, &m_rasterizerState);
+    if (FAILED(hr)) return false;
+
+    // Audio cbuffer (b1) — always bound, zeroed when no audio.
+    D3D11_BUFFER_DESC audioCBDesc = {};
+    audioCBDesc.ByteWidth      = sizeof(AudioConstants);
+    audioCBDesc.Usage          = D3D11_USAGE_DYNAMIC;
+    audioCBDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+    audioCBDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    hr = m_device->CreateBuffer(&audioCBDesc, nullptr, &m_audioConstantBuffer);
+    if (FAILED(hr)) return false;
+
+    // Spectrum texture (t3): 1×256 R32_FLOAT DYNAMIC — updated each frame.
+    D3D11_TEXTURE2D_DESC specDesc = {};
+    specDesc.Width     = AudioData::kSpectrumBins;
+    specDesc.Height    = 1;
+    specDesc.MipLevels = 1;
+    specDesc.ArraySize = 1;
+    specDesc.Format    = DXGI_FORMAT_R32_FLOAT;
+    specDesc.SampleDesc.Count  = 1;
+    specDesc.Usage             = D3D11_USAGE_DYNAMIC;
+    specDesc.BindFlags         = D3D11_BIND_SHADER_RESOURCE;
+    specDesc.CPUAccessFlags    = D3D11_CPU_ACCESS_WRITE;
+    hr = m_device->CreateTexture2D(&specDesc, nullptr, &m_spectrumTexture);
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC specSRVDesc = {};
+    specSRVDesc.Format              = DXGI_FORMAT_R32_FLOAT;
+    specSRVDesc.ViewDimension       = D3D11_SRV_DIMENSION_TEXTURE2D;
+    specSRVDesc.Texture2D.MipLevels = 1;
+    hr = m_device->CreateShaderResourceView(m_spectrumTexture.Get(), &specSRVDesc, &m_spectrumSRV);
     return SUCCEEDED(hr);
 }
 
@@ -802,6 +832,13 @@ void D3D11Renderer::BeginFrame() {
     if (m_wrapSampler)
         m_context->PSSetSamplers(1, 1, m_wrapSampler.GetAddressOf());
 
+    // Bind audio cbuffer (b1) and spectrum texture (t3) globally.
+    // Always bound — shaders that don't use them simply ignore these slots.
+    if (m_audioConstantBuffer)
+        m_context->PSSetConstantBuffers(1, 1, m_audioConstantBuffer.GetAddressOf());
+    if (m_spectrumSRV)
+        m_context->PSSetShaderResources(3, 1, m_spectrumSRV.GetAddressOf());
+
     m_context->RSSetState(m_rasterizerState.Get());
     m_context->OMSetBlendState(m_blendState.Get(), nullptr, 0xFFFFFFFF);
 }
@@ -1047,6 +1084,36 @@ bool D3D11Renderer::UpdateNoiseTexture(float scale, int texSize) {
 
     hr = m_device->CreateShaderResourceView(m_noiseTexture.Get(), &srvDesc, &m_noiseSRV);
     return SUCCEEDED(hr);
+}
+
+void D3D11Renderer::SetAudioData(const AudioData* data) {
+    if (data) {
+        m_audioConstants.rms              = data->rms;
+        m_audioConstants.bass             = data->bass;
+        m_audioConstants.mid              = data->mid;
+        m_audioConstants.high             = data->high;
+        m_audioConstants.beat             = data->beat;
+        m_audioConstants.spectralCentroid = data->spectralCentroid;
+    } else {
+        m_audioConstants = {};
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    if (m_audioConstantBuffer &&
+        SUCCEEDED(m_context->Map(m_audioConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+        memcpy(mapped.pData, &m_audioConstants, sizeof(m_audioConstants));
+        m_context->Unmap(m_audioConstantBuffer.Get(), 0);
+    }
+
+    if (m_spectrumTexture &&
+        SUCCEEDED(m_context->Map(m_spectrumTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+        if (data) {
+            memcpy(mapped.pData, data->spectrum, AudioData::kSpectrumBins * sizeof(float));
+        } else {
+            memset(mapped.pData, 0, AudioData::kSpectrumBins * sizeof(float));
+        }
+        m_context->Unmap(m_spectrumTexture.Get(), 0);
+    }
 }
 
 } // namespace SP

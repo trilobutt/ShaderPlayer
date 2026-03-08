@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ShaderPlayer VERSION 1.0.0 LANGUAGES CXX)
+project(ShaderPlayer VERSION 1.0.0 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,6 +75,31 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 
 FetchContent_Declare(
+    kissfft
+    GIT_REPOSITORY https://github.com/mborgerding/kissfft.git
+    GIT_TAG        131.1.0
+    GIT_SHALLOW    TRUE
+)
+FetchContent_GetProperties(kissfft)
+if(NOT kissfft_POPULATED)
+    FetchContent_Populate(kissfft)
+endif()
+
+add_library(kissfft_lib STATIC
+    ${kissfft_SOURCE_DIR}/kiss_fft.c
+    ${kissfft_SOURCE_DIR}/kiss_fftr.c
+)
+target_include_directories(kissfft_lib PUBLIC
+    ${kissfft_SOURCE_DIR}
+)
+target_compile_definitions(kissfft_lib PUBLIC kiss_fft_scalar=float)
+if(MSVC)
+    target_compile_options(kissfft_lib PRIVATE /W0)
+else()
+    target_compile_options(kissfft_lib PRIVATE -w)
+endif()
+
+FetchContent_Declare(
     spout2
     GIT_REPOSITORY https://github.com/leadedge/Spout2.git
     GIT_TAG        master
@@ -134,6 +159,7 @@ target_include_directories(imgui_lib PUBLIC
 add_executable(ShaderPlayer WIN32
     src/main.cpp
     src/Application.cpp
+    src/AudioAnalyzer.cpp
     src/VideoDecoder.cpp
     src/D3D11Renderer.cpp
     src/ShaderManager.cpp
@@ -154,6 +180,7 @@ target_include_directories(ShaderPlayer PRIVATE
 target_link_libraries(ShaderPlayer PRIVATE
     imgui_lib
     nlohmann_json::nlohmann_json
+    kissfft_lib
     spout_lib
     d3d11
     d3dcompiler
