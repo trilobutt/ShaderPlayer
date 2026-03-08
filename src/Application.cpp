@@ -290,6 +290,9 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
     case VK_F6:
         m_uiManager->ToggleKeybindingsPanel();
         return;
+    case VK_F7:
+        ToggleVideoOutputWindow();
+        return;
     case VK_F9:
         if (m_encoder.IsRecording()) {
             StopRecording();
@@ -522,6 +525,10 @@ void Application::RenderFrame() {
     m_renderer.BeginFrame();
     // Render video+shader to the display texture; ImGui::Image picks it up from there
     m_renderer.RenderToDisplay();
+
+    // Blit processed output to the detached video window (if open)
+    if (m_videoOutputWindow.IsOpen())
+        m_videoOutputWindow.BlitAndPresent(m_renderer);
 
     // Capture recording frame here, BEFORE ImGui renders. ImGui overwrites all D3D11
     // pipeline state (VS, PS, CBs, SRVs), so RenderToTexture must run while the video
@@ -854,6 +861,13 @@ void Application::SaveConfig() {
     m_configManager.Save(ConfigManager::GetDefaultConfigPath());
 }
 
+void Application::ToggleVideoOutputWindow() {
+    if (m_videoOutputWindow.IsOpen())
+        m_videoOutputWindow.Close();
+    else
+        m_videoOutputWindow.Open(m_renderer.GetDevice(), m_renderer.GetContext());
+}
+
 void Application::RegenerateNoise() {
     const auto& n = m_configManager.GetConfig().noise;
     m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
@@ -915,6 +929,7 @@ std::string Application::FindBindingConflict(int vkCode, int modifiers,
         case VK_F4:     return "reserved for Toggle Recording (F4)";
         case VK_F5:     return "reserved for Compile (F5)";
         case VK_F6:     return "reserved for Toggle Keybindings (F6)";
+        case VK_F7:     return "reserved for Video Output Window (F7)";
         case VK_F9:     return "reserved for Start/Stop Recording (F9)";
         }
     }

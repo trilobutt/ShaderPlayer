@@ -373,6 +373,11 @@ void UIManager::DrawMenuBar() {
             ImGui::MenuItem("Noise Generator", nullptr, &m_showNoisePanel);
 
             ImGui::Separator();
+            const bool outWinOpen = m_app.IsVideoOutputWindowOpen();
+            if (ImGui::MenuItem("Video Output Window", "F7", outWinOpen))
+                m_app.ToggleVideoOutputWindow();
+
+            ImGui::Separator();
             if (ImGui::BeginMenu("Workspace Presets")) {
                 auto& wm = m_app.GetWorkspaceManager();
 

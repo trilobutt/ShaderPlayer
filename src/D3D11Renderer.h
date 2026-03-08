@@ -42,6 +42,10 @@ public:
     void RenderToDisplay();
     ID3D11ShaderResourceView* GetDisplaySRV() const { return m_displaySRV.Get(); }
 
+    // Blit the already-processed display texture into an external RTV (e.g. a second
+    // swap chain window).  Restores the main backbuffer RT and active PS afterwards.
+    void BlitDisplayTo(ID3D11RenderTargetView* rtv, int width, int height);
+
     // Shader uniforms
     void SetShaderTime(float time);
     void SetShaderResolution(float width, float height);

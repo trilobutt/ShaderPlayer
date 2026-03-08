@@ -8,6 +8,7 @@
 #include "UIManager.h"
 #include "ConfigManager.h"
 #include "WorkspaceManager.h"
+#include "VideoOutputWindow.h"
 
 namespace SP {
 
@@ -59,6 +60,10 @@ public:
 
     // Configuration
     void SaveConfig();
+
+    // Video output window — separate OS window for screen-sharing
+    void ToggleVideoOutputWindow();
+    bool IsVideoOutputWindowOpen() const { return m_videoOutputWindow.IsOpen(); }
 
     // Noise generator — regenerates the global t1 noise texture from current config
     void RegenerateNoise();
@@ -121,6 +126,7 @@ private:
     std::unique_ptr<UIManager> m_uiManager;
     ConfigManager m_configManager;
     std::unique_ptr<WorkspaceManager> m_workspaceManager;
+    VideoOutputWindow m_videoOutputWindow;
 
     // State
     PlaybackState m_playbackState = PlaybackState::Stopped;

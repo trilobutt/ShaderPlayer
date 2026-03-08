@@ -641,6 +641,36 @@ void D3D11Renderer::RenderToDisplay() {
     m_context->RSSetViewports(1, &mainVP);
 }
 
+void D3D11Renderer::BlitDisplayTo(ID3D11RenderTargetView* rtv, int width, int height) {
+    if (!m_displaySRV || !rtv) return;
+
+    float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    m_context->ClearRenderTargetView(rtv, clearColor);
+    m_context->OMSetRenderTargets(1, &rtv, nullptr);
+
+    D3D11_VIEWPORT vp = {};
+    vp.Width    = static_cast<float>(width);
+    vp.Height   = static_cast<float>(height);
+    vp.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &vp);
+
+    // Passthrough — display texture is already shader-processed
+    m_context->PSSetShader(m_passthroughPS.Get(), nullptr, 0);
+    m_context->PSSetShaderResources(0, 1, m_displaySRV.GetAddressOf());
+    m_context->Draw(3, 0);
+
+    // Restore main backbuffer RT, viewport, active PS, and video SRV
+    m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
+    D3D11_VIEWPORT mainVP = {};
+    mainVP.Width    = static_cast<float>(m_width);
+    mainVP.Height   = static_cast<float>(m_height);
+    mainVP.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &mainVP);
+    m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+    if (m_videoSRV)
+        m_context->PSSetShaderResources(0, 1, m_videoSRV.GetAddressOf());
+}
+
 bool D3D11Renderer::UploadVideoFrame(const VideoFrame& frame) {
     if (!CreateVideoTexture(frame.width, frame.height)) {
         return false;
