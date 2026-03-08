@@ -59,7 +59,7 @@ private:
     bool m_fileWatchingEnabled = false;
     std::unordered_map<std::string, std::filesystem::file_time_type> m_fileTimestamps;
 
-    static std::vector<ShaderParam> ParseISFParams(const std::string& source);
+    static std::vector<ShaderParam> ParseISFParams(const std::string& source, bool* outIsGenerative = nullptr);
     static std::string BuildDefinesPreamble(const std::vector<ShaderParam>& params);
 };
 

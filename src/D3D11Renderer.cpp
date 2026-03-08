@@ -23,6 +23,77 @@ VS_OUTPUT main(VS_INPUT input) {
 }
 )";
 
+// Compositor pixel shader — blends video (t0) with generative output (t2).
+// Blend mode is in padding2.x (cast to int), blend amount in padding1.
+static const char* g_compositorShaderSource = R"(
+Texture2D videoTexture      : register(t0);
+SamplerState videoSampler   : register(s0);
+Texture2D noiseTexture      : register(t1);
+SamplerState noiseSampler   : register(s1);
+Texture2D generativeTexture : register(t2);
+
+cbuffer Constants : register(b0) {
+    float time;
+    float blendAmount;      // padding1
+    float2 resolution;
+    float2 videoResolution;
+    float2 blendParams;     // blendParams.x = blendMode (as float int)
+    float4 custom[4];
+};
+
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+float4 main(PS_INPUT input) : SV_TARGET {
+    float4 v = videoTexture.Sample(videoSampler, input.uv);
+    float4 g = generativeTexture.Sample(videoSampler, input.uv);
+    int mode = int(blendParams.x);
+
+    float3 r;
+    if (mode == 2) {
+        // Add
+        r = saturate(v.rgb + g.rgb);
+    } else if (mode == 3) {
+        // Multiply
+        r = v.rgb * g.rgb;
+    } else if (mode == 4) {
+        // Screen
+        r = 1.0 - (1.0 - v.rgb) * (1.0 - g.rgb);
+    } else if (mode == 5) {
+        // Overlay
+        r = lerp(2.0 * v.rgb * g.rgb,
+                 1.0 - 2.0 * (1.0 - v.rgb) * (1.0 - g.rgb),
+                 step(0.5, v.rgb));
+    } else if (mode == 6) {
+        // Soft Light
+        r = lerp(2.0 * v.rgb * g.rgb + v.rgb * v.rgb * (1.0 - 2.0 * g.rgb),
+                 sqrt(v.rgb) * (2.0 * g.rgb - 1.0) + 2.0 * v.rgb * (1.0 - g.rgb),
+                 step(0.5, g.rgb));
+    } else if (mode == 7) {
+        // Difference
+        r = abs(v.rgb - g.rgb);
+    } else if (mode == 8) {
+        // Exclusion
+        r = v.rgb + g.rgb - 2.0 * v.rgb * g.rgb;
+    } else if (mode == 9) {
+        // Darken
+        r = min(v.rgb, g.rgb);
+    } else if (mode == 10) {
+        // Lighten
+        r = max(v.rgb, g.rgb);
+    } else {
+        // Normal (mode == 1) or fallback
+        r = g.rgb;
+    }
+
+    // Blend: lerp video toward blended result by blendAmount
+    float3 out_rgb = lerp(v.rgb, r, blendAmount);
+    return float4(out_rgb, 1.0);
+}
+)";
+
 // Passthrough pixel shader
 static const char* g_passthroughShaderSource = R"(
 Texture2D videoTexture : register(t0);
@@ -74,6 +145,10 @@ bool D3D11Renderer::Initialize(HWND hwnd, int width, int height) {
         return false;
     }
 
+    if (!CreateCompositorShader()) {
+        return false;
+    }
+
     m_activePS = m_passthroughPS;
     return true;
 }
@@ -97,6 +172,10 @@ void D3D11Renderer::Shutdown() {
     m_noiseTexture.Reset();
     m_noiseSRV.Reset();
     m_wrapSampler.Reset();
+    m_compositorPS.Reset();
+    m_compositorSrcTexture.Reset();
+    m_compositorSrcRTV.Reset();
+    m_compositorSrcSRV.Reset();
     m_vertexShader.Reset();
     m_passthroughPS.Reset();
     m_activePS.Reset();
@@ -331,7 +410,7 @@ bool D3D11Renderer::CreateShaderResources() {
     hr = m_device->CreateSamplerState(&wrapDesc, &m_wrapSampler);
     if (FAILED(hr)) return false;
 
-    // Create blend state (no blending, opaque)
+    // Create blend state (opaque — all compositing done in the compositor shader)
     D3D11_BLEND_DESC blendDesc = {};
     blendDesc.RenderTarget[0].BlendEnable = FALSE;
     blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
@@ -351,6 +430,48 @@ bool D3D11Renderer::CreateShaderResources() {
 bool D3D11Renderer::CreatePassthroughShader() {
     std::string error;
     return CompilePixelShader(g_passthroughShaderSource, m_passthroughPS, error);
+}
+
+bool D3D11Renderer::CreateCompositorShader() {
+    std::string error;
+    return CompilePixelShader(g_compositorShaderSource, m_compositorPS, error);
+}
+
+bool D3D11Renderer::CreateCompositorSrcTexture(int width, int height) {
+    if (m_compositorSrcWidth == width && m_compositorSrcHeight == height && m_compositorSrcTexture)
+        return true;
+
+    m_compositorSrcTexture.Reset();
+    m_compositorSrcRTV.Reset();
+    m_compositorSrcSRV.Reset();
+
+    D3D11_TEXTURE2D_DESC texDesc = {};
+    texDesc.Width     = static_cast<UINT>(width);
+    texDesc.Height    = static_cast<UINT>(height);
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage     = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+    HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_compositorSrcTexture);
+    if (FAILED(hr)) return false;
+
+    hr = m_device->CreateRenderTargetView(m_compositorSrcTexture.Get(), nullptr, &m_compositorSrcRTV);
+    if (FAILED(hr)) return false;
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format        = texDesc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    hr = m_device->CreateShaderResourceView(m_compositorSrcTexture.Get(), &srvDesc, &m_compositorSrcSRV);
+    if (FAILED(hr)) return false;
+
+    m_compositorSrcWidth  = width;
+    m_compositorSrcHeight = height;
+    return true;
 }
 
 bool D3D11Renderer::CreateVideoTexture(int width, int height) {
@@ -463,27 +584,59 @@ bool D3D11Renderer::CreateDisplayTexture(int width, int height) {
 }
 
 void D3D11Renderer::RenderToDisplay() {
-    if (m_videoWidth <= 0 || m_videoHeight <= 0) return;
-    if (!CreateDisplayTexture(m_videoWidth, m_videoHeight)) return;
+    const int renderW = (m_videoWidth  > 0) ? m_videoWidth  : m_generativeWidth;
+    const int renderH = (m_videoHeight > 0) ? m_videoHeight : m_generativeHeight;
+    if (renderW <= 0 || renderH <= 0) return;
+    if (!CreateDisplayTexture(renderW, renderH)) return;
 
-    float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    m_context->ClearRenderTargetView(m_displayRTV.Get(), clearColor);
-    m_context->OMSetRenderTargets(1, m_displayRTV.GetAddressOf(), nullptr);
+    const bool doComposite = (m_videoBlendMode > 0) && (m_videoWidth > 0) && m_compositorPS;
 
-    D3D11_VIEWPORT vp = {};
-    vp.Width = static_cast<float>(m_videoWidth);
-    vp.Height = static_cast<float>(m_videoHeight);
-    vp.MaxDepth = 1.0f;
-    m_context->RSSetViewports(1, &vp);
+    auto setViewport = [&](int w, int h) {
+        D3D11_VIEWPORT vp = {};
+        vp.Width    = static_cast<float>(w);
+        vp.Height   = static_cast<float>(h);
+        vp.MaxDepth = 1.0f;
+        m_context->RSSetViewports(1, &vp);
+    };
 
-    m_context->Draw(3, 0);
+    if (doComposite) {
+        // Pass 1 — run the active (generative) shader into the compositor src texture.
+        if (!CreateCompositorSrcTexture(renderW, renderH)) return;
 
-    // Unbind display RTV so ImGui can use it as SRV; restore backbuffer as RT
+        float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_context->ClearRenderTargetView(m_compositorSrcRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_compositorSrcRTV.GetAddressOf(), nullptr);
+        setViewport(renderW, renderH);
+        m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+        m_context->Draw(3, 0);
+
+        // Pass 2 — compositor reads video (t0) + generative result (t2), blends to display.
+        m_context->ClearRenderTargetView(m_displayRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_displayRTV.GetAddressOf(), nullptr);
+        setViewport(renderW, renderH);
+        m_context->PSSetShader(m_compositorPS.Get(), nullptr, 0);
+        m_context->PSSetShaderResources(2, 1, m_compositorSrcSRV.GetAddressOf());
+        m_context->Draw(3, 0);
+
+        // Unbind t2 to avoid D3D hazard (it's an RTV on next frame's pass 1)
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(2, 1, &nullSRV);
+
+        // Restore active shader for subsequent calls
+        m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+    } else {
+        float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+        m_context->ClearRenderTargetView(m_displayRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_displayRTV.GetAddressOf(), nullptr);
+        setViewport(renderW, renderH);
+        m_context->Draw(3, 0);
+    }
+
+    // Restore backbuffer as RT so ImGui can render into it
     m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
-
     D3D11_VIEWPORT mainVP = {};
-    mainVP.Width = static_cast<float>(m_width);
-    mainVP.Height = static_cast<float>(m_height);
+    mainVP.Width    = static_cast<float>(m_width);
+    mainVP.Height   = static_cast<float>(m_height);
     mainVP.MaxDepth = 1.0f;
     m_context->RSSetViewports(1, &mainVP);
 }
@@ -567,6 +720,18 @@ void D3D11Renderer::BeginFrame() {
     m_constants.resolution[0] = static_cast<float>(m_width);
     m_constants.resolution[1] = static_cast<float>(m_height);
 
+    // When no video is loaded, mirror the generative resolution into videoResolution
+    // so shaders that reference videoResolution get a sensible value.
+    if (m_videoWidth == 0) {
+        m_constants.videoResolution[0] = static_cast<float>(m_generativeWidth);
+        m_constants.videoResolution[1] = static_cast<float>(m_generativeHeight);
+    }
+
+    // Pass blend params through the padding fields so the compositor shader can read them.
+    // These don't affect regular pixel shaders (padding fields are unused by convention).
+    m_constants.padding1    = m_videoBlendFactor;
+    m_constants.padding2[0] = static_cast<float>(m_videoBlendMode);
+
     D3D11_MAPPED_SUBRESOURCE mapped;
     if (SUCCEEDED(m_context->Map(m_constantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
         memcpy(mapped.pData, &m_constants, sizeof(m_constants));
@@ -621,26 +786,53 @@ void D3D11Renderer::Present(bool vsync) {
 }
 
 bool D3D11Renderer::RenderToTexture() {
+    const int w = (m_videoWidth  > 0) ? m_videoWidth  : m_generativeWidth;
+    const int h = (m_videoHeight > 0) ? m_videoHeight : m_generativeHeight;
+
     if (!m_renderTexture || !m_renderTextureRTV) {
-        if (!CreateRenderToTexture(m_videoWidth, m_videoHeight)) {
+        if (!CreateRenderToTexture(w, h)) {
             return false;
         }
     }
 
-    // Render to our texture instead of swapchain
+    const bool doComposite = (m_videoBlendMode > 0) && (m_videoWidth > 0) && m_compositorPS;
+
+    auto setViewport = [&](int vw, int vh) {
+        D3D11_VIEWPORT vp = {};
+        vp.Width    = static_cast<float>(vw);
+        vp.Height   = static_cast<float>(vh);
+        vp.MaxDepth = 1.0f;
+        m_context->RSSetViewports(1, &vp);
+    };
+
     float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    m_context->ClearRenderTargetView(m_renderTextureRTV.Get(), clearColor);
-    m_context->OMSetRenderTargets(1, m_renderTextureRTV.GetAddressOf(), nullptr);
 
-    // Set viewport to video resolution
-    D3D11_VIEWPORT viewport = {};
-    viewport.Width = static_cast<float>(m_videoWidth);
-    viewport.Height = static_cast<float>(m_videoHeight);
-    viewport.MaxDepth = 1.0f;
-    m_context->RSSetViewports(1, &viewport);
+    if (doComposite) {
+        // Pass 1 — active (generative) shader into compositor src texture
+        if (!CreateCompositorSrcTexture(w, h)) return false;
+        m_context->ClearRenderTargetView(m_compositorSrcRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_compositorSrcRTV.GetAddressOf(), nullptr);
+        setViewport(w, h);
+        m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+        m_context->Draw(3, 0);
 
-    // Draw
-    m_context->Draw(3, 0);
+        // Pass 2 — compositor to render texture
+        m_context->ClearRenderTargetView(m_renderTextureRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_renderTextureRTV.GetAddressOf(), nullptr);
+        setViewport(w, h);
+        m_context->PSSetShader(m_compositorPS.Get(), nullptr, 0);
+        m_context->PSSetShaderResources(2, 1, m_compositorSrcSRV.GetAddressOf());
+        m_context->Draw(3, 0);
+
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(2, 1, &nullSRV);
+        m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+    } else {
+        m_context->ClearRenderTargetView(m_renderTextureRTV.Get(), clearColor);
+        m_context->OMSetRenderTargets(1, m_renderTextureRTV.GetAddressOf(), nullptr);
+        setViewport(w, h);
+        m_context->Draw(3, 0);
+    }
 
     return true;
 }
@@ -653,20 +845,24 @@ bool D3D11Renderer::CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int
     // Copy to staging texture
     m_context->CopyResource(m_stagingTexture.Get(), m_renderTexture.Get());
 
+    // Determine actual render dimensions (generative mode has no video)
+    const int renderW = (m_videoWidth  > 0) ? m_videoWidth  : m_generativeWidth;
+    const int renderH = (m_videoHeight > 0) ? m_videoHeight : m_generativeHeight;
+
     // Map and copy data
     D3D11_MAPPED_SUBRESOURCE mapped;
     HRESULT hr = m_context->Map(m_stagingTexture.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) return false;
 
-    outWidth = m_videoWidth;
-    outHeight = m_videoHeight;
-    outData.resize(m_videoWidth * m_videoHeight * 4);
+    outWidth  = renderW;
+    outHeight = renderH;
+    outData.resize(static_cast<size_t>(renderW) * renderH * 4);
 
     const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
     uint8_t* dst = outData.data();
-    int rowBytes = m_videoWidth * 4;
+    int rowBytes = renderW * 4;
 
-    for (int y = 0; y < m_videoHeight; ++y) {
+    for (int y = 0; y < renderH; ++y) {
         memcpy(dst + y * rowBytes, src + y * mapped.RowPitch, rowBytes);
     }
 
@@ -759,6 +955,14 @@ static float voronoiNoise(float x, float y) {
 }
 
 } // anonymous namespace
+
+void D3D11Renderer::SetGenerativeResolution(int width, int height) {
+    m_generativeWidth  = (std::max)(width,  1);
+    m_generativeHeight = (std::max)(height, 1);
+    // Force display texture recreation on next RenderToDisplay call
+    m_displayWidth  = 0;
+    m_displayHeight = 0;
+}
 
 bool D3D11Renderer::UpdateNoiseTexture(float scale, int texSize) {
     if (!m_device) return false;

@@ -58,6 +58,9 @@ public:
 
     // Noise generator — regenerates the global t1 noise texture from current config
     void RegenerateNoise();
+
+    // Generative resolution — applies config.generativeWidth/Height to the renderer
+    void ApplyGenerativeResolution();
     AppConfig& GetConfig() { return m_configManager.GetConfig(); }
     const AppConfig& GetConfig() const { return m_configManager.GetConfig(); }
 
@@ -124,6 +127,7 @@ private:
     std::chrono::steady_clock::time_point m_lastFrameTime;
     double m_frameDuration = 1.0 / 30.0;
     float m_playbackTime = 0.0f;
+    float m_generativeTime = 0.0f;  // Accumulated wall-clock time for generative shaders
     bool m_eventResetPending = false;
     bool m_newVideoFrame = false;
 };

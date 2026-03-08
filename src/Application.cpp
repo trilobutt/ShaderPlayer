@@ -29,8 +29,9 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
 
     // Generate initial noise texture (bound globally as t1/s1 for all shaders)
     {
-        const auto& n = m_configManager.GetConfig().noise;
-        m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
+        const auto& cfg = m_configManager.GetConfig();
+        m_renderer.UpdateNoiseTexture(cfg.noise.scale, cfg.noise.textureSize);
+        m_renderer.SetGenerativeResolution(cfg.generativeWidth, cfg.generativeHeight);
     }
 
     // Create shader manager
@@ -377,16 +378,26 @@ void Application::ProcessFrame() {
     // Check for shader file changes
     m_shaderManager->CheckForChanges();
 
-    // Process video frame if playing
-    if (m_playbackState == PlaybackState::Playing && m_decoder.IsOpen()) {
-        if (elapsed >= m_frameDuration) {
-            if (m_decoder.DecodeNextFrame(m_currentFrame)) {
-                m_newVideoFrame = true;
-                m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
-            } else {
-                // End of video, loop
-                m_decoder.SeekToTime(0.0);
+    if (m_playbackState == PlaybackState::Playing) {
+        if (m_decoder.IsOpen()) {
+            // Video mode: advance playback time from decoded frame timestamps
+            if (elapsed >= m_frameDuration) {
+                if (m_decoder.DecodeNextFrame(m_currentFrame)) {
+                    m_newVideoFrame = true;
+                    m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
+                } else {
+                    // End of video, loop
+                    m_decoder.SeekToTime(0.0);
+                }
+                m_lastFrameTime = now;
             }
+        } else {
+            // Generative mode: advance time by wall-clock delta; cap to avoid jumps after
+            // long pauses or window moves that stall the loop.
+            const float dt = static_cast<float>(std::min(elapsed, 0.1));
+            m_generativeTime += dt;
+            m_playbackTime = m_generativeTime;
+            m_newVideoFrame = true;
             m_lastFrameTime = now;
         }
     }
@@ -482,6 +493,18 @@ void Application::RenderFrame() {
     // Evaluate keyframe animations at current playback time
     EvaluateKeyframes();
 
+    // Push active preset's blend settings so the compositor shader has current values.
+    // Only meaningful when a generative shader is active and video is loaded; harmless otherwise.
+    {
+        const int activeIdx = m_shaderManager->GetActivePresetIndex();
+        if (activeIdx >= 0) {
+            const auto& preset = m_shaderManager->GetPresets()[activeIdx];
+            m_renderer.SetVideoBlend(preset.blendMode, preset.blendAmount);
+        } else {
+            m_renderer.SetVideoBlend(0, 0.0f);
+        }
+    }
+
     // Set up D3D11 pipeline and clear backbuffer to black
     m_renderer.BeginFrame();
     // Render video+shader to the display texture; ImGui::Image picks it up from there
@@ -567,10 +590,8 @@ void Application::OpenVideoDialog() {
 }
 
 void Application::Play() {
-    if (m_decoder.IsOpen()) {
-        m_playbackState = PlaybackState::Playing;
-        m_lastFrameTime = std::chrono::steady_clock::now();
-    }
+    m_playbackState = PlaybackState::Playing;
+    m_lastFrameTime = std::chrono::steady_clock::now();
 }
 
 void Application::Pause() {
@@ -584,6 +605,7 @@ void Application::Stop() {
         m_decoder.DecodeNextFrame(m_currentFrame);
     }
     m_playbackTime = 0.0f;
+    m_generativeTime = 0.0f;
 }
 
 void Application::TogglePlayback() {
@@ -746,12 +768,26 @@ void Application::OpenRecordingOutputDialog(char* pathBuf, size_t bufSize) {
 }
 
 bool Application::StartRecording(const RecordingSettings& settings) {
-    if (!m_decoder.IsOpen()) {
-        m_uiManager->ShowNotification("No video loaded");
-        return false;
+    int recW, recH;
+    double recFPS;
+
+    if (m_decoder.IsOpen()) {
+        recW   = m_decoder.GetWidth();
+        recH   = m_decoder.GetHeight();
+        recFPS = m_decoder.GetFPS();
+    } else {
+        // Generative mode: use configured generative resolution.
+        // If settings.fps is 0 ("match source"), default to 60 since there is no source.
+        recW   = m_renderer.GetGenerativeWidth();
+        recH   = m_renderer.GetGenerativeHeight();
+        recFPS = (settings.fps > 0) ? static_cast<double>(settings.fps) : 60.0;
+
+        // Ensure the generative render loop is running
+        if (m_playbackState != PlaybackState::Playing)
+            Play();
     }
 
-    if (m_encoder.StartRecording(settings, m_decoder.GetWidth(), m_decoder.GetHeight(), m_decoder.GetFPS())) {
+    if (m_encoder.StartRecording(settings, recW, recH, recFPS)) {
         m_uiManager->ShowNotification("Recording started: " + settings.outputPath);
         return true;
     } else {
@@ -787,6 +823,12 @@ void Application::SaveConfig() {
 void Application::RegenerateNoise() {
     const auto& n = m_configManager.GetConfig().noise;
     m_renderer.UpdateNoiseTexture(n.scale, n.textureSize);
+    SaveConfig();
+}
+
+void Application::ApplyGenerativeResolution() {
+    const auto& cfg = m_configManager.GetConfig();
+    m_renderer.SetGenerativeResolution(cfg.generativeWidth, cfg.generativeHeight);
     SaveConfig();
 }
 

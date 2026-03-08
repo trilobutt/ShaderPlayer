@@ -252,6 +252,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
 - `SetActivePreset` is called in **both** `Application.cpp` and `UIManager.cpp` — after any new call-site, always add `OnParamChanged()` (Application) or `m_app.OnParamChanged()` (UIManager)
+- `GetActivePresetIndex()` returns `int` (−1 = passthrough); `GetActivePreset()` returns `ShaderPreset*` (null when passthrough). Never guess `GetActiveIndex` — it doesn't exist.
 
 ## Application API
 

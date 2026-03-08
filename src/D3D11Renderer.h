@@ -52,6 +52,14 @@ public:
     bool UpdateNoiseTexture(float scale, int texSize);
     ID3D11ShaderResourceView* GetNoiseSRV() const { return m_noiseSRV.Get(); }
 
+    // Generative resolution — used as the render target size when no video is loaded.
+    void SetGenerativeResolution(int width, int height);
+    int GetGenerativeWidth()  const { return m_generativeWidth; }
+    int GetGenerativeHeight() const { return m_generativeHeight; }
+
+    // Video blend — only active when blendMode > 0 and video is also loaded.
+    void SetVideoBlend(int mode, float amount) { m_videoBlendMode = mode; m_videoBlendFactor = amount; }
+
     // Accessors
     ID3D11Device* GetDevice() const { return m_device.Get(); }
     ID3D11DeviceContext* GetContext() const { return m_context.Get(); }
@@ -65,8 +73,10 @@ private:
     bool CreateVideoTexture(int width, int height);
     bool CreateRenderToTexture(int width, int height);
     bool CreateDisplayTexture(int width, int height);
+    bool CreateCompositorSrcTexture(int width, int height);
     bool CreateShaderResources();
     bool CreatePassthroughShader();
+    bool CreateCompositorShader();
     void ReleaseRenderTarget();
 
     // Device and swap chain
@@ -93,6 +103,14 @@ private:
     int m_displayWidth = 0;
     int m_displayHeight = 0;
 
+    // Blend compositor shader and its intermediate source texture
+    ComPtr<ID3D11PixelShader>          m_compositorPS;
+    ComPtr<ID3D11Texture2D>            m_compositorSrcTexture;
+    ComPtr<ID3D11RenderTargetView>     m_compositorSrcRTV;
+    ComPtr<ID3D11ShaderResourceView>   m_compositorSrcSRV;
+    int m_compositorSrcWidth  = 0;
+    int m_compositorSrcHeight = 0;
+
     // Shaders and pipeline state
     ComPtr<ID3D11VertexShader> m_vertexShader;
     ComPtr<ID3D11PixelShader> m_passthroughPS;
@@ -101,7 +119,7 @@ private:
     ComPtr<ID3D11Buffer> m_vertexBuffer;
     ComPtr<ID3D11Buffer> m_constantBuffer;
     ComPtr<ID3D11SamplerState> m_sampler;
-    ComPtr<ID3D11BlendState> m_blendState;
+    ComPtr<ID3D11BlendState> m_blendState;  // opaque
     ComPtr<ID3D11RasterizerState> m_rasterizerState;
 
     // Noise texture (t1) + wrap sampler (s1)
@@ -122,6 +140,10 @@ private:
 
     int m_width = 0;
     int m_height = 0;
+    int   m_generativeWidth  = 1920;
+    int   m_generativeHeight = 1080;
+    int   m_videoBlendMode   = 0;
+    float m_videoBlendFactor = 0.0f;
     HWND m_hwnd = nullptr;
 };
 

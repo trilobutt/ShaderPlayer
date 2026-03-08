@@ -335,6 +335,14 @@ void UIManager::DrawMenuBar() {
             if (ImGui::MenuItem("Open Video...", "Ctrl+O")) {
                 m_app.OpenVideoDialog();
             }
+            {
+                bool videoOpen = m_app.GetDecoder().IsOpen();
+                if (!videoOpen) ImGui::BeginDisabled();
+                if (ImGui::MenuItem("Close Video")) {
+                    m_app.CloseVideo();
+                }
+                if (!videoOpen) ImGui::EndDisabled();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Save Shader", "Ctrl+S")) {
                 m_app.SaveCurrentShader(GetEditorContent());
@@ -433,33 +441,47 @@ void UIManager::DrawVideoViewport() {
     ImGui::Begin("Video", nullptr,
         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-    auto& decoder = m_app.GetDecoder();
+    auto& decoder   = m_app.GetDecoder();
+    auto& renderer  = m_app.GetRenderer();
+    const ShaderPreset* active = m_app.GetShaderManager().GetActivePreset();
+    const bool generativeActive = (active && active->isGenerative);
+    ID3D11ShaderResourceView* srv = renderer.GetDisplaySRV();
+
+    // Helper: draw srv letterboxed into available content area at the given logical dimensions.
+    auto drawLetterboxed = [&](float srcW, float srcH) {
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const ImVec2 avail  = ImGui::GetContentRegionAvail();
+        const float  scale  = std::min(avail.x / srcW, avail.y / srcH);
+        const float  drawW  = srcW * scale;
+        const float  drawH  = srcH * scale;
+        ImGui::SetCursorScreenPos(ImVec2(
+            origin.x + (avail.x - drawW) * 0.5f,
+            origin.y + (avail.y - drawH) * 0.5f));
+        ImGui::Image(reinterpret_cast<ImTextureID>(srv), ImVec2(drawW, drawH));
+    };
 
     if (decoder.IsOpen()) {
-        // Info line above the image
+        const float videoW = static_cast<float>(decoder.GetWidth());
+        const float videoH = static_cast<float>(decoder.GetHeight());
+
+        // Info + optional blend control on the same line
         ImGui::Text("%dx%d @ %.2f fps | %s",
             decoder.GetWidth(), decoder.GetHeight(),
             decoder.GetFPS(), decoder.GetCodecName().c_str());
 
-        ID3D11ShaderResourceView* srv = m_app.GetRenderer().GetDisplaySRV();
-        if (srv) {
-            // Compute letterbox rect: largest fit inside the available content area
-            // while preserving the video's exact aspect ratio.
-            const ImVec2 origin  = ImGui::GetCursorScreenPos();
-            const ImVec2 avail   = ImGui::GetContentRegionAvail();
-            const float  videoW  = static_cast<float>(decoder.GetWidth());
-            const float  videoH  = static_cast<float>(decoder.GetHeight());
-            const float  scale   = std::min(avail.x / videoW, avail.y / videoH);
-            const float  drawW   = videoW * scale;
-            const float  drawH   = videoH * scale;
-            const float  padX    = (avail.x - drawW) * 0.5f;
-            const float  padY    = (avail.y - drawH) * 0.5f;
+        if (srv) drawLetterboxed(videoW, videoH);
 
-            ImGui::SetCursorScreenPos(ImVec2(origin.x + padX, origin.y + padY));
-            ImGui::Image(reinterpret_cast<ImTextureID>(srv), ImVec2(drawW, drawH));
-        }
+    } else if (generativeActive && srv) {
+        // No video but generative shader is active and has rendered at least one frame.
+        ImGui::Text("Generative  %d x %d",
+            renderer.GetGenerativeWidth(), renderer.GetGenerativeHeight());
+
+        drawLetterboxed(
+            static_cast<float>(renderer.GetGenerativeWidth()),
+            static_cast<float>(renderer.GetGenerativeHeight()));
+
     } else {
-        // No video loaded: centre a button + hint text vertically and horizontally
+        // Nothing to show: prompt to open a video or load a generative shader.
         const ImVec2 cursorStart = ImGui::GetCursorPos();
         const ImVec2 avail       = ImGui::GetContentRegionAvail();
         constexpr float kButtonW = 200.0f;
@@ -764,6 +786,29 @@ void UIManager::DrawShaderParameters() {
         m_app.OnParamChanged();
     }
 
+    // VIDEO BLEND — shown only when this is a generative shader AND video is loaded.
+    if (preset->isGenerative && m_app.GetDecoder().IsOpen()) {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        ImGui::TextDisabled("VIDEO BLEND");
+        ImGui::Spacing();
+
+        static const char* s_blendModeNames =
+            "Off\0Normal\0Add\0Multiply\0Screen\0"
+            "Overlay\0Soft Light\0Difference\0Exclusion\0Darken\0Lighten\0\0";
+
+        if (ImGui::Combo("Mode##vblend", &preset->blendMode, s_blendModeNames)) {
+            m_app.SaveConfig();
+        }
+
+        if (preset->blendMode > 0) {
+            if (ImGui::SliderFloat("Amount##vblend", &preset->blendAmount, 0.0f, 1.0f, "%.2f")) {
+                m_app.SaveConfig();
+            }
+        }
+    }
+
     ImGui::End();
 }
 
@@ -1018,27 +1063,34 @@ void UIManager::DrawShaderLibrary() {
             m_app.GetShaderManager().SetPassthrough();
         }
 
-        // Shader list
         auto& manager = m_app.GetShaderManager();
-        for (int i = 0; i < manager.GetPresetCount(); ++i) {
+        const int presetCount = manager.GetPresetCount();
+
+        // Count generative vs video shaders to decide which section headers to show
+        int generativeCount = 0, videoCount = 0;
+        for (int i = 0; i < presetCount; ++i) {
+            const auto* p = manager.GetPreset(i);
+            if (!p) continue;
+            if (p->isGenerative) ++generativeCount; else ++videoCount;
+        }
+
+        // Draw a single preset row at index i.
+        auto drawPreset = [&](int i) {
             auto* preset = manager.GetPreset(i);
-            if (!preset) continue;
+            if (!preset) return;
 
             ImGui::PushID(i);
-            
             bool isActive = (manager.GetActivePresetIndex() == i);
-            
-            // Status indicator
+
             if (preset->isValid) {
                 ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "*");
             } else {
                 ImGui::TextColored(ImVec4(0.8f, 0.2f, 0.2f, 1.0f), "!");
-                if (ImGui::IsItemHovered() && !preset->compileError.empty())
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !preset->compileError.empty())
                     ImGui::SetTooltip("%s", preset->compileError.c_str());
             }
             ImGui::SameLine();
 
-            // Selectable name — single click activates, double-click opens keybinding modal
             if (ImGui::Selectable(preset->name.c_str(), isActive)) {
                 manager.SetActivePreset(i);
                 m_selectedKeyframeParam = -1;
@@ -1056,7 +1108,6 @@ void UIManager::DrawShaderLibrary() {
                 ImGui::SetTooltip("Double-click to set keybinding");
             }
 
-            // Right-aligned keybinding label
             if (preset->shortcutKey != 0) {
                 std::string combo = "[" + m_app.GetComboName(preset->shortcutKey, preset->shortcutModifiers) + "]";
                 float textW = ImGui::CalcTextSize(combo.c_str()).x;
@@ -1064,7 +1115,6 @@ void UIManager::DrawShaderLibrary() {
                 ImGui::TextDisabled("%s", combo.c_str());
             }
 
-            // Context menu
             if (ImGui::BeginPopupContextItem("##ctx")) {
                 if (ImGui::MenuItem("Set Keybinding...")) {
                     m_keybindingPresetIndex = i;
@@ -1078,8 +1128,28 @@ void UIManager::DrawShaderLibrary() {
             }
 
             ImGui::PopID();
+        };
+
+        // GENERATIVE section
+        if (generativeCount > 0) {
+            ImGui::Separator();
+            ImGui::TextDisabled("GENERATIVE");
+            for (int i = 0; i < presetCount; ++i) {
+                const auto* p = manager.GetPreset(i);
+                if (p && p->isGenerative) drawPreset(i);
+            }
         }
-        
+
+        // VIDEO EFFECTS section
+        if (videoCount > 0) {
+            ImGui::Separator();
+            ImGui::TextDisabled("VIDEO EFFECTS");
+            for (int i = 0; i < presetCount; ++i) {
+                const auto* p = manager.GetPreset(i);
+                if (p && !p->isGenerative) drawPreset(i);
+            }
+        }
+
         m_libraryHeight = ImGui::GetWindowHeight();
     }
     ImGui::End();
@@ -1197,7 +1267,78 @@ void UIManager::DrawTransportControls() {
             if (wasFrameMode) ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) ImGui::SetTooltip(wasFrameMode ? "Switch to seconds" : "Switch to frames");
         } else {
-            ImGui::Text("No video loaded");
+            // No video — show generative controls or idle prompt
+            const ShaderPreset* active = m_app.GetShaderManager().GetActivePreset();
+            if (active && active->isGenerative) {
+                // Resolution selector
+                struct ResPreset { const char* label; int w, h; };
+                static constexpr ResPreset kResPresets[] = {
+                    { "1280 x 720",   1280,  720 },
+                    { "1920 x 1080",  1920, 1080 },
+                    { "2560 x 1440",  2560, 1440 },
+                    { "3840 x 2160",  3840, 2160 },
+                    { "1080 x 1080",  1080, 1080 },
+                    { "2048 x 2048",  2048, 2048 },
+                    { "Custom",          0,    0 },
+                };
+                static constexpr int kNumPresets = 7;
+                static constexpr int kCustomIdx  = kNumPresets - 1;
+
+                AppConfig& cfg = m_app.GetConfig();
+
+                // Identify which preset matches current config (or Custom)
+                int currentPreset = kCustomIdx;
+                for (int i = 0; i < kCustomIdx; ++i) {
+                    if (kResPresets[i].w == cfg.generativeWidth &&
+                        kResPresets[i].h == cfg.generativeHeight) {
+                        currentPreset = i;
+                        break;
+                    }
+                }
+
+                ImGui::SetNextItemWidth(130.0f);
+                if (ImGui::BeginCombo("##genres", kResPresets[currentPreset].label)) {
+                    for (int i = 0; i < kNumPresets; ++i) {
+                        bool sel = (i == currentPreset);
+                        if (ImGui::Selectable(kResPresets[i].label, sel)) {
+                            if (i != kCustomIdx) {
+                                cfg.generativeWidth  = kResPresets[i].w;
+                                cfg.generativeHeight = kResPresets[i].h;
+                                m_app.ApplyGenerativeResolution();
+                            }
+                        }
+                        if (sel) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Generative output resolution");
+
+                // Inline custom W/H when no preset matches
+                if (currentPreset == kCustomIdx) {
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(60.0f);
+                    if (ImGui::DragInt("##genW", &cfg.generativeWidth, 1.0f, 1, 7680, "%d")) {
+                        m_app.ApplyGenerativeResolution();
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("x");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(60.0f);
+                    if (ImGui::DragInt("##genH", &cfg.generativeHeight, 1.0f, 1, 4320, "%d")) {
+                        m_app.ApplyGenerativeResolution();
+                    }
+                }
+
+                // Elapsed timer
+                ImGui::SameLine();
+                float t = m_app.GetPlaybackTime();
+                int mins = static_cast<int>(t) / 60;
+                float secs = t - static_cast<float>(mins * 60);
+                ImGui::Text("%02d:%05.2f", mins, secs);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Elapsed (wall clock)");
+            } else {
+                ImGui::TextDisabled("No video loaded");
+            }
         }
 
         // Record / Stop button

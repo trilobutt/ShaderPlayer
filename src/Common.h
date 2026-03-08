@@ -105,6 +105,11 @@ struct ShaderPreset {
     int shortcutKey = 0;  // Virtual key code
     int shortcutModifiers = 0;  // MOD_CONTROL, MOD_SHIFT, etc.
     bool isValid = false;
+    bool isGenerative = false;  // True if SHADER_TYPE = "generative" in ISF block
+    int   blendMode   = 0;      // 0=Off, 1=Normal, 2=Add, 3=Multiply, 4=Screen,
+                                //   5=Overlay, 6=Soft Light, 7=Difference,
+                                //   8=Exclusion, 9=Darken, 10=Lighten
+    float blendAmount = 1.0f;   // Blend strength [0,1]
     std::string compileError;
     std::vector<ShaderParam> params;
     // Persistence bridge: saved values keyed by param name, restored after re-parse.
@@ -156,6 +161,11 @@ struct AppConfig {
 
     // Noise generator
     NoiseSettings noise;
+
+    // Generative shader output resolution (used when no video is loaded)
+    int generativeWidth  = 1920;
+    int generativeHeight = 1080;
+
 
     // UI layout
     float editorPanelWidth = 500.0f;

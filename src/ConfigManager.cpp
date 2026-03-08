@@ -10,7 +10,9 @@ void to_json(nlohmann::json& j, const ShaderPreset& p) {
         {"name",              p.name},
         {"filepath",          p.filepath},
         {"shortcutKey",       p.shortcutKey},
-        {"shortcutModifiers", p.shortcutModifiers}
+        {"shortcutModifiers", p.shortcutModifiers},
+        {"blendMode",         p.blendMode},
+        {"blendAmount",       p.blendAmount}
     };
     // Save current param values keyed by name
     if (!p.params.empty()) {
@@ -65,6 +67,8 @@ void from_json(const nlohmann::json& j, ShaderPreset& p) {
     if (j.contains("filepath"))          j.at("filepath").get_to(p.filepath);
     if (j.contains("shortcutKey"))       j.at("shortcutKey").get_to(p.shortcutKey);
     if (j.contains("shortcutModifiers")) j.at("shortcutModifiers").get_to(p.shortcutModifiers);
+    if (j.contains("blendMode"))         j.at("blendMode").get_to(p.blendMode);
+    if (j.contains("blendAmount"))       j.at("blendAmount").get_to(p.blendAmount);
     if (j.contains("paramValues") && j["paramValues"].is_object()) {
         for (auto& [name, vals] : j["paramValues"].items()) {
             std::vector<float> v;
@@ -150,7 +154,9 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"showTransport", c.showTransport},
         {"timeDisplayFrames", c.timeDisplayFrames},
         {"noiseScale", c.noise.scale},
-        {"noiseTextureSize", c.noise.textureSize}
+        {"noiseTextureSize", c.noise.textureSize},
+        {"generativeWidth",   c.generativeWidth},
+        {"generativeHeight",  c.generativeHeight}
     };
 }
 
@@ -170,6 +176,8 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("timeDisplayFrames")) j.at("timeDisplayFrames").get_to(c.timeDisplayFrames);
     if (j.contains("noiseScale"))       j.at("noiseScale").get_to(c.noise.scale);
     if (j.contains("noiseTextureSize")) j.at("noiseTextureSize").get_to(c.noise.textureSize);
+    if (j.contains("generativeWidth"))  j.at("generativeWidth").get_to(c.generativeWidth);
+    if (j.contains("generativeHeight")) j.at("generativeHeight").get_to(c.generativeHeight);
 }
 
 ConfigManager::ConfigManager() = default;

@@ -48,7 +48,7 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
     for (const auto& p : preset.params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
-    preset.params = ParseISFParams(preset.source);
+    preset.params = ParseISFParams(preset.source, &preset.isGenerative);
 
     for (auto& p : preset.params) {
         auto it = saved.find(p.name);
@@ -86,7 +86,7 @@ bool ShaderManager::RecompilePreset(int index) {
     for (const auto& p : m_presets[index].params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
-    m_presets[index].params = ParseISFParams(m_presets[index].source);
+    m_presets[index].params = ParseISFParams(m_presets[index].source, &m_presets[index].isGenerative);
 
     for (auto& p : m_presets[index].params) {
         auto it = saved.find(p.name);
@@ -123,7 +123,7 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
         // ISF defaults), then patches param.values from savedParamValues, then calls
         // AddPreset. Skipping re-parse here preserves those restored user values.
         if (m_presets.back().params.empty()) {
-            m_presets.back().params = ParseISFParams(m_presets.back().source);
+            m_presets.back().params = ParseISFParams(m_presets.back().source, &m_presets.back().isGenerative);
         }
         std::string preamble = BuildDefinesPreamble(m_presets.back().params);
         m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error);
@@ -172,7 +172,7 @@ void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
     
-    m_presets[index].params = ParseISFParams(preset.source);
+    m_presets[index].params = ParseISFParams(preset.source, &m_presets[index].isGenerative);
     std::string preamble = BuildDefinesPreamble(m_presets[index].params);
 
     if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
@@ -334,7 +334,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 )";
 }
 
-std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source) {
+std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source, bool* outIsGenerative) {
     // Find the ISF block: /*{ ... }*/
     const std::string openTag  = "/*{";
     const std::string closeTag = "}*/";
@@ -354,6 +354,9 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
 
     try {
         nlohmann::json j = nlohmann::json::parse(jsonText);
+
+        if (outIsGenerative)
+            *outIsGenerative = (j.value("SHADER_TYPE", std::string{}) == "generative");
 
         if (!j.contains("INPUTS") || !j["INPUTS"].is_array()) return {};
 
