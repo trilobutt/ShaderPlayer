@@ -221,6 +221,14 @@ Each frame:
 
 Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffer layout and ISF block. Then Shader Library → "Scan Folder" to load it.
 
+## Live Capture (Webcam / RTSP)
+
+- `VideoDecoder::OpenCapture(deviceOrUrl, isDshow)` — opens a dshow device (`"video=<name>"`) or any URL (RTSP/RTMP/HTTP). Sets `AVFMT_FLAG_NONBLOCK`; `DecodeNextFrame` returns false on `AVERROR(EAGAIN)` (no frame ready, not an error).
+- DirectShow device enumeration: `#include <dshow.h>` + `strmiids.lib`. `CoCreateInstance(CLSID_SystemDeviceEnum)` → `CreateClassEnumerator(CLSID_VideoInputDeviceCategory)` → `IPropertyBag::Read(L"FriendlyName")`. COM already initialised by WinMain.
+- Live timing uses wall-clock accumulation (`m_generativeTime`), not frame PTS (device clock starts at arbitrary values). `IsLiveCapture()` gate in `ProcessFrame` skips the file-mode frame-rate gate and the end-of-stream `SeekToTime(0.0)`.
+- `Stop()` / `SeekToTime(0.0)` called on a live source fails silently — harmless, no special guard needed.
+- Transport: show LIVE badge + wall-clock elapsed + Stop button instead of the scrubber when `decoder.IsLiveCapture()`.
+
 ## Known Limitations
 
 - Windows-only (Direct3D 11 requirement)

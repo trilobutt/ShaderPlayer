@@ -28,6 +28,10 @@ public:
     void Close();
     bool IsOpen() const { return m_formatCtx != nullptr; }
 
+    // Live capture: dshow webcam (isDshow=true) or any URL (isDshow=false, e.g. rtsp://)
+    bool OpenCapture(const std::string& deviceOrUrl, bool isDshow = true);
+    bool IsLiveCapture() const { return m_isLiveCapture; }
+
     // Decoding
     bool DecodeNextFrame(VideoFrame& outFrame);
     bool SeekToTime(double seconds);
@@ -69,6 +73,7 @@ private:
     double m_currentTime = 0.0;
     AVPixelFormat m_pixelFormat = AV_PIX_FMT_NONE;
     std::string m_codecName;
+    bool m_isLiveCapture = false;
 
     // For YUV to RGB conversion
     AVPixelFormat m_outputFormat = AV_PIX_FMT_RGBA;

@@ -33,6 +33,10 @@ public:
     void CloseVideo();
     void OpenVideoDialog();
 
+    // Live capture (webcam / RTSP stream)
+    bool OpenCapture(const std::string& deviceOrUrl, bool isDshow = true);
+    void OpenCaptureDialog();
+
     // Playback control
     void Play();
     void Pause();

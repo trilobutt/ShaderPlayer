@@ -117,6 +117,7 @@ target_link_libraries(ShaderPlayer PRIVATE
     d3dcompiler
     dxgi
     dxguid
+    strmiids
     ${FFMPEG_LIBRARIES}
 )
 

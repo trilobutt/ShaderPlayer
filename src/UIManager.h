@@ -40,6 +40,10 @@ public:
 
     // Notifications
     void ShowNotification(const std::string& message, float duration = 3.0f);
+
+    // Live capture / stream dialog
+    void ShowCaptureDialog();
+
     void ToggleEditor()           { m_showEditor           = !m_showEditor; }
     void ToggleLibrary()          { m_showLibrary          = !m_showLibrary; }
     void ToggleTransport()        { m_showTransport        = !m_showTransport; }
@@ -73,6 +77,7 @@ private:
     void DrawKeyframeDetail(ShaderParam& param, KeyframeTimeline& timeline,
                             int keyframeIndex, bool& anyChanged);
     void DrawNoisePanel();
+    void DrawCaptureDialog();
 
     Application& m_app;
     
@@ -128,6 +133,12 @@ private:
 
     // Noise generator panel
     bool m_showNoisePanel = false;
+
+    // Capture / stream dialog
+    bool m_showCaptureDialog = false;
+    std::vector<std::string> m_captureDevices;
+    int m_selectedCaptureIdx = 0;
+    char m_captureUrlBuf[512] = "";
 
     // Keyframe editing state
     int m_selectedKeyframeParam = -1;   // index into preset->params, or -1

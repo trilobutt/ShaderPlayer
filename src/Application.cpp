@@ -380,16 +380,29 @@ void Application::ProcessFrame() {
 
     if (m_playbackState == PlaybackState::Playing) {
         if (m_decoder.IsOpen()) {
-            // Video mode: advance playback time from decoded frame timestamps
-            if (elapsed >= m_frameDuration) {
-                if (m_decoder.DecodeNextFrame(m_currentFrame)) {
-                    m_newVideoFrame = true;
-                    m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
-                } else {
-                    // End of video, loop
-                    m_decoder.SeekToTime(0.0);
-                }
+            if (m_decoder.IsLiveCapture()) {
+                // Live capture: non-blocking decode on every tick; advance wall-clock time.
+                // DecodeNextFrame returns false immediately (EAGAIN) when the device has no
+                // new frame yet — we just keep the last frame displayed until the next one.
+                const float dt = static_cast<float>(std::min(elapsed, 0.1));
+                m_generativeTime += dt;
+                m_playbackTime = m_generativeTime;
                 m_lastFrameTime = now;
+
+                if (m_decoder.DecodeNextFrame(m_currentFrame))
+                    m_newVideoFrame = true;
+            } else {
+                // Video file mode: advance playback time from decoded frame timestamps
+                if (elapsed >= m_frameDuration) {
+                    if (m_decoder.DecodeNextFrame(m_currentFrame)) {
+                        m_newVideoFrame = true;
+                        m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
+                    } else {
+                        // End of video, loop
+                        m_decoder.SeekToTime(0.0);
+                    }
+                    m_lastFrameTime = now;
+                }
             }
         } else {
             // Generative mode: advance time by wall-clock delta; cap to avoid jumps after
@@ -575,7 +588,7 @@ void Application::CloseVideo() {
 
 void Application::OpenVideoDialog() {
     char filepath[MAX_PATH] = {};
-    
+
     OPENFILENAMEA ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = m_hwnd;
@@ -587,6 +600,27 @@ void Application::OpenVideoDialog() {
     if (GetOpenFileNameA(&ofn)) {
         OpenVideo(filepath);
     }
+}
+
+bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
+    Stop();
+    m_generativeTime = 0.0f;
+
+    if (!m_decoder.OpenCapture(deviceOrUrl, isDshow)) {
+        m_uiManager->ShowNotification("Failed to open capture: " + deviceOrUrl);
+        return false;
+    }
+
+    m_frameDuration = 1.0 / m_decoder.GetFPS();
+    m_playbackState = PlaybackState::Playing;
+    m_lastFrameTime = std::chrono::steady_clock::now();
+
+    m_uiManager->ShowNotification("Live: " + deviceOrUrl);
+    return true;
+}
+
+void Application::OpenCaptureDialog() {
+    m_uiManager->ShowCaptureDialog();
 }
 
 void Application::Play() {

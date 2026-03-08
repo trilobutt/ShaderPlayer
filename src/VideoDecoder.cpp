@@ -142,6 +142,68 @@ void VideoDecoder::Close() {
     m_pixelFormat = AV_PIX_FMT_NONE;
     m_codecName.clear();
     m_conversionBuffer.clear();
+    m_isLiveCapture = false;
+}
+
+bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
+    Close();
+
+    const AVInputFormat* fmt = nullptr;
+    std::string url = deviceOrUrl;
+
+    if (isDshow) {
+        fmt = av_find_input_format("dshow");
+        if (!fmt) return false;
+        url = "video=" + deviceOrUrl;
+    }
+
+    // Request a common default; fall back to whatever the device offers.
+    AVDictionary* opts = nullptr;
+    av_dict_set(&opts, "video_size", "1280x720", 0);
+    av_dict_set(&opts, "framerate", "30", 0);
+
+    if (avformat_open_input(&m_formatCtx, url.c_str(), fmt, &opts) < 0) {
+        av_dict_free(&opts);
+        if (avformat_open_input(&m_formatCtx, url.c_str(), fmt, nullptr) < 0)
+            return false;
+    } else {
+        av_dict_free(&opts);
+    }
+
+    // Non-blocking: av_read_frame returns AVERROR(EAGAIN) instead of blocking when
+    // the device has no new frame yet. Keeps the render loop responsive.
+    m_formatCtx->flags |= AVFMT_FLAG_NONBLOCK;
+
+    if (avformat_find_stream_info(m_formatCtx, nullptr) < 0) { Close(); return false; }
+
+    m_videoStreamIdx = av_find_best_stream(m_formatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    if (m_videoStreamIdx < 0) { Close(); return false; }
+
+    AVStream* videoStream = m_formatCtx->streams[m_videoStreamIdx];
+    AVCodecParameters* codecParams = videoStream->codecpar;
+
+    const AVCodec* codec = avcodec_find_decoder(codecParams->codec_id);
+    if (!codec) { Close(); return false; }
+
+    m_codecCtx = avcodec_alloc_context3(codec);
+    if (!m_codecCtx) { Close(); return false; }
+
+    if (avcodec_parameters_to_context(m_codecCtx, codecParams) < 0) { Close(); return false; }
+    if (avcodec_open2(m_codecCtx, codec, nullptr) < 0) { Close(); return false; }
+
+    m_width       = m_codecCtx->width;
+    m_height      = m_codecCtx->height;
+    m_pixelFormat = m_codecCtx->pix_fmt;
+    m_codecName   = codec->name;
+    m_fps         = (videoStream->avg_frame_rate.den != 0) ? av_q2d(videoStream->avg_frame_rate) : 30.0;
+    m_duration    = 0.0;
+    m_frameCount  = 0;
+
+    int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
+    m_conversionBuffer.resize(bufferSize + 64);
+
+    m_isLiveCapture = true;
+    return true;
 }
 
 void VideoDecoder::FlushDecoder() {

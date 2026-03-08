@@ -4,6 +4,8 @@
 #include "imgui_impl_dx11.h"
 #include <algorithm>
 #include <cmath>
+#include <dshow.h>
+#pragma comment(lib, "strmiids.lib")
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -268,6 +270,8 @@ void UIManager::Render() {
         DrawNoisePanel();
     }
 
+    DrawCaptureDialog();
+
     DrawNotifications();
     
     if (m_showKeybindingModal) {
@@ -334,6 +338,9 @@ void UIManager::DrawMenuBar() {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("Open Video...", "Ctrl+O")) {
                 m_app.OpenVideoDialog();
+            }
+            if (ImGui::MenuItem("Open Stream / Webcam...")) {
+                m_app.OpenCaptureDialog();
             }
             {
                 bool videoOpen = m_app.GetDecoder().IsOpen();
@@ -481,20 +488,26 @@ void UIManager::DrawVideoViewport() {
             static_cast<float>(renderer.GetGenerativeHeight()));
 
     } else {
-        // Nothing to show: prompt to open a video or load a generative shader.
+        // Nothing to show: prompt to open a video, stream, or load a generative shader.
         const ImVec2 cursorStart = ImGui::GetCursorPos();
         const ImVec2 avail       = ImGui::GetContentRegionAvail();
-        constexpr float kButtonW = 200.0f;
+        constexpr float kButtonW = 220.0f;
         constexpr float kButtonH = 40.0f;
+        constexpr float kGap     = 8.0f;
         const char* hint         = "or drag & drop a video file";
-        const float  totalH      = kButtonH + 8.0f + ImGui::GetTextLineHeight();
+        const float totalH       = kButtonH * 2 + kGap * 2 + ImGui::GetTextLineHeight();
 
-        ImGui::SetCursorPos(ImVec2(
-            cursorStart.x + (avail.x - kButtonW) * 0.5f,
-            cursorStart.y + (avail.y - totalH)   * 0.5f));
+        float startX = cursorStart.x + (avail.x - kButtonW) * 0.5f;
+        float startY = cursorStart.y + (avail.y - totalH)   * 0.5f;
 
+        ImGui::SetCursorPos(ImVec2(startX, startY));
         if (ImGui::Button("Open Video...", ImVec2(kButtonW, kButtonH))) {
             m_app.OpenVideoDialog();
+        }
+
+        ImGui::SetCursorPos(ImVec2(startX, startY + kButtonH + kGap));
+        if (ImGui::Button("Open Stream / Webcam...", ImVec2(kButtonW, kButtonH))) {
+            m_app.OpenCaptureDialog();
         }
 
         const float hintW = ImGui::CalcTextSize(hint).x;
@@ -1174,9 +1187,23 @@ void UIManager::DrawTransportControls() {
         }
         
         ImGui::SameLine();
-        
-        // Timeline slider
-        if (decoder.IsOpen()) {
+
+        // Timeline slider — replaced by a LIVE badge for capture sources
+        if (decoder.IsOpen() && decoder.IsLiveCapture()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.15f, 0.15f, 1.0f));
+            ImGui::Text("LIVE");
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            float t = m_app.GetPlaybackTime();
+            int m = static_cast<int>(t / 60.0f);
+            float s = t - static_cast<float>(m) * 60.0f;
+            ImGui::Text("%02d:%05.2f", m, s);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Stop##live")) {
+                m_app.CloseVideo();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop live capture");
+        } else if (decoder.IsOpen()) {
             float currentTime = static_cast<float>(decoder.GetCurrentTime());
             float duration    = static_cast<float>(decoder.GetDuration());
             double fps        = decoder.GetFPS();
@@ -1922,6 +1949,134 @@ void UIManager::DrawNoisePanel() {
     }
 
     ImGui::End();
+}
+
+// Enumerate DirectShow video capture devices (webcams, capture cards, virtual cameras).
+static std::vector<std::string> EnumerateCaptureDevices() {
+    std::vector<std::string> devices;
+
+    ICreateDevEnum* devEnum = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_SystemDeviceEnum, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_ICreateDevEnum, reinterpret_cast<void**>(&devEnum))))
+        return devices;
+
+    IEnumMoniker* enumMon = nullptr;
+    HRESULT hr = devEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &enumMon, 0);
+    devEnum->Release();
+    if (hr != S_OK || !enumMon)
+        return devices;
+
+    IMoniker* moniker = nullptr;
+    while (enumMon->Next(1, &moniker, nullptr) == S_OK) {
+        IPropertyBag* propBag = nullptr;
+        if (SUCCEEDED(moniker->BindToStorage(nullptr, nullptr, IID_IPropertyBag,
+                                             reinterpret_cast<void**>(&propBag)))) {
+            VARIANT var;
+            VariantInit(&var);
+            if (SUCCEEDED(propBag->Read(L"FriendlyName", &var, nullptr)) && var.vt == VT_BSTR) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, var.bstrVal, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 0) {
+                    std::string name(len - 1, '\0');
+                    WideCharToMultiByte(CP_UTF8, 0, var.bstrVal, -1, name.data(), len, nullptr, nullptr);
+                    devices.push_back(std::move(name));
+                }
+            }
+            VariantClear(&var);
+            propBag->Release();
+        }
+        moniker->Release();
+    }
+    enumMon->Release();
+    return devices;
+}
+
+void UIManager::ShowCaptureDialog() {
+    m_captureDevices = EnumerateCaptureDevices();
+    m_selectedCaptureIdx = 0;
+    m_showCaptureDialog = true;
+}
+
+void UIManager::DrawCaptureDialog() {
+    if (!m_showCaptureDialog) return;
+
+    // Open only on the frame the flag is first set; avoid re-asserting every frame
+    // (which would fight any other popup for focus per CLAUDE.md ImGui notes).
+    static bool s_wasOpen = false;
+    if (!s_wasOpen)
+        ImGui::OpenPopup("Open Stream / Webcam");
+    s_wasOpen = true;
+
+    ImVec2 centre = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(centre, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(520, 0), ImGuiCond_Appearing);
+
+    if (!ImGui::BeginPopupModal("Open Stream / Webcam", &m_showCaptureDialog,
+                                ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (!m_showCaptureDialog) s_wasOpen = false;  // X button closed it
+        return;
+    }
+
+    // ── Webcam section ──────────────────────────────────────────────────────
+    ImGui::SeparatorText("Webcam / Capture Device (DirectShow)");
+    ImGui::Spacing();
+
+    if (m_captureDevices.empty()) {
+        ImGui::TextDisabled("No DirectShow video devices detected.");
+    } else {
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::BeginListBox("##devices", ImVec2(0, 120))) {
+            for (int i = 0; i < static_cast<int>(m_captureDevices.size()); ++i) {
+                bool sel = (m_selectedCaptureIdx == i);
+                if (ImGui::Selectable(m_captureDevices[i].c_str(), sel))
+                    m_selectedCaptureIdx = i;
+                if (sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndListBox();
+        }
+
+        ImGui::Spacing();
+        if (ImGui::Button("Open Device", ImVec2(120, 0))) {
+            if (m_selectedCaptureIdx < static_cast<int>(m_captureDevices.size())) {
+                m_app.OpenCapture(m_captureDevices[m_selectedCaptureIdx], true);
+                m_showCaptureDialog = false;
+                s_wasOpen = false;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+    }
+
+    // ── Stream URL section ───────────────────────────────────────────────────
+    ImGui::Spacing();
+    ImGui::SeparatorText("Stream URL (RTSP / RTMP / HTTP)");
+    ImGui::Spacing();
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##url", m_captureUrlBuf, sizeof(m_captureUrlBuf),
+                     ImGuiInputTextFlags_None);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("e.g.  rtsp://192.168.1.100:554/stream\n"
+                          "      rtmp://live.example.com/app/key\n"
+                          "      http://cam.local/video.mjpg");
+
+    ImGui::Spacing();
+    bool urlEmpty = (m_captureUrlBuf[0] == '\0');
+    if (urlEmpty) ImGui::BeginDisabled();
+    if (ImGui::Button("Open URL", ImVec2(100, 0))) {
+        m_app.OpenCapture(m_captureUrlBuf, false);
+        m_showCaptureDialog = false;
+        s_wasOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+    if (urlEmpty) ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(80, 0))) {
+        m_showCaptureDialog = false;
+        s_wasOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }
 
 } // namespace SP
