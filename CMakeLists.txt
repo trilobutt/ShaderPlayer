@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 project(ShaderPlayer VERSION 1.0.0 LANGUAGES CXX C)
 
+# kissfft and spout2 use FetchContent_Populate directly to avoid running their
+# upstream CMakeLists (which would pull in unwanted targets / break WIN32_LEAN_AND_MEAN).
+# CMP0169 OLD suppresses the deprecation warning for this intentional usage.
+cmake_policy(SET CMP0169 OLD)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

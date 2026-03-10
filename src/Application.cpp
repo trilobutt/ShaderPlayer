@@ -52,11 +52,13 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
         return false;
     }
 
-    // Load shader presets from config
+    // Load shader presets from config.
+    // LoadShaderMetadataFromFile reads+parses ISF without compiling; AddPreset compiles
+    // once. This avoids the double-compile that LoadShaderFromFile + AddPreset incurred.
     for (auto& configPreset : m_configManager.GetConfig().shaderPresets) {
         if (!configPreset.filepath.empty()) {
             ShaderPreset loadedPreset;
-            if (m_shaderManager->LoadShaderFromFile(configPreset.filepath, loadedPreset)) {
+            if (m_shaderManager->LoadShaderMetadataFromFile(configPreset.filepath, loadedPreset)) {
                 loadedPreset.shortcutKey       = configPreset.shortcutKey;
                 loadedPreset.shortcutModifiers = configPreset.shortcutModifiers;
                 // Restore saved param values by name

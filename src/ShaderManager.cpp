@@ -34,6 +34,23 @@ bool ShaderManager::LoadShaderFromFile(const std::string& filepath, ShaderPreset
     return CompilePreset(outPreset);
 }
 
+bool ShaderManager::LoadShaderMetadataFromFile(const std::string& filepath, ShaderPreset& outPreset) {
+    std::ifstream file(filepath);
+    if (!file.is_open()) {
+        outPreset.compileError = "Failed to open file: " + filepath;
+        outPreset.isValid = false;
+        return false;
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    outPreset.filepath = filepath;
+    outPreset.source   = buffer.str();
+    outPreset.name     = std::filesystem::path(filepath).stem().string();
+    // Parse ISF so default param values are available for the caller to override before AddPreset.
+    outPreset.params   = ParseISFParams(outPreset.source, &outPreset.isGenerative, &outPreset.isAudio);
+    return true;
+}
+
 bool ShaderManager::LoadShaderFromSource(const std::string& name, const std::string& source, ShaderPreset& outPreset) {
     outPreset.name = name;
     outPreset.source = source;
@@ -121,17 +138,19 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
     
     if (m_presets.back().isValid || !m_presets.back().source.empty()) {
         // Only parse if params not already set. During startup, Application::Initialize
-        // calls LoadShaderFromFile (which runs CompilePreset, populating params with
-        // ISF defaults), then patches param.values from savedParamValues, then calls
-        // AddPreset. Skipping re-parse here preserves those restored user values.
+        // calls LoadShaderMetadataFromFile (which parses ISF without compiling) then
+        // patches param.values from savedParamValues before calling AddPreset.
+        // Skipping re-parse here preserves those restored user values.
         if (m_presets.back().params.empty()) {
             m_presets.back().params = ParseISFParams(m_presets.back().source,
                                                       &m_presets.back().isGenerative,
                                                       &m_presets.back().isAudio);
         }
         std::string preamble = BuildDefinesPreamble(m_presets.back().params);
-        m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error);
-        if (!error.empty()) {
+        if (m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error)) {
+            m_presets.back().isValid = true;
+            m_presets.back().compileError.clear();
+        } else {
             m_presets.back().isValid = false;
             m_presets.back().compileError = error;
         }

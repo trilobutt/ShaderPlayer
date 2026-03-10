@@ -16,6 +16,8 @@ public:
 
     // Shader operations
     bool LoadShaderFromFile(const std::string& filepath, ShaderPreset& outPreset);
+    // Reads and parses ISF metadata but does NOT compile — use before AddPreset to avoid a double-compile.
+    bool LoadShaderMetadataFromFile(const std::string& filepath, ShaderPreset& outPreset);
     bool LoadShaderFromSource(const std::string& name, const std::string& source, ShaderPreset& outPreset);
     bool CompilePreset(ShaderPreset& preset);
     // Compile a preset already stored at the given index and update m_compiledShaders[index].

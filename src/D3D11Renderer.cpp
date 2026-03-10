@@ -1,5 +1,6 @@
 #include "D3D11Renderer.h"
 #include <stdexcept>
+#include <fstream>
 
 namespace SP {
 
@@ -725,7 +726,50 @@ bool D3D11Renderer::UploadVideoFrame(const VideoFrame& frame) {
     return true;
 }
 
+// FNV-1a 64-bit hash — used to key the shader bytecode cache.
+static uint64_t Fnv1a64(const char* data, size_t len) {
+    uint64_t h = 14695981039346656037ULL;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= static_cast<uint8_t>(data[i]);
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+// Returns (and lazily creates) the shader_cache/ dir next to the exe.
+static std::filesystem::path GetShaderCacheDir() {
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+    auto dir = std::filesystem::path(exePath).parent_path() / "shader_cache";
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+
 bool D3D11Renderer::CompilePixelShader(const std::string& hlslSource, ComPtr<ID3D11PixelShader>& outShader, std::string& outError) {
+    // --- Bytecode cache check ---
+    // Key = FNV-1a hash of the full source (includes preamble defines).
+    // Cache files are DXBC blobs: portable across GPUs (driver JIT-compiles them).
+    const uint64_t hash = Fnv1a64(hlslSource.c_str(), hlslSource.size());
+    char hashStr[17];
+    snprintf(hashStr, sizeof(hashStr), "%016llx", static_cast<unsigned long long>(hash));
+    const auto cachePath = GetShaderCacheDir() / (std::string(hashStr) + ".blob");
+
+    if (std::filesystem::exists(cachePath)) {
+        std::ifstream cacheFile(cachePath, std::ios::binary | std::ios::ate);
+        if (cacheFile) {
+            const auto blobSize = static_cast<size_t>(cacheFile.tellg());
+            cacheFile.seekg(0);
+            std::vector<char> blobData(blobSize);
+            cacheFile.read(blobData.data(), static_cast<std::streamsize>(blobSize));
+            if (cacheFile) {
+                HRESULT hr = m_device->CreatePixelShader(blobData.data(), blobSize, nullptr, &outShader);
+                if (SUCCEEDED(hr)) return true;
+                // Blob corrupt or stale — fall through to full recompile.
+            }
+        }
+    }
+
+    // --- Full compile ---
     ComPtr<ID3DBlob> psBlob;
     ComPtr<ID3DBlob> errorBlob;
 
@@ -765,6 +809,13 @@ bool D3D11Renderer::CompilePixelShader(const std::string& hlslSource, ComPtr<ID3
     if (FAILED(hr)) {
         outError = "Failed to create pixel shader object";
         return false;
+    }
+
+    // Write blob to cache so subsequent startups skip D3DCompile.
+    {
+        std::ofstream cacheOut(cachePath, std::ios::binary);
+        cacheOut.write(static_cast<const char*>(psBlob->GetBufferPointer()),
+                       static_cast<std::streamsize>(psBlob->GetBufferSize()));
     }
 
     outError.clear();
