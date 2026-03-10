@@ -136,7 +136,7 @@ bool VideoEncoder::InitEncoder(const RecordingSettings& settings, int width, int
         m_codecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
         m_codecCtx->bit_rate = settings.bitrate;
         m_codecCtx->gop_size = static_cast<int>(fps);  // One keyframe per second
-        m_codecCtx->max_b_frames = 2;
+        m_codecCtx->max_b_frames = 0;  // No B-frames: each frame is self-contained, sws_scale destination is never cloned
         
         if (settings.codec == "libx264") {
             av_opt_set(m_codecCtx->priv_data, "preset", settings.preset.c_str(), 0);
@@ -188,12 +188,23 @@ bool VideoEncoder::InitEncoder(const RecordingSettings& settings, int width, int
         return false;
     }
 
-    // Allocate frame
+    // Destination (encoder) frame
     m_frame = av_frame_alloc();
+    if (!m_frame) return false;
     m_frame->format = m_codecCtx->pix_fmt;
-    m_frame->width = width;
+    m_frame->width  = width;
     m_frame->height = height;
-    av_frame_get_buffer(m_frame, 0);
+    if (av_frame_get_buffer(m_frame, 0) < 0) return false;
+
+    // Source (RGBA) frame — FFmpeg allocates this with AV_INPUT_BUFFER_PADDING_SIZE
+    // extra bytes per plane, guaranteeing swscale's SIMD/chroma read-ahead can't
+    // stray into an unmapped page regardless of dimension alignment.
+    m_srcFrame = av_frame_alloc();
+    if (!m_srcFrame) return false;
+    m_srcFrame->format = AV_PIX_FMT_RGBA;
+    m_srcFrame->width  = width;
+    m_srcFrame->height = height;
+    if (av_frame_get_buffer(m_srcFrame, 32) < 0) return false;
 
     // Create swscale context for RGBA -> YUV conversion
     m_swsCtx = sws_getContext(
@@ -250,15 +261,21 @@ void VideoEncoder::EncoderThread() {
             }
         }
 
-        // Convert RGBA to encoder pixel format
-        const uint8_t* srcData[4] = { qf.data.data(), nullptr, nullptr, nullptr };
-        int srcLinesize[4] = { qf.width * 4, 0, 0, 0 };
-
-        av_frame_make_writable(m_frame);
+        // Copy pixel data into the FFmpeg-managed source frame row by row.
+        // m_srcFrame was allocated with av_frame_get_buffer which adds
+        // AV_INPUT_BUFFER_PADDING_SIZE (64 bytes) beyond the last row, so
+        // swscale's chroma read-ahead and SIMD overshoot can't reach an
+        // unmapped page — regardless of width/height alignment.
+        const int srcRowBytes = qf.width * 4;
+        for (int y = 0; y < qf.height; ++y) {
+            memcpy(m_srcFrame->data[0] + y * m_srcFrame->linesize[0],
+                   qf.data.data() + y * srcRowBytes,
+                   srcRowBytes);
+        }
 
         sws_scale(
             m_swsCtx,
-            srcData, srcLinesize,
+            m_srcFrame->data, m_srcFrame->linesize,
             0, qf.height,
             m_frame->data, m_frame->linesize
         );
@@ -295,6 +312,10 @@ void VideoEncoder::EncoderThread() {
     if (m_frame) {
         av_frame_free(&m_frame);
         m_frame = nullptr;
+    }
+    if (m_srcFrame) {
+        av_frame_free(&m_srcFrame);
+        m_srcFrame = nullptr;
     }
     m_videoStream = nullptr;
     // Reset stop flag last, after all work is done. StartRecording() joins this

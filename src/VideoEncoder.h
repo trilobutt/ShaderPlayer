@@ -47,6 +47,7 @@ private:
     AVStream* m_videoStream = nullptr;
     SwsContext* m_swsCtx = nullptr;
     AVFrame* m_frame = nullptr;
+    AVFrame* m_srcFrame = nullptr;  // Source RGBA frame; FFmpeg-allocated so sws_scale has safe padding
     AVPacket* m_packet = nullptr;
 
     // Frame queue

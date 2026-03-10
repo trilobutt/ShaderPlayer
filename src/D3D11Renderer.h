@@ -106,6 +106,8 @@ private:
     ComPtr<ID3D11Texture2D> m_renderTexture;
     ComPtr<ID3D11RenderTargetView> m_renderTextureRTV;
     ComPtr<ID3D11Texture2D> m_stagingTexture;
+    int m_renderTextureWidth  = 0;
+    int m_renderTextureHeight = 0;
 
     // Display texture (shader-processed frame for ImGui::Image preview)
     ComPtr<ID3D11Texture2D> m_displayTexture;

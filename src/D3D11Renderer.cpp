@@ -549,6 +549,8 @@ bool D3D11Renderer::CreateRenderToTexture(int width, int height) {
     m_renderTexture.Reset();
     m_renderTextureRTV.Reset();
     m_stagingTexture.Reset();
+    m_renderTextureWidth  = 0;
+    m_renderTextureHeight = 0;
 
     // Render target texture
     D3D11_TEXTURE2D_DESC texDesc = {};
@@ -573,7 +575,10 @@ bool D3D11Renderer::CreateRenderToTexture(int width, int height) {
     texDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 
     hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_stagingTexture);
-    return SUCCEEDED(hr);
+    if (FAILED(hr)) return false;
+    m_renderTextureWidth  = width;
+    m_renderTextureHeight = height;
+    return true;
 }
 
 bool D3D11Renderer::CreateDisplayTexture(int width, int height) {
@@ -907,7 +912,8 @@ bool D3D11Renderer::RenderToTexture() {
     const int w = (m_videoWidth  > 0) ? m_videoWidth  : m_generativeWidth;
     const int h = (m_videoHeight > 0) ? m_videoHeight : m_generativeHeight;
 
-    if (!m_renderTexture || !m_renderTextureRTV) {
+    if (!m_renderTexture || !m_renderTextureRTV ||
+        m_renderTextureWidth != w || m_renderTextureHeight != h) {
         if (!CreateRenderToTexture(w, h)) {
             return false;
         }
@@ -963,9 +969,11 @@ bool D3D11Renderer::CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int
     // Copy to staging texture
     m_context->CopyResource(m_stagingTexture.Get(), m_renderTexture.Get());
 
-    // Determine actual render dimensions (generative mode has no video)
-    const int renderW = (m_videoWidth  > 0) ? m_videoWidth  : m_generativeWidth;
-    const int renderH = (m_videoHeight > 0) ? m_videoHeight : m_generativeHeight;
+    // Use the tracked render texture dimensions — these always match the staging
+    // texture allocation, unlike recomputing from m_videoWidth/m_generativeWidth
+    // which can diverge if the texture was created at a different resolution.
+    const int renderW = m_renderTextureWidth;
+    const int renderH = m_renderTextureHeight;
 
     // Map and copy data
     D3D11_MAPPED_SUBRESOURCE mapped;
@@ -974,11 +982,16 @@ bool D3D11Renderer::CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int
 
     outWidth  = renderW;
     outHeight = renderH;
-    outData.resize(static_cast<size_t>(renderW) * renderH * 4);
+    const int rowBytes = renderW * 4;
+    // swscale's 4:2:0 chroma path reads source rows in pairs, so it can read one
+    // row past the last valid row. For dimensions where width*height*4 is exactly
+    // divisible by 4096 (e.g. 1920×1080), the allocation lands page-aligned with
+    // zero slack and that extra-row read hits an unmapped page → access violation.
+    // Two rows of tail padding guarantees the read lands in committed memory.
+    outData.resize(static_cast<size_t>(renderW) * renderH * 4 + rowBytes * 2, 0);
 
     const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
     uint8_t* dst = outData.data();
-    int rowBytes = renderW * 4;
 
     for (int y = 0; y < renderH; ++y) {
         memcpy(dst + y * rowBytes, src + y * mapped.RowPitch, rowBytes);
