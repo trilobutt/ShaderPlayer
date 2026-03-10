@@ -11,7 +11,6 @@ Real-time HLSL shader video player for Windows. Decodes video with FFmpeg, runs 
 - Looping playback with scrubber and frame-accurate seeking
 - Drag-and-drop a video file onto the window to open it
 - Live capture from webcams (DirectShow) and network streams (RTSP, RTMP, HTTP)
-- Mute toggle and volume control
 - Time display switchable between seconds and frame numbers
 
 ### Shader Pipeline
