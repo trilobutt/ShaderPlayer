@@ -258,6 +258,7 @@ void Application::HandleDroppedFiles(HDROP hDrop) {
             if (m_shaderManager->LoadShaderFromFile(utf8Path, preset)) {
                 int idx = m_shaderManager->AddPreset(preset);
                 m_shaderManager->SetActivePreset(idx);
+                m_uiManager->ResetKeyframeSelection();
                 OnParamChanged();
                 m_uiManager->SetEditorContent(preset.source);
                 m_uiManager->ShowNotification("Loaded shader: " + preset.name);
@@ -342,6 +343,7 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
 
         if (modifiersMatch && vkCode == static_cast<UINT>(preset->shortcutKey)) {
             m_shaderManager->SetActivePreset(i);
+            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
             m_uiManager->SetEditorContent(preset->source);
             m_uiManager->ShowNotification("Switched to: " + preset->name);
@@ -610,6 +612,15 @@ void Application::RenderFrame() {
 }
 
 bool Application::OpenVideo(const std::string& filepath) {
+    // Reset prior state before opening — mirrors OpenCapture and prevents stale audio,
+    // playback time, and renderer video dimensions when replacing an already-open video.
+    m_playbackState  = PlaybackState::Stopped;
+    m_playbackTime   = 0.0f;
+    m_generativeTime = 0.0f;
+    m_currentFrame   = VideoFrame{};
+    m_audioAnalyzer.Reset();
+    m_renderer.ReleaseVideoTexture();
+
     if (!m_decoder.Open(filepath)) {
         m_uiManager->ShowNotification("Failed to open video: " + filepath);
         return false;
@@ -617,7 +628,7 @@ bool Application::OpenVideo(const std::string& filepath) {
 
     m_frameDuration = 1.0 / m_decoder.GetFPS();
     m_configManager.GetConfig().lastOpenedVideo = filepath;
-    
+
     // Decode first frame
     m_decoder.DecodeNextFrame(m_currentFrame);
     m_playbackState = PlaybackState::Paused;
@@ -631,6 +642,11 @@ void Application::CloseVideo() {
     m_decoder.Close();
     m_currentFrame = VideoFrame{};
     m_audioAnalyzer.Reset();
+    // Reset renderer video dimensions so RenderToTexture/RenderToDisplay fall back
+    // to generative resolution. Without this, the stale m_videoWidth/Height causes
+    // the render target to be sized at the old video resolution, producing a tiny
+    // squished image in the top-left of the recording frame with green fill elsewhere.
+    m_renderer.ReleaseVideoTexture();
 }
 
 void Application::OpenVideoDialog() {
@@ -715,6 +731,7 @@ bool Application::CompileCurrentShader(const std::string& source) {
         preset->source = source;
         if (m_shaderManager->RecompilePreset(activeIndex)) {
             m_shaderManager->SetActivePreset(activeIndex);
+            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
@@ -733,6 +750,7 @@ bool Application::CompileCurrentShader(const std::string& source) {
         auto* added = m_shaderManager->GetPreset(idx);
         if (added && added->isValid) {
             m_shaderManager->SetActivePreset(idx);
+            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
             m_uiManager->ShowNotification("Shader compiled successfully");
             return true;
@@ -796,9 +814,10 @@ void Application::SaveShaderAsDialog(const std::string& source) {
                 m_shaderManager->CompilePreset(newPreset);
                 int idx = m_shaderManager->AddPreset(newPreset);
                 m_shaderManager->SetActivePreset(idx);
+                m_uiManager->ResetKeyframeSelection();
                 OnParamChanged();
             }
-            
+
             m_uiManager->ShowNotification("Shader saved: " + std::string(filepath));
         }
     }

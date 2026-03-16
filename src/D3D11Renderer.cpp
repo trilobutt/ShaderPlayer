@@ -1087,6 +1087,18 @@ static float voronoiNoise(float x, float y) {
 
 } // anonymous namespace
 
+void D3D11Renderer::ReleaseVideoTexture() {
+    m_videoTexture.Reset();
+    m_videoSRV.Reset();
+    m_videoWidth  = 0;
+    m_videoHeight = 0;
+    // Unbind from pipeline immediately so the next BeginFrame doesn't hold a stale SRV.
+    if (m_context) {
+        ID3D11ShaderResourceView* nullSRV = nullptr;
+        m_context->PSSetShaderResources(0, 1, &nullSRV);
+    }
+}
+
 void D3D11Renderer::SetGenerativeResolution(int width, int height) {
     m_generativeWidth  = (std::max)(width,  1);
     m_generativeHeight = (std::max)(height, 1);

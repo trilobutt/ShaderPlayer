@@ -63,6 +63,11 @@ public:
     // Pass nullptr to zero both (used when no audio is available).
     void SetAudioData(const AudioData* data);
 
+    // Release video texture and reset video dimensions to zero.
+    // Must be called when a video is closed so RenderToTexture/RenderToDisplay
+    // fall back to generative resolution rather than stale video dimensions.
+    void ReleaseVideoTexture();
+
     // Generative resolution — used as the render target size when no video is loaded.
     void SetGenerativeResolution(int width, int height);
     int GetGenerativeWidth()  const { return m_generativeWidth; }

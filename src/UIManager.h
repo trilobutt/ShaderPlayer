@@ -51,6 +51,14 @@ public:
     void ToggleKeybindingsPanel() { m_showKeybindingsPanel = !m_showKeybindingsPanel; }
     void ToggleSpoutPanel()       { m_showSpoutPanel       = !m_showSpoutPanel; }
 
+    // Reset keyframe selection state. Must be called whenever the active shader preset
+    // changes so stale param/keyframe indices don't address into the wrong preset's vectors.
+    void ResetKeyframeSelection() {
+        m_selectedKeyframeParam = -1;
+        m_selectedKeyframeIndex = -1;
+        m_keyframeFollowMode    = false;
+    }
+
     // Apply a full set of panel visibility flags (used by workspace preset load).
     void ApplyVisibility(bool showEditor, bool showLibrary, bool showTransport,
                          bool showRecording, bool showKeybindingsPanel) {
