@@ -46,8 +46,24 @@ void SpoutOutput::SetEnabled(bool enabled) {
     m_enabled = enabled;
     // Release the Spout sender slot so it disappears from receiver lists
     // immediately when disabled, rather than appearing stale.
-    if (!enabled && m_impl)
+    if (!enabled && m_impl) {
         m_impl->sender.ReleaseSender();
+        // ReleaseSender unconditionally zeros m_SenderName[0] inside spoutDX.
+        // Re-apply our stored name so the next SendTexture call registers with
+        // the correct name instead of falling back to the exe name.
+        m_impl->sender.SetSenderName(m_senderName.c_str());
+    }
+}
+
+bool SpoutOutput::IsActive() const {
+    return m_initialized && m_enabled && m_impl && m_impl->sender.IsInitialized();
+}
+
+std::string SpoutOutput::GetActiveSenderName() const {
+    if (!m_impl || !m_impl->sender.IsInitialized())
+        return {};
+    const char* name = m_impl->sender.GetSenderName();
+    return name ? name : std::string{};
 }
 
 void SpoutOutput::SetSenderName(const std::string& name) {

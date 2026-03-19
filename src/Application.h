@@ -69,7 +69,9 @@ public:
 
     // Spout output — GPU texture sharing with Spout-aware receivers
     void SetSpoutEnabled(bool enabled);
-    bool IsSpoutEnabled() const { return m_spoutOutput.IsEnabled(); }
+    bool IsSpoutEnabled()  const { return m_spoutOutput.IsEnabled(); }
+    bool IsSpoutActive()   const { return m_spoutOutput.IsActive(); }
+    std::string GetSpoutActiveSenderName() const { return m_spoutOutput.GetActiveSenderName(); }
     void SetSpoutSenderName(const std::string& name);
 
     // Noise generator — regenerates the global t1 noise texture from current config

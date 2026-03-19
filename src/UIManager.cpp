@@ -2010,6 +2010,21 @@ void UIManager::DrawSpoutPanel() {
     if (ImGui::Checkbox("Send via Spout", &enabled))
         m_app.SetSpoutEnabled(enabled);
 
+    // Status indicator — shows what SpoutCam should look for
+    ImGui::SameLine();
+    if (m_app.IsSpoutActive()) {
+        std::string activeName = m_app.GetSpoutActiveSenderName();
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1.0f), "Active");
+        if (!activeName.empty()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(\"%s\")", activeName.c_str());
+        }
+    } else if (m_app.IsSpoutEnabled()) {
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Waiting for frame...");
+    } else {
+        ImGui::TextDisabled("Off");
+    }
+
     ImGui::Separator();
     ImGui::Spacing();
 
