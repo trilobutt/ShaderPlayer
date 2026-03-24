@@ -234,6 +234,7 @@ void VideoDecoder::FlushDecoder() {
     av_frame_unref(m_audioFrame);
     av_packet_unref(m_packet);
     m_audioPending.clear();
+    m_audioEOFReached = false;
 }
 
 bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
@@ -484,9 +485,14 @@ void VideoDecoder::DecodeAudioPacket() {
 void VideoDecoder::ReadAudioAhead(int targetSamples) {
     if (!IsOpen() || m_audioStreamIdx < 0 || !m_audioCtx) return;
 
+    m_audioEOFReached = false;
     while (static_cast<int>(m_audioPending.size()) < targetSamples) {
         int ret = av_read_frame(m_formatCtx, m_packet);
-        if (ret < 0) break;  // EOF or error — stop reading
+        if (ret < 0) {
+            if (ret == AVERROR_EOF)
+                m_audioEOFReached = true;
+            break;
+        }
 
         if (m_packet->stream_index == m_audioStreamIdx) {
             DecodeAudioPacket();  // decodes + unrefs m_packet

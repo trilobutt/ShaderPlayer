@@ -41,9 +41,17 @@ src/
 │                           ProcessFrame(). Outputs AudioData (rms/bass/mid/high/
 │                           beat/spectralCentroid + 256-bin spectrum). No threads.
 │                           Reset() on seek/close/EOF loop.
+├── AudioPlayer.{cpp,h}   - miniaudio WASAPI playback. SPSC ring buffer (524288 mono f32
+│                           ≈10.9s at 48kHz); miniaudio callback drains independently.
+│                           Submit() called from ProcessFrame; SWR resamples if source
+│                           rate differs. Flush() on seek/pause/stop/close/EOF/open.
+│                           MINIAUDIO_IMPLEMENTATION defined in AudioPlayer.cpp only;
+│                           miniaudio.h included BEFORE Common.h (WASAPI COM ordering).
 ├── VideoDecoder.{cpp,h}  - FFmpeg wrapper: Open/Close, DecodeNextFrame() → VideoFrame
-│                           (RGBA8 in data[0]), SeekToTime(). Blocking decode, called
-│                           from main thread in ProcessFrame().
+│                           (RGBA8 in data[0]), SeekToTime(). ReadAudioAhead(n) decodes
+│                           audio eagerly and queues encountered video packets in
+│                           m_videoPktQueue (av_packet_clone); DecodeNextFrame drains
+│                           that queue before calling av_read_frame.
 ├── VideoEncoder.{cpp,h}  - FFmpeg recording: StartRecording/StopRecording, SubmitFrame()
 │                           from RenderFrame() after CopyRenderTargetToStaging().
 ├── D3D11Renderer.{cpp,h} - D3D11 device, swap chain, and fullscreen-triangle pipeline.
@@ -271,10 +279,20 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - Use `FetchContent_Populate` (not `FetchContent_MakeAvailable`) — MakeAvailable runs Spout2's own CMakeLists which builds GL targets that fail with `WIN32_LEAN_AND_MEAN`.
 - `SpoutFrameCount.cpp` needs `<mmsystem.h>` (timeGetDevCaps etc.). Fix: `/UWIN32_LEAN_AND_MEAN` on spout_lib compile options + explicit `winmm` link.
 
+## Audio Playback (AudioPlayer)
+
+- Ring buffer fill is deficit-driven: `targetFill = deviceRate * 2`; `deficit = targetFill − GetBufferedSamples()`. Only submit the deficit — never more. Prevents ring filling at 20× real-time on high-fps main loops.
+- `ReadAudioAhead(deficit)` then drain-loop in `kAudioBuf`-sized chunks. No per-tick cap — must recover full deficit in one ProcessFrame tick (handles Windows background throttling to 1 fps).
+- **Audio EOF loop**: `ReadAudioAhead` sets `m_audioEOFReached` on `AVERROR_EOF`. ProcessFrame detects this and calls `SeekToTime(0.0)` + immediate refill WITHOUT `Flush()` — remaining ring audio plays through, then new audio from position 0 appends seamlessly. Without this, audio goes silent ~2 seconds before video EOF (ring drains while video packet queue keeps video alive).
+- Flush must be called at: seek, pause, stop, close, open-video. The EOF loop path does NOT flush (appends to ring for seamless looping). Missing a flush site at any other transition causes stale audio.
+- `MINIAUDIO_IMPLEMENTATION` + `#include "miniaudio.h"` must appear before any Windows headers (i.e. before `Common.h`) in `AudioPlayer.cpp`. Wrong order breaks INITGUID / WASAPI COM initialisation silently.
+- miniaudio added via FetchContent (GIT_TAG master); `ole32` and `winmm` must be in target_link_libraries.
+- `m_audioPlayer.GetDeviceSampleRate()` returns 0 until `Initialize()` completes — fall back to source rate when computing targetFill.
+
 ## Known Limitations
 
 - Windows-only (Direct3D 11 requirement)
-- No audio **playback** (audio is decoded and analysed for shader reactivity; playback through speakers is not implemented)
+- Audio playback via miniaudio (WASAPI). Volume/mute in transport bar. `AppConfig::audioVolume`/`muteAudio` persisted in config.json.
 - ProRes support depends on FFmpeg build configuration
 - Recording framerate matches playback framerate (no arbitrary output rates)
 

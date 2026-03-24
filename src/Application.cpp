@@ -449,18 +449,49 @@ void Application::ProcessFrame() {
                     const int currentFill = m_audioPlayer.GetBufferedSamples();
                     const int deficit     = targetFill - currentFill;
 
-                    if (deficit > 0) {
-                        // Decode up to 0.25 s of source audio ahead per tick to spread the
-                        // initial fill over ~8 ticks rather than a single burst.
-                        m_decoder.ReadAudioAhead(std::min(deficit, rate / 4));
+                    constexpr int kAudioBuf = 16384;
+                    static float audioBuf[kAudioBuf];
 
-                        constexpr int kAudioBuf = 16384;
-                        static float audioBuf[kAudioBuf];
-                        int got = m_decoder.DrainAudioSamples(
-                                      audioBuf, std::min(deficit, kAudioBuf));
-                        if (got > 0) {
+                    if (deficit > 0) {
+                        // Read ahead exactly what's needed to cover the deficit — no per-tick
+                        // cap. If the main loop was throttled (background, low fps), deficit
+                        // can be large. ReadAudioAhead returns quickly if m_audioPending
+                        // already has enough samples.
+                        m_decoder.ReadAudioAhead(deficit);
+
+                        // Drain and submit in chunks until the deficit is satisfied.
+                        // A single 16384-sample drain can't cover a large deficit on its own
+                        // (e.g., after a 1 fps background stall draining 48000 samples).
+                        int remaining = deficit;
+                        while (remaining > 0) {
+                            int got = m_decoder.DrainAudioSamples(
+                                          audioBuf, std::min(remaining, kAudioBuf));
+                            if (got <= 0) break;
                             m_audioAnalyzer.FeedSamples(audioBuf, got, 1, rate);
                             m_audioPlayer.Submit(audioBuf, got, rate);
+                            remaining -= got;
+                        }
+                    }
+
+                    // ReadAudioAhead hit audio EOF before filling the target. Loop audio
+                    // immediately rather than waiting for video EOF (which is ~2 seconds
+                    // later due to the video packet queue). Without this, the ring buffer
+                    // drains silently for ~2 seconds before the video loop trigger fires.
+                    // SeekToTime resets both audio and video to position 0; we then
+                    // immediately refill the ring from position 0 WITHOUT flushing, so
+                    // any remaining audio in the ring plays through before new audio follows.
+                    if (m_decoder.AudioEOFReached()) {
+                        m_decoder.SeekToTime(0.0);   // clears m_audioEOFReached via FlushDecoder
+                        m_audioAnalyzer.Reset();
+                        int remaining = targetFill;
+                        m_decoder.ReadAudioAhead(remaining);
+                        while (remaining > 0) {
+                            int got = m_decoder.DrainAudioSamples(
+                                          audioBuf, std::min(remaining, kAudioBuf));
+                            if (got <= 0) break;
+                            m_audioAnalyzer.FeedSamples(audioBuf, got, 1, rate);
+                            m_audioPlayer.Submit(audioBuf, got, rate);
+                            remaining -= got;
                         }
                     }
                 }

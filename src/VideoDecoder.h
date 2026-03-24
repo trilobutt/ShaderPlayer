@@ -62,6 +62,10 @@ public:
     // Stops when m_audioPending.size() >= targetSamples or EOF.
     void ReadAudioAhead(int targetSamples);
 
+    // True if the last ReadAudioAhead call hit AVERROR_EOF before filling the
+    // requested samples. Cleared by FlushDecoder (SeekToTime / Close).
+    bool AudioEOFReached() const { return m_audioEOFReached; }
+
 
     // Hardware acceleration
     bool IsHardwareAccelerated() const { return m_hwDeviceCtx != nullptr; }
@@ -111,6 +115,8 @@ private:
     // Video packet queue — populated by ReadAudioAhead(), consumed by DecodeNextFrame().
     // Entries are av_packet_clone()'d; caller must av_packet_free() on pop.
     std::queue<AVPacket*> m_videoPktQueue;
+
+    bool m_audioEOFReached = false;
 };
 
 } // namespace SP
