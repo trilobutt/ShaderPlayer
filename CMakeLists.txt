@@ -105,6 +105,17 @@ else()
 endif()
 
 FetchContent_Declare(
+    miniaudio
+    GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_GetProperties(miniaudio)
+if(NOT miniaudio_POPULATED)
+    FetchContent_Populate(miniaudio)
+endif()
+
+FetchContent_Declare(
     spout2
     GIT_REPOSITORY https://github.com/leadedge/Spout2.git
     GIT_TAG        master
@@ -175,11 +186,13 @@ add_executable(ShaderPlayer WIN32
     src/KeyframeTimeline.cpp
     src/VideoOutputWindow.cpp
     src/SpoutOutput.cpp
+    src/AudioPlayer.cpp
 )
 
 target_include_directories(ShaderPlayer PRIVATE
     src
     ${FFMPEG_INCLUDE_DIRS}
+    ${miniaudio_SOURCE_DIR}
 )
 
 target_link_libraries(ShaderPlayer PRIVATE
@@ -192,6 +205,8 @@ target_link_libraries(ShaderPlayer PRIVATE
     dxgi
     dxguid
     strmiids
+    ole32
+    winmm
     ${FFMPEG_LIBRARIES}
 )
 

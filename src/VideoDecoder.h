@@ -56,7 +56,13 @@ public:
     // Drain accumulated decoded audio samples (mono float, interleaved if channels>1
     // but we always emit mono after SWR conversion). Returns number of floats written.
     int DrainAudioSamples(float* buf, int maxFloats);
-    
+
+    // Read ahead for audio: call av_read_frame in a loop, decode audio packets
+    // eagerly, queue video packets for later consumption by DecodeNextFrame.
+    // Stops when m_audioPending.size() >= targetSamples or EOF.
+    void ReadAudioAhead(int targetSamples);
+
+
     // Hardware acceleration
     bool IsHardwareAccelerated() const { return m_hwDeviceCtx != nullptr; }
     ID3D11Device* GetD3D11Device() const;
@@ -68,6 +74,7 @@ private:
     void OpenAudioStream();   // Called from Open(); non-fatal if no audio stream
     void CloseAudioStream();
     void DecodeAudioPacket(); // Sends m_packet to audio codec, drains frames into m_audioPending
+    void FlushVideoQueue();   // Free all queued video packets
 
     AVFormatContext* m_formatCtx = nullptr;
     AVCodecContext* m_codecCtx = nullptr;
@@ -100,6 +107,10 @@ private:
     SwrContext*      m_swrCtx          = nullptr;
     AVFrame*         m_audioFrame      = nullptr;
     std::vector<float> m_audioPending; // accumulated mono-float samples awaiting drain
+
+    // Video packet queue — populated by ReadAudioAhead(), consumed by DecodeNextFrame().
+    // Entries are av_packet_clone()'d; caller must av_packet_free() on pop.
+    std::queue<AVPacket*> m_videoPktQueue;
 };
 
 } // namespace SP

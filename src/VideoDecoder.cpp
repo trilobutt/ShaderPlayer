@@ -216,7 +216,15 @@ bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     return true;
 }
 
+void VideoDecoder::FlushVideoQueue() {
+    while (!m_videoPktQueue.empty()) {
+        av_packet_free(&m_videoPktQueue.front());
+        m_videoPktQueue.pop();
+    }
+}
+
 void VideoDecoder::FlushDecoder() {
+    FlushVideoQueue();
     if (m_codecCtx)
         avcodec_flush_buffers(m_codecCtx);
     if (m_audioCtx)
@@ -258,12 +266,22 @@ bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
             return false;  // Error
         }
 
-        // Read next packet; also decode audio packets encountered along the way.
+        // Prefer queued video packets (populated by ReadAudioAhead) to avoid
+        // re-reading from the container. Falls through to av_read_frame if the
+        // queue is empty, which also decodes any interleaved audio packets.
         while (true) {
+            if (!m_videoPktQueue.empty()) {
+                AVPacket* queued = m_videoPktQueue.front();
+                m_videoPktQueue.pop();
+                ret = avcodec_send_packet(m_codecCtx, queued);
+                av_packet_free(&queued);
+                if (ret < 0 && ret != AVERROR(EAGAIN)) return false;
+                break;
+            }
+
             ret = av_read_frame(m_formatCtx, m_packet);
             if (ret < 0) {
                 if (ret == AVERROR_EOF) {
-                    // Send flush packet
                     avcodec_send_packet(m_codecCtx, nullptr);
                     break;
                 }
@@ -273,13 +291,10 @@ bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
             if (m_packet->stream_index == m_videoStreamIdx) {
                 ret = avcodec_send_packet(m_codecCtx, m_packet);
                 av_packet_unref(m_packet);
-                if (ret < 0 && ret != AVERROR(EAGAIN)) {
-                    return false;
-                }
+                if (ret < 0 && ret != AVERROR(EAGAIN)) return false;
                 break;
             } else if (m_packet->stream_index == m_audioStreamIdx && m_audioCtx) {
                 DecodeAudioPacket();
-                // Don't break — keep reading until we find a video packet.
                 continue;
             }
             av_packet_unref(m_packet);
@@ -463,6 +478,25 @@ void VideoDecoder::DecodeAudioPacket() {
         if (converted > 0)
             m_audioPending.insert(m_audioPending.end(), tmp.begin(), tmp.begin() + converted);
         av_frame_unref(m_audioFrame);
+    }
+}
+
+void VideoDecoder::ReadAudioAhead(int targetSamples) {
+    if (!IsOpen() || m_audioStreamIdx < 0 || !m_audioCtx) return;
+
+    while (static_cast<int>(m_audioPending.size()) < targetSamples) {
+        int ret = av_read_frame(m_formatCtx, m_packet);
+        if (ret < 0) break;  // EOF or error — stop reading
+
+        if (m_packet->stream_index == m_audioStreamIdx) {
+            DecodeAudioPacket();  // decodes + unrefs m_packet
+        } else if (m_packet->stream_index == m_videoStreamIdx) {
+            // Queue the video packet for DecodeNextFrame to consume later.
+            m_videoPktQueue.push(av_packet_clone(m_packet));
+            av_packet_unref(m_packet);
+        } else {
+            av_packet_unref(m_packet);
+        }
     }
 }
 

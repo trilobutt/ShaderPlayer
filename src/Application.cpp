@@ -112,6 +112,13 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     // Apply audio DSP settings from config
     m_audioAnalyzer.UpdateSettings(m_configManager.GetConfig().audio);
 
+    // Initialise audio playback (non-fatal — continues without audio on headless systems)
+    if (m_audioPlayer.Initialize()) {
+        const auto& cfg = m_configManager.GetConfig();
+        m_audioPlayer.SetVolume(cfg.audioVolume);
+        m_audioPlayer.SetMute(cfg.muteAudio);
+    }
+
     m_lastFrameTime = std::chrono::steady_clock::now();
 
     // Upload initial param values to GPU if a preset is already active
@@ -124,6 +131,7 @@ void Application::Shutdown() {
     StopRecording();
     SaveConfig();
 
+    m_audioPlayer.Shutdown();
     m_spoutOutput.Shutdown();
     m_uiManager.reset();
     m_shaderManager.reset();
@@ -418,22 +426,43 @@ void Application::ProcessFrame() {
                     if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                         m_newVideoFrame = true;
                         m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
-
-                        // Feed audio samples decoded alongside this video frame to the analyzer.
-                        if (m_decoder.HasAudio()) {
-                            constexpr int kAudioBuf = 16384;
-                            static float audioBuf[kAudioBuf];
-                            int got = m_decoder.DrainAudioSamples(audioBuf, kAudioBuf);
-                            if (got > 0)
-                                m_audioAnalyzer.FeedSamples(audioBuf, got, 1,
-                                                            m_decoder.GetAudioSampleRate());
-                        }
                     } else {
                         // End of video, loop
                         m_decoder.SeekToTime(0.0);
                         m_audioAnalyzer.Reset();
+                        m_audioPlayer.Flush();
                     }
                     m_lastFrameTime = now;
+                }
+
+                // Audio: fill the ring buffer to a 2-second target on every tick.
+                // ReadAudioAhead decodes audio eagerly and queues video packets for
+                // DecodeNextFrame. Submission is capped at the deficit so the ring
+                // buffer never fills beyond the target — avoiding the bug where
+                // draining at 60 fps submits audio 20x faster than real time,
+                // exhausting the ring buffer capacity in < 1 second.
+                if (m_decoder.HasAudio()) {
+                    const int rate        = m_decoder.GetAudioSampleRate();
+                    const int deviceRate  = m_audioPlayer.GetDeviceSampleRate();
+                    // 2-second target in device-rate samples (the unit GetBufferedSamples returns)
+                    const int targetFill  = (deviceRate > 0 ? deviceRate : rate) * 2;
+                    const int currentFill = m_audioPlayer.GetBufferedSamples();
+                    const int deficit     = targetFill - currentFill;
+
+                    if (deficit > 0) {
+                        // Decode up to 0.25 s of source audio ahead per tick to spread the
+                        // initial fill over ~8 ticks rather than a single burst.
+                        m_decoder.ReadAudioAhead(std::min(deficit, rate / 4));
+
+                        constexpr int kAudioBuf = 16384;
+                        static float audioBuf[kAudioBuf];
+                        int got = m_decoder.DrainAudioSamples(
+                                      audioBuf, std::min(deficit, kAudioBuf));
+                        if (got > 0) {
+                            m_audioAnalyzer.FeedSamples(audioBuf, got, 1, rate);
+                            m_audioPlayer.Submit(audioBuf, got, rate);
+                        }
+                    }
                 }
             }
         } else {
@@ -619,6 +648,7 @@ bool Application::OpenVideo(const std::string& filepath) {
     m_generativeTime = 0.0f;
     m_currentFrame   = VideoFrame{};
     m_audioAnalyzer.Reset();
+    m_audioPlayer.Flush();
     m_renderer.ReleaseVideoTexture();
 
     if (!m_decoder.Open(filepath)) {
@@ -639,6 +669,7 @@ bool Application::OpenVideo(const std::string& filepath) {
 
 void Application::CloseVideo() {
     Stop();
+    m_audioPlayer.Flush();
     m_decoder.Close();
     m_currentFrame = VideoFrame{};
     m_audioAnalyzer.Reset();
@@ -693,10 +724,12 @@ void Application::Play() {
 
 void Application::Pause() {
     m_playbackState = PlaybackState::Paused;
+    m_audioPlayer.Flush();
 }
 
 void Application::Stop() {
     m_playbackState = PlaybackState::Stopped;
+    m_audioPlayer.Flush();
     if (m_decoder.IsOpen()) {
         m_decoder.SeekToTime(0.0);
         m_decoder.DecodeNextFrame(m_currentFrame);
@@ -715,11 +748,22 @@ void Application::TogglePlayback() {
 
 void Application::SeekTo(double seconds) {
     if (m_decoder.IsOpen()) {
+        m_audioPlayer.Flush();
         m_decoder.SeekToTime(seconds);
         m_decoder.DecodeNextFrame(m_currentFrame);
         m_playbackTime = static_cast<float>(seconds);
         m_audioAnalyzer.Reset();
     }
+}
+
+void Application::SetAudioVolume(float vol) {
+    m_configManager.GetConfig().audioVolume = vol;
+    m_audioPlayer.SetVolume(vol);
+}
+
+void Application::SetAudioMute(bool mute) {
+    m_configManager.GetConfig().muteAudio = mute;
+    m_audioPlayer.SetMute(mute);
 }
 
 bool Application::CompileCurrentShader(const std::string& source) {

@@ -2,6 +2,7 @@
 
 #include "Common.h"
 #include "AudioAnalyzer.h"
+#include "AudioPlayer.h"
 #include "VideoDecoder.h"
 #include "D3D11Renderer.h"
 #include "ShaderManager.h"
@@ -81,6 +82,10 @@ public:
     void UpdateAudioSettings();
     const AudioData& GetAudioData() const { return m_audioData; }
 
+    // Audio playback volume / mute — persisted to config.json
+    void SetAudioVolume(float vol);
+    void SetAudioMute(bool mute);
+
     // Generative resolution — applies config.generativeWidth/Height to the renderer
     void ApplyGenerativeResolution();
     AppConfig& GetConfig() { return m_configManager.GetConfig(); }
@@ -133,6 +138,7 @@ private:
 
     // Components
     AudioAnalyzer m_audioAnalyzer;
+    AudioPlayer   m_audioPlayer;
     AudioData     m_audioData;
     VideoDecoder  m_decoder;
     D3D11Renderer m_renderer;

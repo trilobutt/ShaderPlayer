@@ -192,6 +192,10 @@ struct AppConfig {
     // Audio analysis DSP settings
     AudioSettings audio;
 
+    // Audio playback
+    float audioVolume = 1.0f;
+    bool  muteAudio   = false;
+
     // Spout output
     bool        spoutEnabled    = false;
     std::string spoutSenderName = "ShaderPlayer";

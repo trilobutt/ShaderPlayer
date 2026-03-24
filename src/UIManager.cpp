@@ -1448,6 +1448,31 @@ void UIManager::DrawTransportControls() {
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Recording settings");
         }
+
+        // Volume / mute — only shown when a video with audio is open
+        if (m_app.GetDecoder().HasAudio()) {
+            AppConfig& cfg = m_app.GetConfig();
+
+            ImGui::SameLine();
+            bool wasMute = cfg.muteAudio;
+            if (wasMute) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.55f, 0.1f, 0.1f, 1.0f));
+            if (ImGui::Button(wasMute ? "M##mute" : "V##mute", ImVec2(24, 30))) {
+                m_app.SetAudioMute(!wasMute);
+                m_app.SaveConfig();
+            }
+            if (wasMute) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip(wasMute ? "Unmute audio" : "Mute audio");
+
+            ImGui::SameLine();
+            float vol = cfg.audioVolume;
+            ImGui::SetNextItemWidth(80);
+            if (ImGui::SliderFloat("##volume", &vol, 0.0f, 1.0f, "%.2f")) {
+                m_app.SetAudioVolume(vol);
+                m_app.SaveConfig();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Volume");
+        }
     }
     ImGui::End();
 }
