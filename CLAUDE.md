@@ -197,6 +197,8 @@ If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>`
 
 ### Building
 
+**Build via Visual Studio IDE, not the command line.** CMake generator is Ninja + MSVC (`build.ninja` in `build/`). Running `cmake --build` from a plain shell fails at link with `memcpy` unresolved because the MSVC CRT environment is not set up. Open the project in Visual Studio and build from there.
+
 ```bash
 cmake -B build
 cmake --build build --config Release   # → build/Release/ShaderPlayer.exe
@@ -349,6 +351,7 @@ Audio stream support: `HasAudio()`, `GetAudioSampleRate()`, `DrainAudioSamples(b
 - nlohmann/json `try/catch` must wrap the full processing loop, not just `json::parse` — `get<>()` and `value()` throw `type_error` on type mismatches
 - HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.) or HLSL reserved words (`line`, `point`, `triangle`, `linear`, `sample`, etc.)
 - `std::stoi` throws `std::invalid_argument`/`std::out_of_range` on malformed input — use `std::from_chars` (C++17, `<charconv>`) for parsing untrusted file content; it is noexcept and leaves the output unchanged on failure
+- `AV_CHANNEL_LAYOUT_MONO` is a compound literal — MSVC C++ mode rejects `&AV_CHANNEL_LAYOUT_MONO` directly. Assign to a local first: `AVChannelLayout mono = AV_CHANNEL_LAYOUT_MONO; av_channel_layout_copy(&ctx->ch_layout, &mono);`
 
 ## Shader Parameter System
 
