@@ -3,7 +3,7 @@ name: new-shader
 description: Scaffold a new HLSL shader for ShaderPlayer with correct cbuffer layout and ISF parameter block
 ---
 
-Create a new HLSL shader file in `shaders/` named after the argument provided (e.g. `/new-shader bloom` → `shaders/bloom.hlsl`).
+Create a new HLSL shader file in `default_shaders/` named after the argument provided (e.g. `/new-shader bloom` → `shaders/bloom.hlsl`).
 
 The shader MUST use this exact cbuffer layout — deviating from it silently breaks the pipeline:
 

@@ -130,19 +130,23 @@ struct PS_INPUT {
 float4 main(PS_INPUT input) : SV_TARGET { ... }
 ```
 
-Included shaders in `shaders/`:
+Included shaders in `default_shaders/`:
 - `audio_spectrum.hlsl` - Spectrum bar visualiser with beat flash (SHADER_TYPE: "audio")
 - `audio_bass_pulse.hlsl` - Bass-reactive chromatic aberration + beat flash on video (SHADER_TYPE: "audio")
 - `audio_waveform.hlsl` - Spectrum waveform overlay on video (SHADER_TYPE: "audio")
+- `plasma.hlsl` - Generative animated plasma (SHADER_TYPE: "generative")
 - `passthrough.hlsl` - Direct video pass-through (no effect)
 - `grayscale.hlsl` - Luminance-based desaturation
 - `vignette.hlsl` - Radial darkening
 - `chromatic_aberration.hlsl` - RGB channel offset
 - `sharpen.hlsl` - Convolution-based sharpening
 - `false_colour.hlsl` - Luminance-based false colour mapping
-- `pixelate.hlsl` - Pixelation with optional grid overlay; demonstrates all ISF widget types
-- `receipt_bars.hlsl`, `halftone.hlsl`, `pixel_sdf.hlsl`, `pixel_matrix.hlsl`, `ascii_noise.hlsl` — luma-based pixelated pattern effects
-- `led_panel.hlsl`, `crochet.hlsl`, `lego_bricks.hlsl`, `fluted_glass.hlsl`, `depixelation.hlsl` — advanced stylised effects
+- `focus_peaking.hlsl` - Sobel edge-detection overlay highlighting sharp regions in a chosen colour
+- `rgb_parade.hlsl` - RGB parade scope overlay
+- `safe_areas.hlsl` - Broadcast safe area guides (action/title safe)
+- `vectorscope.hlsl` - Vectorscope display overlay
+- `waveform.hlsl` - Waveform monitor overlay
+- `zebra.hlsl` - Zebra stripes overexposure indicator
 
 ### Audio Data (b1 / t3)
 
@@ -170,7 +174,6 @@ SamplerState noiseSampler : register(s1);   // WRAP addressing
 - UI: View → Noise Generator (`UIManager::DrawNoisePanel` / `m_showNoisePanel`).
 - Config: `AppConfig::noise` (`NoiseSettings { float scale; int textureSize; }`), persisted as `noiseScale`/`noiseTextureSize` in `config.json`.
 - Noise UV pattern for per-cell variation: `cellCoord / 64.0 + cellUv * (freq / 64.0)` — unique slice per cell, `freq` scales zoom.
-- HSV helpers (`rgb2hsv`/`hsv2rgb`) used by some shaders — copy the compact float4-swizzle implementation from `crochet.hlsl` or `lego_bricks.hlsl`.
 
 ## Build Instructions
 
@@ -438,13 +441,13 @@ Live documentation lookup for D3D11, HLSL, FFmpeg, and ImGui APIs.
 
 ### Skill: `/new-shader`
 
-Scaffolds a new `.hlsl` file in `shaders/` with the correct cbuffer layout, ISF JSON block, and parameter packing — preventing the silent bugs documented in the HLSL gotchas above.
+Scaffolds a new `.hlsl` file in `default_shaders/` with the correct cbuffer layout, ISF JSON block, and parameter packing — preventing the silent bugs documented in the HLSL gotchas above.
 
 **Defined in**: `.claude/skills/new-shader/SKILL.md`
 
 **Usage**: `/new-shader bloom` or `/new-shader film grain with intensity and speed controls`
 
-Claude will write `shaders/<name>.hlsl` with ISF INPUTS tailored to the description, correct cbuffer structure, and no intrinsic name shadowing. After creation, use Shader Library → "Scan Folder" to load it.
+Claude will write `default_shaders/<name>.hlsl` with ISF INPUTS tailored to the description, correct cbuffer structure, and no intrinsic name shadowing. After creation, use Shader Library → "Scan Folder" to load it.
 
 ### Subagent: shader-reviewer
 
