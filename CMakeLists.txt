@@ -187,6 +187,7 @@ add_executable(ShaderPlayer WIN32
     src/VideoOutputWindow.cpp
     src/SpoutOutput.cpp
     src/AudioPlayer.cpp
+    resources/ShaderPlayer.rc
 )
 
 target_include_directories(ShaderPlayer PRIVATE

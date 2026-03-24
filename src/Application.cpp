@@ -145,12 +145,21 @@ void Application::Shutdown() {
 }
 
 bool Application::CreateMainWindow(HINSTANCE hInstance, int nCmdShow) {
+    // Load the application icon from embedded resources (IDI_APPICON = 101)
+    HICON hIcon   = static_cast<HICON>(LoadImageW(hInstance, MAKEINTRESOURCEW(101),
+                        IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
+    HICON hIconSm = static_cast<HICON>(LoadImageW(hInstance, MAKEINTRESOURCEW(101),
+                        IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
+                        GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+
     // Register window class
     WNDCLASSEXW wc = {};
     wc.cbSize = sizeof(wc);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
+    wc.hIcon   = hIcon;
+    wc.hIconSm = hIconSm;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = L"ShaderPlayerWindow";
     RegisterClassExW(&wc);
@@ -173,6 +182,13 @@ bool Application::CreateMainWindow(HINSTANCE hInstance, int nCmdShow) {
     if (!m_hwnd) {
         return false;
     }
+
+    // Explicitly push the icons to the window handle — needed for the taskbar
+    // on some Windows 11 configurations even when set on the window class.
+    if (hIcon)
+        SendMessageW(m_hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
+    if (hIconSm)
+        SendMessageW(m_hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIconSm));
 
     ShowWindow(m_hwnd, nCmdShow);
     UpdateWindow(m_hwnd);
