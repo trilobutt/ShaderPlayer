@@ -14,4 +14,4 @@ julia_set: changing C Real and C Imaginaary makes the whole fractal disappear, i
 mandelbulb: cannot select Iterations dropdown
 newton_fractal: cannot select dropdowns
 chromatic_aberration: not doing chromatic aberration
-non_euclidean_lens: not working (exclamation mark)
+non_euclidean_lens: not working (error X3004: undeclared identifier "atanh")
