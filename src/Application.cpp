@@ -355,6 +355,21 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         return;
     }
 
+    // Custom passthrough keybinding (Escape is always hardcoded; this is a secondary binding)
+    {
+        const AppConfig& cfg = m_configManager.GetConfig();
+        if (cfg.passthroughKey != 0) {
+            bool modifiersMatch = true;
+            if ((cfg.passthroughModifiers & MOD_CONTROL) && !ctrl) modifiersMatch = false;
+            if ((cfg.passthroughModifiers & MOD_SHIFT)   && !shift) modifiersMatch = false;
+            if ((cfg.passthroughModifiers & MOD_ALT)     && !alt)   modifiersMatch = false;
+            if (modifiersMatch && vkCode == static_cast<UINT>(cfg.passthroughKey)) {
+                m_shaderManager->SetPassthrough();
+                return;
+            }
+        }
+    }
+
     // Check shader keybindings
     for (int i = 0; i < m_shaderManager->GetPresetCount(); ++i) {
         auto* preset = m_shaderManager->GetPreset(i);
@@ -1082,7 +1097,8 @@ void Application::LoadWorkspacePreset(int index) {
 
 std::string Application::FindBindingConflict(int vkCode, int modifiers,
                                               int excludeShaderIdx,
-                                              int excludeWorkspaceIdx) const
+                                              int excludeWorkspaceIdx,
+                                              bool excludePassthrough) const
 {
     if (vkCode == 0) return {};
 
@@ -1107,6 +1123,14 @@ std::string Application::FindBindingConflict(int vkCode, int modifiers,
         if (vkCode == 'O') return "reserved for Open Video (Ctrl+O)";
         if (vkCode == 'S') return "reserved for Save Shader (Ctrl+S)";
         if (vkCode == 'N') return "reserved for New Shader (Ctrl+N)";
+    }
+
+    // Passthrough keybinding
+    if (!excludePassthrough) {
+        const AppConfig& cfg = m_configManager.GetConfig();
+        if (cfg.passthroughKey != 0 &&
+            cfg.passthroughKey == vkCode && cfg.passthroughModifiers == modifiers)
+            return "conflicts with (No Effect) keybinding";
     }
 
     // Shader presets

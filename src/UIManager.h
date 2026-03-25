@@ -101,6 +101,7 @@ private:
     bool m_showNewShaderModal = false;
     bool m_showKeybindingsPanel = false;
     int m_keybindingPresetIndex = -1;
+    bool m_keybindingIsPassthrough = false;  // true = modal edits the passthrough binding
     std::string m_keybindingConflictMsg;
 
     // Workspace preset UI state

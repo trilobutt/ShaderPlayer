@@ -1110,6 +1110,31 @@ void UIManager::DrawShaderLibrary() {
         if (ImGui::Selectable("(No Effect)", isPassthrough)) {
             m_app.GetShaderManager().SetPassthrough();
         }
+        if (ImGui::IsItemHovered()) {
+            if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                m_keybindingIsPassthrough = true;
+                m_keybindingConflictMsg.clear();
+                m_showKeybindingModal = true;
+            }
+            ImGui::SetTooltip("Double-click to set keybinding");
+        }
+        {
+            const AppConfig& cfg = m_app.GetConfig();
+            if (cfg.passthroughKey != 0) {
+                std::string combo = "[" + m_app.GetComboName(cfg.passthroughKey, cfg.passthroughModifiers) + "]";
+                float textW = ImGui::CalcTextSize(combo.c_str()).x;
+                ImGui::SameLine(ImGui::GetContentRegionMax().x - textW - 4.0f);
+                ImGui::TextDisabled("%s", combo.c_str());
+            }
+        }
+        if (ImGui::BeginPopupContextItem("##passthrough_ctx")) {
+            if (ImGui::MenuItem("Set Keybinding...")) {
+                m_keybindingIsPassthrough = true;
+                m_keybindingConflictMsg.clear();
+                m_showKeybindingModal = true;
+            }
+            ImGui::EndPopup();
+        }
 
         auto& manager = m_app.GetShaderManager();
         const int presetCount = manager.GetPresetCount();
@@ -1152,6 +1177,7 @@ void UIManager::DrawShaderLibrary() {
             if (ImGui::IsItemHovered()) {
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                     m_keybindingPresetIndex = i;
+                    m_keybindingIsPassthrough = false;
                     m_keybindingConflictMsg.clear();
                     m_showKeybindingModal = true;
                 }
@@ -1168,6 +1194,7 @@ void UIManager::DrawShaderLibrary() {
             if (ImGui::BeginPopupContextItem("##ctx")) {
                 if (ImGui::MenuItem("Set Keybinding...")) {
                     m_keybindingPresetIndex = i;
+                    m_keybindingIsPassthrough = false;
                     m_showKeybindingModal = true;
                     m_keybindingConflictMsg.clear();
                 }
@@ -1563,11 +1590,14 @@ void UIManager::DrawKeybindingModal() {
 
     if (ImGui::BeginPopupModal("Set Keybinding", &m_showKeybindingModal,
                                ImGuiWindowFlags_AlwaysAutoResize)) {
-        auto* preset = m_app.GetShaderManager().GetPreset(m_keybindingPresetIndex);
-        if (!preset) {
-            m_showKeybindingModal = false;
-            ImGui::EndPopup();
-            return;
+        ShaderPreset* preset = nullptr;
+        if (!m_keybindingIsPassthrough) {
+            preset = m_app.GetShaderManager().GetPreset(m_keybindingPresetIndex);
+            if (!preset) {
+                m_showKeybindingModal = false;
+                ImGui::EndPopup();
+                return;
+            }
         }
 
         // Edge-detection state - reset each time the modal (re)opens
@@ -1582,7 +1612,10 @@ void UIManager::DrawKeybindingModal() {
             s_wasOpen     = true;
         }
 
-        ImGui::Text("Setting keybinding for: %s", preset->name.c_str());
+        if (m_keybindingIsPassthrough)
+            ImGui::Text("Setting keybinding for: (No Effect)");
+        else
+            ImGui::Text("Setting keybinding for: %s", preset->name.c_str());
         ImGui::Separator();
         ImGui::TextDisabled("Hold modifiers and press a key   |   Esc = cancel   |   Del = clear");
         ImGui::Spacing();
@@ -1642,12 +1675,20 @@ void UIManager::DrawKeybindingModal() {
         if (escDown && !s_prevEsc) {
             m_keybindingConflictMsg.clear();
             m_showKeybindingModal = false;
+            m_keybindingIsPassthrough = false;
             s_wasOpen = false;
         } else if (delDown && !s_prevDel) {
-            preset->shortcutKey       = 0;
-            preset->shortcutModifiers = 0;
+            if (m_keybindingIsPassthrough) {
+                AppConfig& cfg = m_app.GetConfig();
+                cfg.passthroughKey       = 0;
+                cfg.passthroughModifiers = 0;
+            } else {
+                preset->shortcutKey       = 0;
+                preset->shortcutModifiers = 0;
+            }
             m_keybindingConflictMsg.clear();
             m_showKeybindingModal = false;
+            m_keybindingIsPassthrough = false;
             m_app.SaveConfig();
             s_wasOpen = false;
         } else if (triggerKey != 0 && triggerKey != s_prevTrigger) {
@@ -1656,17 +1697,25 @@ void UIManager::DrawKeybindingModal() {
             if (alt)   mods |= MOD_ALT;
             if (shift) mods |= MOD_SHIFT;
 
-            std::string conflict = m_app.FindBindingConflict(triggerKey, mods,
-                                                              m_keybindingPresetIndex, -1);
+            std::string conflict = m_keybindingIsPassthrough
+                ? m_app.FindBindingConflict(triggerKey, mods, -1, -1, /*excludePassthrough=*/true)
+                : m_app.FindBindingConflict(triggerKey, mods, m_keybindingPresetIndex, -1);
             if (!conflict.empty()) {
                 // Conflict: show warning, do NOT commit
                 m_keybindingConflictMsg = conflict + " — choose a different key.";
             } else {
                 // No conflict: commit, save, close
-                preset->shortcutKey = triggerKey;
-                preset->shortcutModifiers = mods;
+                if (m_keybindingIsPassthrough) {
+                    AppConfig& cfg = m_app.GetConfig();
+                    cfg.passthroughKey       = triggerKey;
+                    cfg.passthroughModifiers = mods;
+                } else {
+                    preset->shortcutKey       = triggerKey;
+                    preset->shortcutModifiers = mods;
+                }
                 m_keybindingConflictMsg.clear();
                 m_showKeybindingModal = false;
+                m_keybindingIsPassthrough = false;
                 m_app.SaveConfig();
                 s_wasOpen = false;
             }
@@ -1716,14 +1765,42 @@ void UIManager::DrawKeybindingsPanel() {
         auto& manager = m_app.GetShaderManager();
         const int count = manager.GetPresetCount();
 
-        if (count == 0) {
-            ImGui::TextDisabled("No shaders loaded.");
-        } else if (ImGui::BeginTable("kb_table", 2,
-                       ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                       ImGuiTableFlags_SizingStretchProp)) {
+        if (ImGui::BeginTable("kb_table", 2,
+                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                   ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("Shader", ImGuiTableColumnFlags_WidthStretch, 0.6f);
             ImGui::TableSetupColumn("Binding", ImGuiTableColumnFlags_WidthStretch, 0.4f);
             ImGui::TableHeadersRow();
+
+            // (No Effect) / passthrough row
+            {
+                ImGui::TableNextRow();
+                ImGui::PushID("passthrough_kb");
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted("(No Effect)");
+                ImGui::TableSetColumnIndex(1);
+                const AppConfig& cfg = m_app.GetConfig();
+                std::string passthroughLabel;
+                if (cfg.passthroughKey != 0)
+                    passthroughLabel = m_app.GetComboName(cfg.passthroughKey, cfg.passthroughModifiers);
+                else
+                    passthroughLabel = "\xe2\x80\x94";
+                if (ImGui::Selectable(passthroughLabel.c_str(), false,
+                                      ImGuiSelectableFlags_SpanAllColumns)) {
+                    m_keybindingIsPassthrough = true;
+                    m_keybindingConflictMsg.clear();
+                    m_showKeybindingModal = true;
+                }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Click to set keybinding");
+                ImGui::PopID();
+            }
+
+            if (count == 0) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextDisabled("No shaders loaded.");
+            }
 
             for (int i = 0; i < count; ++i) {
                 const ShaderPreset* preset = manager.GetPreset(i);
@@ -1745,6 +1822,7 @@ void UIManager::DrawKeybindingsPanel() {
                 if (ImGui::Selectable(label.c_str(), false,
                                       ImGuiSelectableFlags_SpanAllColumns)) {
                     m_keybindingPresetIndex = i;
+                    m_keybindingIsPassthrough = false;
                     m_keybindingConflictMsg.clear();
                     m_showKeybindingModal = true;
                 }

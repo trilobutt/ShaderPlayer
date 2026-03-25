@@ -196,6 +196,10 @@ struct AppConfig {
     float audioVolume = 1.0f;
     bool  muteAudio   = false;
 
+    // Passthrough keybinding (secondary; Escape is always hardcoded)
+    int passthroughKey       = 0;
+    int passthroughModifiers = 0;
+
     // Spout output
     bool        spoutEnabled    = false;
     std::string spoutSenderName = "ShaderPlayer";

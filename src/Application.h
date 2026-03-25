@@ -108,9 +108,11 @@ public:
     // Returns a human-readable conflict description, or empty string if the binding is free.
     // excludeShaderIdx: shader preset index to skip (-1 = check all)
     // excludeWorkspaceIdx: workspace preset index to skip (-1 = check all)
+    // excludePassthrough: skip the passthrough binding (use when editing it)
     std::string FindBindingConflict(int vkCode, int modifiers,
                                      int excludeShaderIdx,
-                                     int excludeWorkspaceIdx) const;
+                                     int excludeWorkspaceIdx,
+                                     bool excludePassthrough = false) const;
 
     void LoadWorkspacePreset(int index);
 

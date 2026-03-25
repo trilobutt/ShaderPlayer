@@ -165,7 +165,9 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"audioBeatDecay",       c.audio.beatDecay},
         {"audioSmoothing",       c.audio.smoothing},
         {"audioVolume",          c.audioVolume},
-        {"muteAudio",            c.muteAudio}
+        {"muteAudio",            c.muteAudio},
+        {"passthroughKey",       c.passthroughKey},
+        {"passthroughModifiers", c.passthroughModifiers}
     };
 }
 
@@ -194,6 +196,8 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("audioSmoothing"))       j.at("audioSmoothing").get_to(c.audio.smoothing);
     if (j.contains("audioVolume"))          j.at("audioVolume").get_to(c.audioVolume);
     if (j.contains("muteAudio"))            j.at("muteAudio").get_to(c.muteAudio);
+    if (j.contains("passthroughKey"))       j.at("passthroughKey").get_to(c.passthroughKey);
+    if (j.contains("passthroughModifiers")) j.at("passthroughModifiers").get_to(c.passthroughModifiers);
 }
 
 ConfigManager::ConfigManager() = default;
