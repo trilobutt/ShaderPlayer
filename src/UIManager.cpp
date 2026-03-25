@@ -834,8 +834,8 @@ void UIManager::DrawShaderParameters() {
         m_app.OnParamChanged();
     }
 
-    // VIDEO BLEND — shown only when this is a generative shader AND video is loaded.
-    if (preset->isGenerative && m_app.GetDecoder().IsOpen()) {
+    // VIDEO BLEND — shown whenever video is loaded.
+    if (m_app.GetDecoder().IsOpen()) {
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
