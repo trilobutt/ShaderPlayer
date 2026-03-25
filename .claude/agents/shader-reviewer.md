@@ -92,14 +92,20 @@ Flag any of:
 - Total non-audio floats exceeding 16 (extras are silently dropped)
 - `audio` type used in a non-audio shader (SHADER_TYPE must be "audio")
 
-### 7. ISF `long` type correctness
+### 7. ISF `point2d` and `color` MIN/MAX
+
+`ShaderParam::min`/`max` are scalar floats. The parser reads `MIN`/`MAX`/`STEP` only when the JSON value `is_number()`. Array-form values (e.g. `"MIN": [0.0, 0.0]`) are silently skipped — UI bounds will be stuck at defaults (0.0/1.0).
+
+Flag any `point2d` or `color` INPUTS entry where `MIN` or `MAX` is written as a JSON array. The fix is to replace the array with a scalar, or omit the field entirely.
+
+### 8. ISF `long` type correctness
 
 For every `long` INPUTS entry:
 - `VALUES` must be an array of **integers** (e.g. `[0, 1, 2]`). Strings in `VALUES` cause a runtime crash in the parser.
 - `LABELS` must be an array of **strings** (e.g. `["Add", "Multiply"]`), parallel to `VALUES`.
 - `DEFAULT` must be an integer that matches one of the `VALUES` entries.
 
-### 8. HLSL intrinsic and reserved word shadowing
+### 9. HLSL intrinsic and reserved word shadowing
 
 Flag any ISF `NAME` field, local variable, or function parameter that matches an HLSL built-in intrinsic or reserved word.
 
@@ -107,7 +113,7 @@ Forbidden intrinsics: `abs`, `acos`, `all`, `any`, `asin`, `atan`, `atan2`, `cei
 
 Forbidden reserved words: `line`, `point`, `triangle`, `linear`, `sample`, `centroid`, `nointerpolation`, `precise`, `shared`, `groupshared`, `uniform`, `volatile`
 
-### 9. UV sampling
+### 10. UV sampling
 
 Shaders should sample from `input.uv` (normalised 0..1). Flag direct use of `input.pos.xy` as a texture UV without dividing by `resolution`.
 

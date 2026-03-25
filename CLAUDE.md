@@ -387,6 +387,8 @@ After parsing, a `#define` preamble is prepended to the source passed to `D3DCom
 
 The original source on disk is never modified.
 
+`ShaderParam::min`/`max`/`step` are **scalar floats**. `ParseISFParams` reads `MIN`/`MAX`/`STEP` only when the JSON value `is_number()` — array-form values (e.g. `"MIN": [0.0, 0.0]` for `point2d`) are silently skipped and the field stays at its default (0.0/1.0/0.01). Write scalar `MIN`/`MAX` for all param types, including `point2d` and `color`, if you want non-default UI bounds. Array-form used to throw `nlohmann::detail::type_error` and silently discard the entire param list; the `is_number()` guard fixed this.
+
 ### Cbuffer Packing Rules
 
 Parameters packed into `custom[16]` (= `float4 custom[4]`) sequentially:

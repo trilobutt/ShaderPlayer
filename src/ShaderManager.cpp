@@ -411,9 +411,9 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
                 continue;  // Skip cbuffer alignment/offset logic below.
             } else continue;  // Unknown type; skip
 
-            p.min  = input.value("MIN",  0.0f);
-            p.max  = input.value("MAX",  1.0f);
-            p.step = input.value("STEP", 0.01f);
+            if (input.contains("MIN")  && input["MIN"].is_number())  p.min  = input["MIN"].get<float>();
+            if (input.contains("MAX")  && input["MAX"].is_number())  p.max  = input["MAX"].get<float>();
+            if (input.contains("STEP") && input["STEP"].is_number()) p.step = input["STEP"].get<float>();
 
             if (p.type == ShaderParamType::Long && input.contains("VALUES")) {
                 for (const auto& v : input["VALUES"])

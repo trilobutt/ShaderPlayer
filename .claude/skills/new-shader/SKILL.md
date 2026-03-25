@@ -76,7 +76,7 @@ Use descriptive names instead: `blurRadius`, `edgeStrength`, `tintColour`, `nois
 - `bool` — checkbox, `DEFAULT` true/false
 - `long` — dropdown/integer, `VALUES` array of **integers**, `LABELS` array of strings (parallel), `DEFAULT` integer. Never put strings in `VALUES`.
 - `color` — RGBA picker, `DEFAULT` [r,g,b,a]
-- `point2d` — XY pad, `MIN`/`MAX`/`DEFAULT` [x,y]
+- `point2d` — XY pad, `DEFAULT` [x,y]; `MIN`/`MAX` must be **scalar** floats (the parser only reads scalar values — array-form `"MIN": [0.0, 0.0]` is silently ignored and bounds default to 0.0/1.0)
 - `event` — momentary button (no DEFAULT, not keyframeable)
 - `audio` — AudioBand read-only meter; requires `"BAND"` field: one of `"rms"`, `"bass"`, `"mid"`, `"high"`, `"beat"`, `"centroid"`. Consumes no `custom[]` slot. Only valid when `SHADER_TYPE` is `"audio"`.
 
