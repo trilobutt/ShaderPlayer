@@ -8,7 +8,8 @@
         {"NAME": "lacunarity",     "LABEL": "Lacunarity",    "TYPE": "float", "MIN": 1.2,  "MAX": 4.0,  "DEFAULT": 2.0},
         {"NAME": "trailFade",      "LABEL": "Trail Length",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6},
         {"NAME": "stepSz",         "LABEL": "Step Size",     "TYPE": "float", "MIN": 0.5,  "MAX": 8.0,  "DEFAULT": 2.0},
-        {"NAME": "colourByAngle",  "LABEL": "Colour By Angle","TYPE": "bool", "DEFAULT": true}
+        {"NAME": "colourByAngle",  "LABEL": "Colour By Angle","TYPE": "bool", "DEFAULT": true},
+        {"NAME": "FlowTint",       "LABEL": "Flow Tint",      "TYPE": "color","DEFAULT": [0.6,0.9,1.0,1.0]}
     ]
 }*/
 
@@ -99,10 +100,9 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float3 col;
     if (colourByAngle) {
         float hue = frac(ang0 / (3.14159265 * 2.0) + 0.5);
-        col = hsv2rgb(float3(hue, 0.75, brightness));
+        col = hsv2rgb(float3(hue, 0.75, brightness)) * FlowTint.rgb;
     } else {
-        // Subtle teal-white palette
-        col = lerp(float3(0.0, 0.05, 0.15), float3(0.6, 0.9, 1.0), brightness);
+        col = lerp(float3(0.0, 0.0, 0.0), FlowTint.rgb, brightness);
     }
 
     return float4(saturate(col), 1.0);

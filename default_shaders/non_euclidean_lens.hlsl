@@ -40,6 +40,12 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
+// HLSL has no atanh intrinsic
+float myAtanh(float x) {
+    x = clamp(x, -0.9999, 0.9999);
+    return 0.5 * log((1.0 + x) / (1.0 - x));
+}
+
 float2 applyEdgeMode(float2 uv, int mode) {
     if (mode == 1) { // mirror
         uv = abs(frac(uv * 0.5) * 2.0 - 1.0);
@@ -88,7 +94,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float rLen  = length(p);
         float normR = rLen / (diskR * max(abs(k), 0.01) + 1.0);
         // Exponential stretch: r → atanh(r/R) * R (geodesic distance in Poincaré disk)
-        float stretched = atanh(clamp(normR, 0.0, 0.999)) * (diskR + 0.001);
+        float stretched = myAtanh(clamp(normR, 0.0, 0.999)) * (diskR + 0.001);
         warped = (rLen > 0.0001) ? (p / rLen) * stretched : p;
     } else {
         // Toroidal: fold coordinates with twist proportional to curvature

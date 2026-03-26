@@ -1,10 +1,14 @@
 /*{
   "SHADER_TYPE": "audio",
   "INPUTS": [
-    { "NAME": "SymmetryOrder", "TYPE": "long",  "MIN": 1,   "MAX": 8,    "DEFAULT": 4,   "LABEL": "Symmetry" },
+    { "NAME": "SymmetryOrder", "TYPE": "long",
+      "VALUES": [1,2,3,4,5,6,8,12], "LABELS": ["1","2","3","4","5","6","8","12"],
+      "DEFAULT": 4, "LABEL": "Symmetry" },
     { "NAME": "InnerRadius",   "TYPE": "float", "MIN": 0.0, "MAX": 0.45, "DEFAULT": 0.08,"LABEL": "Inner Radius" },
     { "NAME": "RotSpeed",      "TYPE": "float", "MIN": -2.0,"MAX": 2.0,  "DEFAULT": 0.2, "LABEL": "Rotation Speed" },
     { "NAME": "GlowWidth",     "TYPE": "float", "MIN": 0.5, "MAX": 8.0,  "DEFAULT": 3.0, "LABEL": "Glow Width" },
+    { "NAME": "CoreColour",    "TYPE": "color",             "DEFAULT": [0.2, 0.5, 1.0, 1.0], "LABEL": "Core Colour" },
+    { "NAME": "OuterColour",   "TYPE": "color",             "DEFAULT": [1.0, 0.25, 0.05, 1.0], "LABEL": "Outer Colour" },
     { "NAME": "AudioBassIn",   "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
     { "NAME": "AudioHighIn",   "TYPE": "audio", "BAND": "high", "LABEL": "Treble" }
   ]
@@ -54,34 +58,41 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Fold angle into one sector of N-fold symmetry.
     float sym          = float(SymmetryOrder);
     float sectorAngle  = 2.0 * PI / sym;
-    // Normalise angle to [0, sectorAngle], then mirror at the midpoint.
     float a = fmod(angle + 64.0 * PI, sectorAngle);
-    float t = a / sectorAngle;                          // [0, 1] within sector
-    t = 1.0 - abs(t * 2.0 - 1.0);                      // mirror → [0, 1] folded
+    float t = a / sectorAngle;
+    t = 1.0 - abs(t * 2.0 - 1.0);
 
-    // Sample spectrum at this angular position (0 = low, 1 = high freq).
+    // Sample spectrum at this angular position.
     float specVal = spectrumTexture.SampleLevel(videoSampler, float2(t, 0.5), 0).r;
 
-    // Bass widens the core; target ring radius is set by spectrum amplitude.
-    float coreR   = AudioBassIn * 0.12;
+    // Bass widens the core more aggressively.
+    float coreR   = AudioBassIn * 0.28;
     float targetR = InnerRadius + coreR + specVal * max(0.0, 0.42 - InnerRadius - coreR);
 
     // Treble adds a fine inner ring.
-    float trebleR = InnerRadius * 0.4 + AudioHighIn * 0.06;
+    float trebleR = InnerRadius * 0.4 + AudioHighIn * 0.1;
 
-    // Radial glow at the target ring.
+    // Radial glow.
     float dMain   = abs(r - targetR);
     float dTreble = abs(r - trebleR);
-    float glowMain   = exp(-dMain   * dMain   * GlowWidth * 80.0)  * (specVal + 0.1);
-    float glowTreble = exp(-dTreble * dTreble * GlowWidth * 300.0) * AudioHighIn;
+    float glowMain   = exp(-dMain   * dMain   * GlowWidth * 80.0)  * (specVal + 0.15) * (1.0 + AudioBassIn * 2.0);
+    float glowTreble = exp(-dTreble * dTreble * GlowWidth * 300.0) * AudioHighIn * 2.5;
 
-    // Colour: hue varies with angular position and slowly shifts over time.
-    float hue    = t * 0.55 + specVal * 0.25 + time * 0.04;
-    float3 col   = hsv2rgb(hue, 0.9, glowMain + glowTreble * 0.6);
+    // Hue cycling with user colour tint.
+    float hue  = t * 0.55 + specVal * 0.25 + time * 0.04;
+    float3 hsvCol = hsv2rgb(hue, 0.9, glowMain + glowTreble * 0.6);
 
-    // Luminous core that pulses with bass.
-    float coreGlow = exp(-r * r / max(0.0001, coreR * coreR + 0.002)) * AudioBassIn * 2.0;
-    col += hsv2rgb(0.62 + AudioBassIn * 0.15, 0.6, coreGlow);
+    // Modulate towards user colours based on radial position.
+    float radialT = saturate(r / max(targetR + 0.05, 0.001));
+    float3 userCol = lerp(CoreColour.rgb, OuterColour.rgb, radialT);
+    float3 col = lerp(hsvCol, hsvCol * userCol * 2.0, 0.55);
 
-    return float4(col, 1.0);
+    // Luminous core that pulses hard with bass.
+    float coreGlow = exp(-r * r / max(0.0001, coreR * coreR + 0.003)) * AudioBassIn * 3.5;
+    col += CoreColour.rgb * hsv2rgb(0.62 + AudioBassIn * 0.15, 0.6, coreGlow);
+
+    // Extra brightness boost on strong bass.
+    col *= 1.0 + AudioBassIn * 1.5;
+
+    return float4(saturate(col), 1.0);
 }

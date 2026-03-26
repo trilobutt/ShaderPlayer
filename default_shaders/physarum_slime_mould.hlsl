@@ -7,7 +7,8 @@
         {"NAME": "decayRate",      "LABEL": "Decay Rate",    "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.4},
         {"NAME": "diffRadius",     "LABEL": "Diffuse Radius","TYPE": "float", "MIN": 0.001,"MAX": 0.05, "DEFAULT": 0.01},
         {"NAME": "attractorCount", "LABEL": "Attractors",    "TYPE": "long",
-         "VALUES": [4,8,12,16,24,32], "LABELS": ["4","8","12","16","24","32"], "DEFAULT": 12}
+         "VALUES": [4,8,12,16,24,32], "LABELS": ["4","8","12","16","24","32"], "DEFAULT": 12},
+        {"NAME": "TrailColour",    "LABEL": "Trail Colour",   "TYPE": "color", "DEFAULT": [0.7,1.0,0.4,1.0]}
     ]
 }*/
 
@@ -108,9 +109,9 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Combine: bright trail + node glow
     float brightness = trailSDF * wavePulse * decay + nodeGlow;
 
-    // Colour: yellow-green network on dark background
+    // Colour: trail colour on dark background
     float3 trailCol = lerp(float3(0.0, 0.05, 0.02),
-                           float3(0.7, 1.0, 0.4),
+                           TrailColour.rgb,
                            saturate(brightness));
     trailCol = lerp(trailCol, float3(1.0, 0.9, 0.5), nodeGlow * 0.8);
 

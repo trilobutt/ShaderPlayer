@@ -1,7 +1,7 @@
 /*{
   "SHADER_TYPE": "video",
   "INPUTS": [
-    { "NAME": "BladeCount",        "TYPE": "long",  "MIN": 3,   "MAX": 12,  "DEFAULT": 6,  "LABEL": "Aperture Blades" },
+    { "NAME": "BladeCount",        "TYPE": "long",  "VALUES": [3,4,5,6,7,8,9,10,11,12], "LABELS": ["3","4","5","6","7","8","9","10","11","12"], "DEFAULT": 6, "LABEL": "Aperture Blades" },
     { "NAME": "DiffractScale",     "TYPE": "float", "MIN": 0.05,"MAX": 2.0, "DEFAULT": 0.4,"LABEL": "Starburst Scale" },
     { "NAME": "DiffractIntensity", "TYPE": "float", "MIN": 0.0, "MAX": 3.0, "DEFAULT": 1.0,"LABEL": "Diffraction Intensity" },
     { "NAME": "WavelengthSpread",  "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.4,"LABEL": "Wavelength Spread (Colour)" },

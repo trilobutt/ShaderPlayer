@@ -5,7 +5,8 @@
         {"NAME": "updateHz",       "LABEL": "Update Rate Hz", "TYPE": "float", "MIN": 0.1,  "MAX": 8.0,  "DEFAULT": 2.0},
         {"NAME": "initialDensity", "LABEL": "Density",        "TYPE": "float", "MIN": 0.1,  "MAX": 0.9,  "DEFAULT": 0.45},
         {"NAME": "ageSaturation",  "LABEL": "Age Colour",     "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.8},
-        {"NAME": "wrapEdges",      "LABEL": "Wrap Edges",     "TYPE": "bool",  "DEFAULT": true}
+        {"NAME": "wrapEdges",      "LABEL": "Wrap Edges",     "TYPE": "bool",  "DEFAULT": true},
+        {"NAME": "CellTint",       "LABEL": "Cell Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]}
     ]
 }*/
 
@@ -131,7 +132,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Hue: red (new) → yellow → green → cyan → blue (long-lived)
     float hue = float(age - 1) / 4.0 * 0.65;  // 0=red, 0.65=blue
     float sat = ageSaturation;
-    float3 col = hsv2rgb(float3(hue, sat, 0.95));
+    float3 col = hsv2rgb(float3(hue, sat, 0.95)) * CellTint.rgb;
 
     return float4(saturate(col), 1.0);
 }

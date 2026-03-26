@@ -1,9 +1,9 @@
 /*{
   "SHADER_TYPE": "generative",
   "INPUTS": [
-    { "NAME": "SchlaefliP",  "TYPE": "long",  "MIN": 3,    "MAX": 8,   "DEFAULT": 5,            "LABEL": "p (polygon sides)" },
-    { "NAME": "SchlaefliQ",  "TYPE": "long",  "MIN": 3,    "MAX": 8,   "DEFAULT": 4,            "LABEL": "q (polygons/vertex)" },
-    { "NAME": "MobiusSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 0.5, "DEFAULT": 0.06,         "LABEL": "Möbius Drift Speed" },
+    { "NAME": "SchlaefliP",  "TYPE": "long",  "VALUES": [3,4,5,6,7,8], "LABELS": ["3","4","5","6","7","8"], "DEFAULT": 5, "LABEL": "p (polygon sides)" },
+    { "NAME": "SchlaefliQ",  "TYPE": "long",  "VALUES": [3,4,5,6,7,8], "LABELS": ["3","4","5","6","7","8"], "DEFAULT": 4, "LABEL": "q (polygons/vertex)" },
+    { "NAME": "MobiusSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 3.0, "DEFAULT": 0.06,         "LABEL": "Möbius Drift Speed" },
     { "NAME": "EdgeWidth",   "TYPE": "float", "MIN": 0.001,"MAX": 0.03,"DEFAULT": 0.006,        "LABEL": "Edge Width" },
     { "NAME": "TileColourA", "TYPE": "color",                           "DEFAULT": [0.15,0.35,0.75,1], "LABEL": "Tile Colour A" },
     { "NAME": "TileColourB", "TYPE": "color",                           "DEFAULT": [0.75,0.18,0.18,1], "LABEL": "Tile Colour B" }
@@ -63,18 +63,19 @@ float2 rot2(float2 z, float a) {
                   z.x * sin(a) + z.y * cos(a));
 }
 
+// tanh is not a ps_5_0 intrinsic — manual implementation
+float myTanh(float x) { float e2 = exp(2.0 * x); return (e2 - 1.0) / (e2 + 1.0); }
+
 // Centre of the fundamental {p,q} polygon in the Poincaré disc.
 // r = tanh(acosh( cos(PI/q) / sin(PI/p) ) / 2)
 float fundamentalR(int p, int q) {
-    float cp = cos(PI / float(p));
-    float sq = sin(PI / float(q));
     float sp = sin(PI / float(p));
     float cq = cos(PI / float(q));
     // inradius of the fundamental domain
     float cosA = cq / sp;
     if (cosA <= 1.0) cosA = 1.001;
     float acoshVal = log(cosA + sqrt(cosA * cosA - 1.0));
-    return tanh(acoshVal * 0.5);
+    return myTanh(acoshVal * 0.5);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
@@ -107,23 +108,23 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     [loop]
     for (int iter = 0; iter < MAX_ITER; ++iter) {
-        // Reflect across the polygon edge at angle 0 (real axis) using inversion.
-        // Move the fundamental domain centre to the origin.
         float2 centre = float2(polyR, 0.0);
         float2 zr     = mobius(z, centre);
 
-        // If inside the polygon, find which sector and rotate to the canonical one.
-        float ang = atan2(zr.y, zr.x);
+        float ang     = atan2(zr.y, zr.x);
         float sectorF = floor((ang + PI) / rotAng);
-        // Rotate z back by integer multiples of 2PI/p to reduce to sector 0.
+
+        // Each sector step crosses a polygon edge — odd crossings flip parity.
+        parity ^= (int(abs(sectorF)) & 1);
+
         float rotBack = -sectorF * rotAng;
         float2 zRot = rot2(zr, rotBack);
-        // Move back out of the canonical polygon.
         float2 zOut = mobius(zRot, float2(-polyR, 0.0));
 
-        if (abs(zOut.y) < 0.0001 && zOut.x < polyR) break;
+        // Relaxed tolerance so convergence fires reliably.
+        if (abs(zOut.y) < 0.002 && zOut.x < polyR * 1.05) break;
 
-        // Reflect across the real axis.
+        // Reflect across real axis — each reflection also flips parity.
         float2 zRef = reflectReal(zOut);
         parity = 1 - parity;
         z = zRef;

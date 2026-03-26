@@ -3,7 +3,8 @@
     "SHADER_TYPE": "generative",
     "INPUTS": [
         { "NAME": "BulbPower",  "LABEL": "Bulb Power",    "TYPE": "float", "DEFAULT": 8.0, "MIN": 2.0,  "MAX": 16.0, "STEP": 0.1 },
-        { "NAME": "DEIter",     "LABEL": "DE Iterations", "TYPE": "long",  "DEFAULT": 10,  "MIN": 4,    "MAX": 16              },
+        { "NAME": "DEIter",     "LABEL": "DE Iterations", "TYPE": "long",
+          "VALUES": [4,6,8,10,12,16], "LABELS": ["4","6","8","10","12","16"], "DEFAULT": 10  },
         { "NAME": "OrbitSpeed", "LABEL": "Orbit Speed",   "TYPE": "float", "DEFAULT": 0.08,"MIN": 0.0,  "MAX": 1.0,  "STEP": 0.01 },
         { "NAME": "GlowColour", "LABEL": "Glow Colour",   "TYPE": "color", "DEFAULT": [0.2, 0.5, 1.0, 1.0]                    }
     ]

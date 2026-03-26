@@ -7,7 +7,9 @@
         {"NAME": "noiseAmplitude",  "LABEL": "Noise Amplitude",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.5},
         {"NAME": "colourByPressure","LABEL": "Colour by Pressure","TYPE": "bool",  "DEFAULT": true},
         {"NAME": "formulation",     "LABEL": "Geometry",         "TYPE": "long",
-         "VALUES": [0,1,2], "LABELS": ["Radial","Linear","Branching"], "DEFAULT": 0}
+         "VALUES": [0,1,2], "LABELS": ["Radial","Linear","Branching"], "DEFAULT": 0},
+        {"NAME": "animSpeed",       "LABEL": "Anim Speed",       "TYPE": "float", "MIN": 0.0, "MAX": 5.0, "DEFAULT": 1.0},
+        {"NAME": "FluidColour",     "LABEL": "Fluid Colour",     "TYPE": "color", "DEFAULT": [0.3,0.7,1.0,1.0]}
     ]
 }*/
 
@@ -55,7 +57,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 p   = (uv - 0.5) * float2(ar, 1.0);
 
     // Growth radius driven by injection rate + time
-    float growthR = injectionRate * (0.3 + frac(time * 0.08) * 0.5);
+    float growthR = injectionRate * (0.3 + frac(time * 0.08 * animSpeed) * 0.5);
 
     // Angular frequency for dominant unstable mode
     // surfaceTension stabilises short wavelengths: low tension → more/finer fingers
@@ -96,7 +98,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float3 col3 = float3(0,0,0);
         if (p.x / ar < frontX) {
             float pressure = 1.0 - (p.x / ar + 0.5) / max(frontX + 0.5, 0.01);
-            col3 = colourByPressure ? heatmap(pressure) : float3(0.3, 0.7, 1.0);
+            col3 = colourByPressure ? heatmap(pressure) : FluidColour.rgb;
         }
         col3 += exp(-distToFront * 30.0) * float3(1.0, 1.0, 0.8) * 0.5; // interface glow
         return float4(saturate(col3), 1.0);
@@ -125,7 +127,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     if (colourByPressure) {
         col = inside ? heatmap(pressure * viscosityRatio * 4.0) : float3(0.02, 0.02, 0.05);
     } else {
-        col = inside ? float3(0.3, 0.7, 1.0) * pressure * 2.0 : float3(0.05, 0.05, 0.12);
+        col = inside ? FluidColour.rgb * pressure * 2.0 : float3(0.05, 0.05, 0.12);
     }
     col += interfaceGlow * float3(0.8, 0.95, 1.0) * 0.4;
 

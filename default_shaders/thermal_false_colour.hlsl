@@ -1,7 +1,7 @@
 /*{
   "SHADER_TYPE": "video",
   "INPUTS": [
-    { "NAME": "PalettePreset",   "TYPE": "long",  "MIN": 0,   "MAX": 3,   "DEFAULT": 0,  "LABEL": "Palette (0=Inferno 1=Ironbow 2=Rainbow 3=Greyscale)" },
+    { "NAME": "PalettePreset",   "TYPE": "long",  "VALUES": [0,1,2,3], "LABELS": ["Inferno","Ironbow","Rainbow","Greyscale"], "DEFAULT": 0, "LABEL": "Palette" },
     { "NAME": "LevelLow",        "TYPE": "float", "MIN": 0.0, "MAX": 0.9, "DEFAULT": 0.0,"LABEL": "Level Low" },
     { "NAME": "LevelHigh",       "TYPE": "float", "MIN": 0.1, "MAX": 1.0, "DEFAULT": 1.0,"LABEL": "Level High" },
     { "NAME": "ContrastBoost",   "TYPE": "float", "MIN": 0.5, "MAX": 3.0, "DEFAULT": 1.0,"LABEL": "Contrast Boost" },

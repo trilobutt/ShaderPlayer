@@ -101,13 +101,22 @@ Flag any `point2d` or `color` INPUTS entry where `MIN` or `MAX` is written as a 
 ### 8. ISF `long` type correctness
 
 For every `long` INPUTS entry:
+- **`VALUES` array is mandatory.** Without it the combo box renders empty and the parameter cannot be changed at runtime. This is the single most common `long` bug. Flag every `long` entry missing `VALUES`.
 - `VALUES` must be an array of **integers** (e.g. `[0, 1, 2]`). Strings in `VALUES` cause a runtime crash in the parser.
 - `LABELS` must be an array of **strings** (e.g. `["Add", "Multiply"]`), parallel to `VALUES`.
-- `DEFAULT` must be an integer that matches one of the `VALUES` entries.
+- `DEFAULT` must be an integer that matches one of the `VALUES` entries. A `DEFAULT` not present in `VALUES` leaves the combo stuck at the stored default value with no matching label.
 
 ### 9. HLSL intrinsic and reserved word shadowing
 
 Flag any ISF `NAME` field, local variable, or function parameter that matches an HLSL built-in intrinsic or reserved word.
+
+**Also flag `atanh` usage in shader body**: `atanh` is not a built-in in HLSL ps_5_0. Implement manually:
+```hlsl
+float myAtanh(float x) {
+    x = clamp(x, -0.9999, 0.9999);
+    return 0.5 * log((1.0 + x) / (1.0 - x));
+}
+```
 
 Forbidden intrinsics: `abs`, `acos`, `all`, `any`, `asin`, `atan`, `atan2`, `ceil`, `clamp`, `clip`, `cos`, `cosh`, `cross`, `ddx`, `ddy`, `degrees`, `determinant`, `distance`, `dot`, `exp`, `exp2`, `floor`, `fmod`, `frac`, `fwidth`, `isfinite`, `isinf`, `isnan`, `ldexp`, `length`, `lerp`, `lit`, `log`, `log10`, `log2`, `max`, `min`, `modf`, `mul`, `noise`, `normalize`, `pow`, `radians`, `reflect`, `refract`, `round`, `rsqrt`, `saturate`, `sign`, `sin`, `sincos`, `sinh`, `smoothstep`, `sqrt`, `step`, `tan`, `tanh`, `tex1D`, `tex2D`, `tex3D`, `texCUBE`, `transpose`, `trunc`
 

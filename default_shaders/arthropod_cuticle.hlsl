@@ -9,7 +9,8 @@
         {"NAME": "bodyGeometry",   "LABEL": "Body Geometry",   "TYPE": "long",
          "VALUES": [0,1,2,3], "LABELS": ["Cylinder","Carapace","Wing","Abdomen"], "DEFAULT": 1},
         {"NAME": "segmentCount",   "LABEL": "Segments",        "TYPE": "long",
-         "VALUES": [2,3,4,5,6,8,10,12], "LABELS": ["2","3","4","5","6","8","10","12"], "DEFAULT": 6}
+         "VALUES": [2,3,4,5,6,8,10,12], "LABELS": ["2","3","4","5","6","8","10","12"], "DEFAULT": 6},
+        {"NAME": "bgColour",       "LABEL": "Background",      "TYPE": "color", "DEFAULT": [0.92, 0.88, 0.80, 1.0]}
     ]
 }*/
 
@@ -92,9 +93,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float threshHigh =  0.1;
     float pigment    = smoothstep(threshLow, threshHigh, conc);
 
-    // Background: complement of pigment at very low intensity
-    float3 bgColour = float3(0.92, 0.88, 0.80);  // cuticle background (pale chitin)
-    float3 col = lerp(bgColour, pigmentColour.rgb, pigment);
+    float3 col = lerp(bgColour.rgb, pigmentColour.rgb, pigment);
 
     // Add subtle specular sheen (chitin iridescence)
     float2 normDir = gUV * 2.0 - 1.0;

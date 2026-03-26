@@ -1,17 +1,26 @@
-All shaders:  add colour pickers for all; for all that have colour maps, keep the colour maps and add the option for colour pickers to make a custom colour map
-All audio: detect bass better; make both bass and treble reactivity stronger; cannot select any dropdown
-audio_spectrum: Add position and scale
-audio_waveform: Make bigger/higher, more reactivity
-radial_burst: make more reactive and brighter
-fourier_crystal_growth: make more reactive
-psychoacoustic_topography: make larger scale options
-hyperbolic_tiling: Tile colour B never shows up. Faster animation with control for animation speed
-strange_attractor: increase maximum speed
-arthropod_cuticle: colour picker for background
-diffusion_limited_aggregation: add animation
-helen_shaw_fingering: add animation speed slider
-julia_set: changing C Real and C Imaginaary makes the whole fractal disappear, investigate this and find the correct limits; max Iterations dropdown doesn't work
-mandelbulb: cannot select Iterations dropdown
-newton_fractal: cannot select dropdowns
-chromatic_aberration: not doing chromatic aberration
-non_euclidean_lens: not working (error X3004: undeclared identifier "atanh")
+The following have no dropdown options:
+frequency_Chromesthesia
+hyperbolic_tiling
+reaction_diffusion
+voronoi_cells
+crt_simulation
+holographic_diffraction
+thermal_false_colour
+kaleidoscope
+
+The following have no colour picker option to fully parametrise every aspect of the shader:
+acoustic_geology
+frequency_chromesthesia
+audio_fluid_vortex
+fourier_crystal_growth
+psychoacoustic_topography
+synaptic_fire_network
+plasma
+voronoi_cells
+electromagnetic_field
+game_of_life
+helen_shaw_fingering
+mandelbulb
+newton_fraactal
+perlin_flow_field
+physarum_slime_mould

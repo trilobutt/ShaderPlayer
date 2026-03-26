@@ -2,7 +2,7 @@
   "SHADER_TYPE": "video",
   "INPUTS": [
     { "NAME": "BarrelStrength", "TYPE": "float", "MIN": 0.0,  "MAX": 0.5,  "DEFAULT": 0.18,  "LABEL": "Barrel Distortion" },
-    { "NAME": "MaskType",       "TYPE": "long",  "MIN": 0,    "MAX": 2,    "DEFAULT": 0,      "LABEL": "Mask (0=Shadow 1=Slot 2=Trinitron)" },
+    { "NAME": "MaskType",       "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Shadow","Slot","Trinitron"], "DEFAULT": 0, "LABEL": "Mask Type" },
     { "NAME": "ScanlineStr",    "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.35,  "LABEL": "Scanline Strength" },
     { "NAME": "BloomAmount",    "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25,  "LABEL": "Bloom" },
     { "NAME": "BleedStrength",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.3,   "LABEL": "Colour Bleed" },

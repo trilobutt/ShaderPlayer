@@ -5,12 +5,13 @@
         {"NAME": "highLevel",        "LABEL": "Treble",          "TYPE": "audio",  "BAND": "high"},
         {"NAME": "meshResolution",   "LABEL": "Depth Layers",    "TYPE": "long",
          "VALUES": [16,32,48,64], "LABELS": ["16 (fast)","32","48","64 (quality)"], "DEFAULT": 32},
-        {"NAME": "heightScale",      "LABEL": "Height Scale",    "TYPE": "float",  "MIN": 0.1, "MAX": 2.0,  "DEFAULT": 0.8},
+        {"NAME": "heightScale",      "LABEL": "Height Scale",    "TYPE": "float",  "MIN": 0.1, "MAX": 10.0, "DEFAULT": 0.8},
         {"NAME": "erosionRate",      "LABEL": "Depth Fade",      "TYPE": "float",  "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.6},
         {"NAME": "orbitSpeed",       "LABEL": "Orbit Speed",     "TYPE": "float",  "MIN": 0.0, "MAX": 2.0,  "DEFAULT": 0.3},
         {"NAME": "lightAzimuth",     "LABEL": "Light Azimuth",   "TYPE": "float",  "MIN": 0.0, "MAX": 360.0,"DEFAULT": 45.0},
         {"NAME": "eruptionThreshold","LABEL": "Eruption Thresh", "TYPE": "float",  "MIN": 0.3, "MAX": 1.0,  "DEFAULT": 0.75},
-        {"NAME": "showWireframe",    "LABEL": "Wireframe",       "TYPE": "bool",   "DEFAULT": false}
+        {"NAME": "showWireframe",    "LABEL": "Wireframe",       "TYPE": "bool",   "DEFAULT": false},
+        {"NAME": "TerrainTint",      "LABEL": "Terrain Tint",    "TYPE": "color",  "DEFAULT": [0.35,0.42,0.55,1.0]}
     ]
 }*/
 
@@ -88,10 +89,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float wy   = sampleTerrain(freq) * heightScale;
 
         // Bass deepens/raises the terrain valley floor
-        wy *= (1.0 + bassLevel * 0.4);
+        wy *= (1.0 + bassLevel * 1.8);
 
-        // Treble sharpens peaks (high-frequency content only)
-        if (freq > 0.6) wy *= (1.0 + highLevel * 1.5);
+        // Treble sharpens peaks
+        if (freq > 0.6) wy *= (1.0 + highLevel * 3.5);
 
         // Eruption: spikes above threshold get amplified and flash
         bool erupting = wy / max(heightScale, 0.001) > eruptionThreshold;
@@ -111,8 +112,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
         // Terrain normal from horizontal gradient
         float freqL = frac((wx - 0.003) * 0.18 + orbitAng);
         float freqR = frac((wx + 0.003) * 0.18 + orbitAng);
-        float wyL   = sampleTerrain(freqL) * heightScale * (1.0 + bassLevel * 0.4);
-        float wyR   = sampleTerrain(freqR) * heightScale * (1.0 + bassLevel * 0.4);
+        float wyL   = sampleTerrain(freqL) * heightScale * (1.0 + bassLevel * 1.8);
+        float wyR   = sampleTerrain(freqR) * heightScale * (1.0 + bassLevel * 1.8);
         float3 nrm  = normalize(float3(wyL - wyR, 0.04 / wz, 1.0));
 
         float lightAzRad = radians(lightAzimuth);
@@ -124,8 +125,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float heightN = wy / max(heightScale * 1.2, 0.001);
 
         float3 snowCap  = float3(0.92, 0.96, 1.00);
-        float3 rockCol  = float3(0.35, 0.42, 0.55);
-        float3 deepCol  = float3(0.10, 0.18, 0.40);
+        float3 rockCol  = TerrainTint.rgb;
+        float3 deepCol  = TerrainTint.rgb * float3(0.29, 0.43, 0.73);
         float3 terrainBase = lerp(deepCol, rockCol, saturate(heightN * 2.0));
         terrainBase = lerp(terrainBase, snowCap, saturate((heightN - 0.7) * 4.0));
 

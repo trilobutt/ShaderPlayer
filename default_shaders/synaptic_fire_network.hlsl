@@ -9,7 +9,9 @@
         {"NAME": "firingThreshold",  "LABEL": "Fire Threshold", "TYPE": "float",  "MIN": 0.1,  "MAX": 0.95, "DEFAULT": 0.6},
         {"NAME": "refractoryPeriod", "LABEL": "Refractory (s)", "TYPE": "float",  "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.3},
         {"NAME": "propagationDelay", "LABEL": "Propagation (s)","TYPE": "float",  "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.25},
-        {"NAME": "spontaneousRate",  "LABEL": "Spontaneous Hz", "TYPE": "float",  "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0}
+        {"NAME": "spontaneousRate",  "LABEL": "Spontaneous Hz", "TYPE": "float",  "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
+        {"NAME": "AxonColour",       "LABEL": "Axon Colour",    "TYPE": "color",  "DEFAULT": [0.2,0.7,0.3,1.0]},
+        {"NAME": "NodeColour",       "LABEL": "Node Colour",    "TYPE": "color",  "DEFAULT": [0.4,0.9,0.5,1.0]}
     ]
 }*/
 
@@ -122,7 +124,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
             // Axon base glow (faint persistent signal)
             float baseGlow = axon * (0.05 + refractPulse * 0.15);
-            float3 axonCol = float3(0.2, 0.7, 0.3) * baseGlow;
+            float3 axonCol = AxonColour.rgb * baseGlow;
 
             // Bright action potential bolus
             axonCol += float3(0.9, 1.0, 0.8) * pulseGlow * axon * 0.8;
@@ -146,7 +148,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float refractory = max(0.0, phase2 - (1.0 - refractoryPeriod / max(period2, 0.01))) > 0.0 &&
                            phase2 > firingThreshold ? 0.3 : 1.0;
 
-        float3 nodeCol = float3(0.4, 0.9, 0.5) * nodeMask * refractory;
+        float3 nodeCol = NodeColour.rgb * nodeMask * refractory;
         if (firing) nodeCol += float3(0.6, 0.3, 0.1) * nodeMask * 1.5;  // fire flash (warm)
         col += nodeCol;
     }

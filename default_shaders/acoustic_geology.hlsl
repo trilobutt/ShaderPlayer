@@ -5,6 +5,7 @@
     { "NAME": "FoldStrength", "TYPE": "float", "MIN": 0.0, "MAX": 0.3,  "DEFAULT": 0.08, "LABEL": "Fold Strength" },
     { "NAME": "FaultThresh",  "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.55, "LABEL": "Fault Threshold" },
     { "NAME": "ColourSat",    "TYPE": "float", "MIN": 0.0, "MAX": 2.0,  "DEFAULT": 1.2,  "LABEL": "Colour Saturation" },
+    { "NAME": "BaseTint",     "TYPE": "color",                             "DEFAULT": [0.75,0.62,0.40,1.0], "LABEL": "Base Tint" },
     { "NAME": "BassBand",     "TYPE": "audio", "BAND": "bass",  "LABEL": "Bass" },
     { "NAME": "MidBand",      "TYPE": "audio", "BAND": "mid",   "LABEL": "Mid" },
     { "NAME": "HighBand",     "TYPE": "audio", "BAND": "high",  "LABEL": "Treble" },
@@ -85,6 +86,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     float3 col = baseCol * (0.55 + strataPattern * 0.9);
     col        = lerp(neutralCol * 0.5, col, ColourSat);
+    col       *= BaseTint.rgb;
 
     // Flash the whole frame on a strong beat (volcanic intrusion).
     float flashBright = max(0.0, BeatIn - FaultThresh) * 2.5;

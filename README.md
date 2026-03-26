@@ -11,13 +11,14 @@ Real-time HLSL shader video player for Windows. Decodes video with FFmpeg, runs 
 - Looping playback with scrubber and frame-accurate seeking
 - Drag-and-drop a video file onto the window to open it
 - Live capture from webcams (DirectShow) and network streams (RTSP, RTMP, HTTP)
+- Audio playback via WASAPI (miniaudio); volume and mute controls in the transport bar
 - Time display switchable between seconds and frame numbers
 
 ### Shader Pipeline
 - Every video frame passes through a user-selected HLSL pixel shader (Shader Model 5.0)
 - Passthrough mode available (no effect)
 - Hot-swap shaders mid-playback with no stutter
-- Each frame exposes: `time`, `resolution`, `videoResolution`, and 16 floats of user-defined custom parameters
+- Each frame exposes: `time`, `resolution`, `videoResolution`, a global noise texture, audio data, and 16 floats of user-defined custom parameters
 
 ### Shader Editor
 - Built-in syntax-highlighted HLSL editor (ImGuiColorTextEdit)
@@ -46,7 +47,7 @@ Supported parameter types:
 | `event` | Button (fires for one frame) | single float |
 | `audio` | Read-only band meter | audio uniform |
 
-Parameter values are saved in `config.json` and restored on next launch.
+Parameter values are saved in `config.json` and restored on next launch. See `docs/shader-parameter-guide.md` for the full reference.
 
 ### Keyframe Animation
 - Per-parameter keyframe timeline tied to video playback time
@@ -57,8 +58,8 @@ Parameter values are saved in `config.json` and restored on next launch.
 - Keyframes are saved and restored via `config.json`
 
 ### Audio Reactivity
-- Video audio is decoded and analysed every frame (no audio playback to speakers)
-- DSP: 2048-sample ring buffer, Hann window, KissFFT, beat detection, spectral centroid
+- Video audio is decoded and analysed every frame via KissFFT
+- DSP: 2048-sample ring buffer, Hann window, beat detection, spectral centroid
 - Shaders receive: `audioRms`, `audioBass`, `audioMid`, `audioHigh`, `audioBeat`, `audioSpectralCentroid`, plus a 256-bin spectrum texture at `t3`
 - Declare an `audio` parameter with a `BAND` field to expose the value as a named uniform
 - Audio-reactive shaders are tagged `SHADER_TYPE: "audio"` and listed separately in the library
@@ -120,44 +121,68 @@ User-defined shortcuts for shader presets and workspace presets are set via righ
 
 ## Included Shaders
 
-### Video Effects
-| Shader | Effect |
-|---|---|
-| `passthrough` | No effect — direct output |
-| `grayscale` | Luminance-based desaturation |
-| `chromatic_aberration` | RGB channel offset |
-| `vignette` | Radial darkening |
-| `sharpen` | Convolution sharpening |
-| `false_colour` | Luminance false colour mapping |
-| `pixelate` | Pixel grid with optional overlay |
-| `halftone` | Halftone dot pattern |
-| `led_panel` | Stylised LED panel grid |
-| `lego_bricks` | Lego brick effect |
-| `crochet` | Crochet stitch pattern |
-| `fluted_glass` | Fluted glass distortion |
-| `depixelation` | Smooth depixelation blur |
-| `pixel_sdf` | SDF-based pixel shapes |
-| `pixel_matrix` | Matrix-style pixel pattern |
-| `receipt_bars` | Receipt/barcode aesthetic |
-| `ascii_noise` | ASCII noise overlay |
-| `zebra` | Zebra-stripe exposure assist |
-| `focus_peaking` | Edge-highlight focus peaking |
-| `safe_areas` | Broadcast safe area overlays |
-| `waveform` | Luma waveform monitor |
-| `rgb_parade` | RGB parade scope |
-| `vectorscope` | Colour vectorscope |
-
 ### Audio Reactive
+
 | Shader | Effect |
 |---|---|
+| `acoustic_geology` | Deposits virtual sedimentary layers from audio; low frequencies produce thick warm strata, highs create fine detail |
+| `audio_bass_pulse` | Bass-reactive chromatic aberration with beat flash on video |
+| `audio_fluid_vortex` | Audio-driven incompressible fluid vortex rendered via curl noise |
 | `audio_spectrum` | Spectrum bar visualiser with beat flash |
-| `audio_bass_pulse` | Bass-reactive chromatic aberration |
-| `audio_waveform` | Spectrum waveform overlay |
+| `audio_waveform` | Spectrum waveform overlay on video |
+| `fourier_crystal_growth` | Audio-driven N-fold crystallographic growth patterns |
+| `frequency_chromesthesia` | Pitch-colour synesthesia — each FFT bin mapped to hue via Scriabin/Newton/Rimington tables |
+| `psychoacoustic_topography` | FFT spectrum rendered as a 3D terrain surface |
+| `radial_burst` | FFT bins mapped to polar coordinates with N-fold rotational symmetry |
+| `synaptic_fire_network` | Audio-driven synaptic fire network visualiser |
 
 ### Generative
+
 | Shader | Effect |
 |---|---|
+| `arthropod_cuticle` | Meinhardt-Gierer activator-inhibitor Turing instability — insect cuticle patterning |
+| `diffusion_limited_aggregation` | Procedural DLA fractal growth approximation |
+| `electromagnetic_field` | N point charges in a rotating ring — E-field and potential visualisation |
+| `game_of_life` | Conway Game of Life (B3/S23) with chromatic cell age |
+| `hele_shaw_fingering` | Hele-Shaw Saffman-Taylor viscous fingering (Laplacian growth) |
+| `hyperbolic_tiling` | Conformal Poincaré disc tiling of any valid {p, q} Schläfli symbol |
+| `julia_set` | Julia set fractal with animatable C parameter |
+| `mandelbulb` | Mandelbulb 3D fractal via ray-marched distance estimator |
+| `newton_fractal` | Newton fractal for polynomials of degree 2–7 |
+| `perlin_flow_field` | Perlin curl flow field LIC approximation |
+| `physarum_slime_mould` | Physarum polycephalum transport network procedural approximation |
 | `plasma` | Classic plasma animation |
+| `reaction_diffusion` | Turing instability via multi-scale Difference-of-Gaussians on Perlin noise |
+| `strange_attractor` | Chaotic ODE integration rendered as per-pixel density accumulator |
+| `voronoi_cells` | Animated Voronoi diagram with three render modes |
+
+### Video Effects
+
+| Shader | Effect |
+|---|---|
+| `chromatic_aberration` | RGB channel offset simulating lens dispersion |
+| `colour_grading` | Lift/gamma/gain colour grading |
+| `crt_simulation` | CRT emulation: barrel distortion, phosphor mask, scanlines, bloom |
+| `datamosh_drift` | Datamosh block drift using Perlin noise as proxy motion vectors |
+| `domain_warp` | Recursive domain-warped noise distortion |
+| `false_colour` | Luminance-based false colour mapping |
+| `focus_peaking` | Sobel edge-detection overlay highlighting sharp regions |
+| `fourier_sculpting` | Frequency-domain sculpting — low-pass, high-pass, band-pass, directional, annular, notch |
+| `grayscale` | Luminance-based desaturation |
+| `holographic_diffraction` | Physically grounded aperture diffraction starburst on bright regions |
+| `kaleidoscope` | N-segment radial kaleidoscope mirror |
+| `non_euclidean_lens` | Spherical and hyperbolic spacetime lens distortion |
+| `oil_paint_filter` | Generalised Kuwahara structure-tensor oil-paint filter |
+| `pixel_sort` | Threshold-based pixel sort approximation |
+| `rgb_parade` | RGB parade scope overlay |
+| `safe_areas` | Broadcast safe area guides (action/title safe) |
+| `sharpen` | Convolution-based sharpening |
+| `slit_scan` | Slit-scan temporal splice approximation |
+| `thermal_false_colour` | Luminance-to-temperature false colour (inferno, ironbow, rainbow, greyscale palettes) |
+| `vectorscope` | Vectorscope display overlay |
+| `vignette` | Radial darkening |
+| `waveform` | Luma waveform monitor overlay |
+| `zebra` | Zebra-stripe overexposure indicator |
 
 ---
 
@@ -166,7 +191,7 @@ User-defined shortcuts for shader presets and workspace presets are set via righ
 ### Requirements
 
 - Windows 11 (Windows 10 may work but is untested)
-- Visual Studio 2022 with C++20 support, or MinGW-w64
+- Visual Studio 2022 with C++20 support
 - CMake 3.20 or later
 - FFmpeg runtime DLLs (see below)
 
@@ -188,9 +213,11 @@ cmake -B build -DFFMPEG_ROOT=C:\path\to\ffmpeg
 
 ### Compile
 
-```bash
+**Build via Visual Studio IDE, not the command line.** The CMake generator uses Ninja + MSVC; running `cmake --build` from a plain shell fails at link with `memcpy` unresolved because the MSVC CRT environment is not initialised outside the Visual Studio developer prompt.
+
+```
 cmake -B build
-cmake --build build --config Release
+# Then open the project in Visual Studio and build from there.
 ```
 
 Output: `build/Release/ShaderPlayer.exe` with FFmpeg DLLs copied alongside it.
@@ -235,7 +262,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 }
 ```
 
-`noiseTexture`/`noiseSampler` must be declared even if unused.
+`noiseTexture`/`noiseSampler` must be declared even if unused — they are always bound by the renderer.
 
 ### Adding Parameters
 
@@ -252,7 +279,7 @@ Declare an ISF JSON block before any non-comment HLSL. ShaderPlayer parses it an
 }*/
 ```
 
-Use `Strength` and `Tint` directly in the shader body — no `custom[]` indexing needed.
+Use `Strength` and `Tint` directly in the shader body — no `custom[]` indexing needed. See `docs/shader-parameter-guide.md` for all parameter types, packing rules, and gotchas.
 
 ### Shader Types
 
@@ -260,13 +287,13 @@ Add `"SHADER_TYPE"` to the ISF block to control how ShaderPlayer categorises and
 
 | Value | Behaviour |
 |---|---|
-| *(absent)* | Video effect — video texture is the primary input |
+| *(absent)* or `"video"` | Video effect — video texture is the primary input |
 | `"generative"` | No video required — `time` drives animation |
 | `"audio"` | Audio reactive — audio uniforms auto-injected |
 
 ### Audio Reactive Shaders
 
-Audio shaders receive additional uniforms automatically:
+Audio shaders receive additional uniforms automatically (injected by ShaderPlayer before compilation):
 
 ```hlsl
 cbuffer AudioConstants : register(b1) {
@@ -289,19 +316,14 @@ Declare an `audio`-type parameter to expose a band as a named alias:
 
 Valid `BAND` values: `rms`, `bass`, `mid`, `high`, `beat`, `centroid`.
 
-### Parameter Types Reference
+### New Shader Scaffolding
 
-| Type | UI | Floats used | Alignment |
-|---|---|---|---|
-| `float` | Slider | 1 | none |
-| `bool` | Checkbox | 1 | none |
-| `long` | Dropdown | 1 | none |
-| `event` | Button (one frame) | 1 | none |
-| `point2d` | 2D drag pad | 2 | even offset |
-| `color` | RGBA picker | 4 | multiple of 4 |
-| `audio` | Read-only meter | 0 | n/a |
+The `/new-shader` Claude Code skill scaffolds a new `.hlsl` file with the correct cbuffer layout and ISF block:
 
-Maximum 16 floats total across all non-audio parameters.
+```
+/new-shader bloom
+/new-shader film grain with intensity and speed controls
+```
 
 ---
 
@@ -327,7 +349,6 @@ Workspace layout presets are stored as `.ini` files in the `layouts/` directory 
 ## Known Limitations
 
 - Windows only (Direct3D 11)
-- No audio playback to speakers — audio is decoded for shader analysis only
 - Recording framerate matches source framerate (no arbitrary output rate)
 - ProRes support depends on the FFmpeg build used
 
@@ -342,6 +363,7 @@ Workspace layout presets are stored as `.ini` files in the `layouts/` directory 
 | [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit) | Syntax-highlighted HLSL editor |
 | [nlohmann/json](https://github.com/nlohmann/json) | Config file serialisation |
 | [KissFFT](https://github.com/mborgerding/kissfft) | Audio spectrum analysis |
+| [miniaudio](https://miniaud.io/) | Audio playback (WASAPI) |
 | [Spout2](https://github.com/leadedge/Spout2) | GPU texture sharing output |
 | Direct3D 11 / HLSL | Shader pipeline and rendering |
 

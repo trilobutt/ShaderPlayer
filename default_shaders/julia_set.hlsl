@@ -2,12 +2,15 @@
     "DESCRIPTION": "Julia set fractal with smooth colouring and optional animation of the C parameter",
     "SHADER_TYPE": "generative",
     "INPUTS": [
-        { "NAME": "CX",          "LABEL": "C Real",            "TYPE": "float", "DEFAULT": -0.7269, "MIN": -2.0, "MAX": 2.0,  "STEP": 0.001 },
-        { "NAME": "CY",          "LABEL": "C Imaginary",       "TYPE": "float", "DEFAULT":  0.1889, "MIN": -2.0, "MAX": 2.0,  "STEP": 0.001 },
+        { "NAME": "CX",          "LABEL": "C Real",            "TYPE": "float", "DEFAULT": -0.7269, "MIN": -1.5, "MAX": 1.5,  "STEP": 0.001 },
+        { "NAME": "CY",          "LABEL": "C Imaginary",       "TYPE": "float", "DEFAULT":  0.1889, "MIN": -1.5, "MAX": 1.5,  "STEP": 0.001 },
         { "NAME": "Zoom",        "LABEL": "Zoom",              "TYPE": "float", "DEFAULT": 1.3,     "MIN": 0.1,  "MAX": 10.0, "STEP": 0.05  },
-        { "NAME": "MaxIter",     "LABEL": "Max Iterations",    "TYPE": "long",  "DEFAULT": 128,     "MIN": 16,   "MAX": 256               },
+        { "NAME": "MaxIter",     "LABEL": "Max Iterations",    "TYPE": "long",
+          "VALUES": [16,32,64,128,256,512], "LABELS": ["16","32","64","128","256","512"], "DEFAULT": 128 },
         { "NAME": "ColourCycle", "LABEL": "Colour Cycle Speed","TYPE": "float", "DEFAULT": 0.1,     "MIN": 0.0,  "MAX": 2.0,  "STEP": 0.01  },
-        { "NAME": "AnimateC",    "LABEL": "Animate C",         "TYPE": "bool",  "DEFAULT": 0                                             }
+        { "NAME": "AnimateC",    "LABEL": "Animate C",         "TYPE": "bool",  "DEFAULT": 0                                             },
+        { "NAME": "InnerColour", "LABEL": "Inner Colour",      "TYPE": "color", "DEFAULT": [0.05, 0.05, 0.35, 1.0]                       },
+        { "NAME": "OuterColour", "LABEL": "Outer Colour",      "TYPE": "color", "DEFAULT": [1.0,  0.75, 0.1,  1.0]                       }
     ]
 }*/
 
@@ -18,6 +21,9 @@
 // MaxIter     offset 3 → int(custom[0].w)
 // ColourCycle offset 4 → custom[1].x
 // AnimateC    offset 5 → (custom[1].y > 0.5)
+// (holes 6,7)
+// InnerColour offset 8 → custom[2]
+// OuterColour offset 12 → custom[3]
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -38,11 +44,6 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 hsv2rgb(float h, float s, float v) {
-    float3 p = abs(frac(float3(h, h, h) + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-    return v * lerp(float3(1, 1, 1), saturate(p - 1.0), s);
-}
-
 float4 main(PS_INPUT input) : SV_TARGET {
     float cx          = custom[0].x;
     float cy          = custom[0].y;
@@ -50,6 +51,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
     int   maxIterVal  = int(custom[0].w);
     float colourSpeed = custom[1].x;
     bool  animC       = (custom[1].y > 0.5);
+    float4 innerCol   = custom[2];
+    float4 outerCol   = custom[3];
 
     // Optional animated C parameter — Douady rabbit neighbourhood orbit
     if (animC) {
@@ -86,12 +89,12 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Smooth escape colouring (Hubbard-Douady potential normalisation)
     float logZn = log(dot(z, z)) * 0.5;
-    float nu = log(logZn / 0.6931472) / 0.6931472;  // log2(log2(|z|))
+    float nu = log(logZn / 0.6931472) / 0.6931472;
     float smoothed = float(iterN) + 1.0 - nu;
 
     float tVal = frac(smoothed * 0.04 + time * colourSpeed * 0.05);
     float val  = pow(frac(smoothed * 0.04), 0.4);
 
-    float3 col = hsv2rgb(tVal, 0.85, val);
-    return float4(col, 1.0);
+    float3 col = lerp(innerCol.rgb, outerCol.rgb, tVal) * val;
+    return float4(saturate(col), 1.0);
 }

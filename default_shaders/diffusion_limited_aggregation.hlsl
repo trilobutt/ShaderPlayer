@@ -6,7 +6,8 @@
         {"NAME": "driftStrength", "LABEL": "Drift Strength", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.0},
         {"NAME": "walkerDensity", "LABEL": "Walker Density", "TYPE": "float", "MIN": 0.1,  "MAX": 1.0,   "DEFAULT": 0.6},
         {"NAME": "colourByRadius","LABEL": "Colour by Radius","TYPE": "bool", "DEFAULT": true},
-        {"NAME": "branchDetail",  "LABEL": "Branch Detail",  "TYPE": "float", "MIN": 1.0,  "MAX": 8.0,   "DEFAULT": 4.0}
+        {"NAME": "branchDetail",  "LABEL": "Branch Detail",  "TYPE": "float", "MIN": 1.0,  "MAX": 8.0,   "DEFAULT": 4.0},
+        {"NAME": "AnimSpeed",     "LABEL": "Anim Speed",     "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,   "DEFAULT": 0.3}
     ]
 }*/
 
@@ -68,9 +69,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float totAmp  = 0.0;
     int   iOcts   = int(branchDetail);
 
+    float2 animOffset = float2(sin(time * AnimSpeed * 0.4), cos(time * AnimSpeed * 0.31)) * AnimSpeed * 0.15;
+
     [loop] for (int i = 0; i < 8; i++) {
         if (i >= iOcts) break;
-        float2 fp      = pb * freq + float2(float(i) * 1.73, float(i) * 2.31);
+        float2 fp      = pb * freq + float2(float(i) * 1.73, float(i) * 2.31) + animOffset * (1.0 + float(i) * 0.4);
         float  noiseVal = noiseTexture.SampleLevel(noiseSampler, frac(fp * 0.2 + 0.5), 0).r;
         // Apply threshold at this scale; stickingProb controls density of branches
         float  thresh  = stickingProb * (1.0 - float(i) / float(iOcts) * 0.5);

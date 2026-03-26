@@ -4,7 +4,7 @@
     { "NAME": "FeedRate",  "TYPE": "float", "MIN": 0.01, "MAX": 0.1,  "DEFAULT": 0.055, "LABEL": "Feed Rate (F)" },
     { "NAME": "KillRate",  "TYPE": "float", "MIN": 0.04, "MAX": 0.07, "DEFAULT": 0.062, "LABEL": "Kill Rate (k)" },
     { "NAME": "AnimSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,  "DEFAULT": 0.5,   "LABEL": "Anim Speed" },
-    { "NAME": "ColourMap", "TYPE": "long",  "MIN": 0,    "MAX": 3,    "DEFAULT": 0,      "LABEL": "Colour Map (0=Blue 1=Fire 2=Mint 3=Grey)" }
+    { "NAME": "ColourMap", "TYPE": "long",  "VALUES": [0,1,2,3], "LABELS": ["Blue","Fire","Mint","Grey"], "DEFAULT": 0, "LABEL": "Colour Map" }
   ]
 }*/
 

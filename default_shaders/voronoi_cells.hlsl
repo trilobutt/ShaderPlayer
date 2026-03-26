@@ -1,10 +1,10 @@
 /*{
   "SHADER_TYPE": "generative",
   "INPUTS": [
-    { "NAME": "CellCount",   "TYPE": "long",  "MIN": 2,    "MAX": 20,   "DEFAULT": 8,            "LABEL": "Cell Count" },
+    { "NAME": "CellCount",   "TYPE": "long",  "VALUES": [2,3,4,5,6,8,10,12,16,20], "LABELS": ["2","3","4","5","6","8","10","12","16","20"], "DEFAULT": 8, "LABEL": "Cell Count" },
     { "NAME": "BorderWidth", "TYPE": "float", "MIN": 0.0,  "MAX": 0.04, "DEFAULT": 0.006,         "LABEL": "Border Width" },
     { "NAME": "MotionSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,  "DEFAULT": 0.4,           "LABEL": "Motion Speed" },
-    { "NAME": "RenderMode",  "TYPE": "long",  "MIN": 0,    "MAX": 2,    "DEFAULT": 0,             "LABEL": "Mode (0=Fill 1=Border 2=Both)" },
+    { "NAME": "RenderMode",  "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Fill","Border","Both"], "DEFAULT": 0, "LABEL": "Render Mode" },
     { "NAME": "BorderColour","TYPE": "color",                            "DEFAULT": [0,0,0,1],     "LABEL": "Border Colour" }
   ]
 }*/

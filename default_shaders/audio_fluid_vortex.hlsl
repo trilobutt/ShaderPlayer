@@ -9,7 +9,8 @@
         {"NAME": "trebleScale",        "LABEL": "Treble Scale",    "TYPE": "float", "MIN": 0.0,  "MAX": 5.0,  "DEFAULT": 1.5},
         {"NAME": "injectionPoints",    "LABEL": "Vortex Points",   "TYPE": "long",
          "VALUES": [1,2,3,4], "LABELS": ["1","2","3","4"], "DEFAULT": 2},
-        {"NAME": "colourByVorticity",  "LABEL": "Colour Vorticity","TYPE": "bool",  "DEFAULT": true}
+        {"NAME": "colourByVorticity",  "LABEL": "Colour Vorticity","TYPE": "bool",  "DEFAULT": true},
+        {"NAME": "FluidTint",          "LABEL": "Fluid Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]}
     ]
 }*/
 
@@ -116,6 +117,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Diffusion: blend with a blurred neighbour sample
     float3 blurCol = noiseTexture.Sample(noiseSampler, frac(p + float2(0.001, 0))).rrr;
     col = lerp(col, blurCol * 0.2, dyeDiffusion * 0.15);
+    col *= FluidTint.rgb;
 
     return float4(saturate(col), 1.0);
 }

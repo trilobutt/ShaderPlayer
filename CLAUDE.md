@@ -353,6 +353,10 @@ Audio stream support: `HasAudio()`, `GetAudioSampleRate()`, `DrainAudioSamples(b
 - `nlohmann/json.hpp` is ~25,000 lines — include it only in `.cpp` files, never in headers
 - nlohmann/json `try/catch` must wrap the full processing loop, not just `json::parse` — `get<>()` and `value()` throw `type_error` on type mismatches
 - HLSL intrinsic shadowing: never name local variables after HLSL built-ins (`frac`, `min`, `max`, `abs`, `lerp`, etc.) or HLSL reserved words (`line`, `point`, `triangle`, `linear`, `sample`, etc.)
+- `atanh` is NOT a built-in in HLSL ps_5_0 — using it produces X3004 "undeclared identifier". Implement manually: `float myAtanh(float x) { x = clamp(x,-0.9999,0.9999); return 0.5*log((1.0+x)/(1.0-x)); }`
+- ISF `long` params without a `VALUES` array produce an empty, un-selectable dropdown at runtime. `MIN`/`MAX` alone are not sufficient — always include `"VALUES": [...]` and `"LABELS": [...]`. A `DEFAULT` not present in `VALUES` leaves the combo stuck.
+- Audio band values (`audioBass`, `audioHigh`, etc.) are typically 0.01–0.3 for music. Shader multipliers need to be 3–5× higher than intuition suggests to produce a visible effect.
+- For offset-based video effects (chromatic aberration, lens warp, etc.), default `Strength` must produce ≥10px offset at 1080p to be perceptible. The lens formula `offset = (uv-0.5) * s` gives only ~4px at the corner with `s=0.003`; use `s≥0.01` and `MAX≥0.05` as a baseline.
 - `std::stoi` throws `std::invalid_argument`/`std::out_of_range` on malformed input — use `std::from_chars` (C++17, `<charconv>`) for parsing untrusted file content; it is noexcept and leaves the output unchanged on failure
 - `AV_CHANNEL_LAYOUT_MONO` is a compound literal — MSVC C++ mode rejects `&AV_CHANNEL_LAYOUT_MONO` directly. Assign to a local first: `AVChannelLayout mono = AV_CHANNEL_LAYOUT_MONO; av_channel_layout_copy(&ctx->ch_layout, &mono);`
 

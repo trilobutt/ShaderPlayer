@@ -9,7 +9,8 @@
         {"NAME": "growthSpeed",     "LABEL": "Growth Speed",   "TYPE": "float",  "MIN": 0.1, "MAX": 3.0,  "DEFAULT": 1.0},
         {"NAME": "maxRadius",       "LABEL": "Max Radius",     "TYPE": "float",  "MIN": 0.1, "MAX": 1.0,  "DEFAULT": 0.45},
         {"NAME": "latticeSaturation","LABEL": "Saturation",    "TYPE": "float",  "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.8},
-        {"NAME": "displaciveNoise", "LABEL": "Displace Noise", "TYPE": "float",  "MIN": 0.0, "MAX": 0.5,  "DEFAULT": 0.08}
+        {"NAME": "displaciveNoise", "LABEL": "Displace Noise", "TYPE": "float",  "MIN": 0.0, "MAX": 0.5,  "DEFAULT": 0.08},
+        {"NAME": "CrystalTint",     "LABEL": "Crystal Tint",   "TYPE": "color",                             "DEFAULT": [0.5, 0.8, 1.0, 1.0]}
     ]
 }*/
 
@@ -96,9 +97,9 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float  ar  = resolution.x / resolution.y;
     float2 p   = (uv - 0.5) * float2(ar, 1.0);
 
-    // Audio-driven parameters
-    float audioRadius  = bassLevel   * 0.5 + midLevel * 0.2;
-    float latticeScale = 0.04 + midLevel * 0.02;   // spacing modulated by mid
+    // Audio-driven parameters — boosted for strong reactivity
+    float audioRadius  = bassLevel   * 1.1 + midLevel * 0.45;
+    float latticeScale = 0.04 + midLevel * 0.04;   // spacing modulated by mid
 
     // Crystal growth radius: grows over time, pulsed by bass
     float growthPhase = frac(time * growthSpeed * 0.1) * maxRadius;
@@ -152,9 +153,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
         // Colour: hue from angle within the crystal, saturation from audio
         float ang0 = atan2(fp.y, fp.x) / (3.14159 * 2.0) + 0.5;
         float hue  = frac(ang0 + float(ni) * golden + time * 0.04);
-        float sat  = latticeSaturation * (0.6 + bassLevel * 0.4);
-        float bri  = facet * envelope * (0.5 + midLevel * 0.5);
-        col += hsv2rgb(float3(hue, sat, bri));
+        float sat  = latticeSaturation * (0.4 + bassLevel * 1.1);
+        float bri  = facet * envelope * (0.3 + midLevel * 1.8) * (1.0 + bassLevel * 1.5);
+        float3 crystalCol = hsv2rgb(float3(hue, sat, bri));
+        col += crystalCol * lerp(float3(1,1,1), CrystalTint.rgb * 2.0, 0.5);
     }
 
     // Spectrum halo: ring glow at current growth radius coloured by spectrum bin
@@ -162,7 +164,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float  rr = length(cp) / ar;
     float  specFreq = frac(rr / maxRadius * 0.5 + time * growthSpeed * 0.02);
     float  specVal  = spectrumTexture.Sample(videoSampler, float2(specFreq, 0.5)).r;
-    float  haloR    = exp(-abs(rr - crystalR) * 20.0) * specVal;
+    float  haloR    = exp(-abs(rr - crystalR) * 20.0) * specVal * (1.0 + bassLevel * 2.0);
     float  haloHue  = frac(atan2(cp.y, cp.x) / 6.28318 + 0.5);
     col += hsv2rgb(float3(haloHue, 0.9, haloR * 0.6));
 

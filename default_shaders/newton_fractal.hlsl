@@ -2,12 +2,15 @@
     "DESCRIPTION": "Newton's method fractal for f(z) = z^n - 1, coloured by convergence basin and speed",
     "SHADER_TYPE": "generative",
     "INPUTS": [
-        { "NAME": "Degree",      "LABEL": "Polynomial Degree", "TYPE": "long",  "DEFAULT": 3,   "MIN": 2,  "MAX": 7               },
+        { "NAME": "Degree",      "LABEL": "Polynomial Degree", "TYPE": "long",
+          "VALUES": [2,3,4,5,6,7], "LABELS": ["2","3","4","5","6","7"], "DEFAULT": 3       },
         { "NAME": "ZoomN",       "LABEL": "Zoom",              "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1,"MAX": 5.0, "STEP": 0.05 },
         { "NAME": "ColourOffset","LABEL": "Colour Offset",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 1.0, "STEP": 0.01 },
         { "NAME": "Damping",     "LABEL": "Relaxation",        "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1,"MAX": 2.0, "STEP": 0.05 },
-        { "NAME": "MaxIterN",    "LABEL": "Max Iterations",    "TYPE": "long",  "DEFAULT": 48,  "MIN": 8,  "MAX": 128             },
-        { "NAME": "AnimSpeedN",  "LABEL": "Animate Speed",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 0.5, "STEP": 0.01 }
+        { "NAME": "MaxIterN",    "LABEL": "Max Iterations",    "TYPE": "long",
+          "VALUES": [8,16,32,48,64,128], "LABELS": ["8","16","32","48","64","128"], "DEFAULT": 48 },
+        { "NAME": "AnimSpeedN",  "LABEL": "Animate Speed",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 0.5, "STEP": 0.01 },
+        { "NAME": "PaletteTint", "LABEL": "Palette Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0] }
     ]
 }*/
 
@@ -18,6 +21,8 @@
 // Damping      offset 3 → custom[0].w
 // MaxIterN     offset 4 → int(custom[1].x)
 // AnimSpeedN   offset 5 → custom[1].y
+// (hole at 6,7)
+// PaletteTint  offset 8 → custom[2] (rgba)
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -113,6 +118,6 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float bri  = pow(1.0 - float(ni) / float(maxIterVal), 0.4);
     float sat  = saturate(0.9 - sqrt(minRootDist) * 2.0);
 
-    float3 col = hsv2rgb(hue, sat, bri);
+    float3 col = hsv2rgb(hue, sat, bri) * custom[2].rgb;
     return float4(col, 1.0);
 }

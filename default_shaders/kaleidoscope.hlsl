@@ -1,10 +1,10 @@
 /*{
     "DESCRIPTION": "Polar mirror kaleidoscope — folds the video frame into N rotationally symmetric segments",
     "INPUTS": [
-        { "NAME": "Segments",   "LABEL": "Segments",       "TYPE": "long",    "DEFAULT": 6,       "MIN": 2,    "MAX": 24              },
+        { "NAME": "Segments",   "LABEL": "Segments",       "TYPE": "long",    "VALUES": [2,3,4,5,6,7,8,9,10,12,16,20,24], "LABELS": ["2","3","4","5","6","7","8","9","10","12","16","20","24"], "DEFAULT": 6 },
         { "NAME": "RotSpeed",   "LABEL": "Rotation Speed", "TYPE": "float",   "DEFAULT": 0.1,     "MIN": -2.0, "MAX": 2.0, "STEP": 0.01 },
         { "NAME": "ZoomKaleid", "LABEL": "Zoom",           "TYPE": "float",   "DEFAULT": 1.0,     "MIN": 0.1,  "MAX": 4.0, "STEP": 0.05 },
-        { "NAME": "Centre",     "LABEL": "Centre Point",   "TYPE": "point2d", "DEFAULT": [0.5, 0.5], "MIN": [0.0, 0.0], "MAX": [1.0, 1.0] }
+        { "NAME": "Centre",     "LABEL": "Centre Point",   "TYPE": "point2d", "DEFAULT": [0.5, 0.5], "MIN": 0.0, "MAX": 1.0 }
     ]
 }*/
 

@@ -1,10 +1,11 @@
 /*{
   "SHADER_TYPE": "audio",
   "INPUTS": [
-    { "NAME": "PaletteMode",  "TYPE": "long",  "MIN": 0,   "MAX": 2,   "DEFAULT": 0,  "LABEL": "Palette (0=Scriabin 1=Newton 2=Rimington)" },
+    { "NAME": "PaletteMode",  "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Scriabin","Newton","Rimington"], "DEFAULT": 0, "LABEL": "Palette" },
     { "NAME": "Saturation",   "TYPE": "float", "MIN": 0.0, "MAX": 2.0, "DEFAULT": 1.2,"LABEL": "Saturation" },
     { "NAME": "BrightGamma",  "TYPE": "float", "MIN": 0.3, "MAX": 3.0, "DEFAULT": 1.0,"LABEL": "Brightness Gamma" },
     { "NAME": "OverlayAlpha", "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.0,"LABEL": "Video Overlay" },
+    { "NAME": "SpectrumTint", "TYPE": "color",                           "DEFAULT": [1.0,1.0,1.0,1.0],  "LABEL": "Spectrum Tint" },
     { "NAME": "RmsIn",        "TYPE": "audio", "BAND": "rms",  "LABEL": "RMS Level" }
   ]
 }*/
@@ -83,7 +84,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float glow   = exp(-dist * dist * 120.0) * bright;
     float fill   = (uv.y > barTop) ? bright * 0.25 : 0.0;
 
-    float3 chromCol = syCol * (glow + fill);
+    float3 chromCol = syCol * (glow + fill) * SpectrumTint.rgb;
 
     // Global brightness breathes with overall RMS.
     chromCol *= (0.3 + RmsIn * 1.4);

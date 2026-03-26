@@ -1,12 +1,15 @@
 /*{
   "SHADER_TYPE": "generative",
   "INPUTS": [
-    { "NAME": "AttractorType", "TYPE": "long",  "MIN": 0,    "MAX": 3,   "DEFAULT": 0,   "LABEL": "Attractor (0=Lorenz 1=Rossler 2=Thomas 3=Halvorsen)" },
-    { "NAME": "IterCount",     "TYPE": "long",  "MIN": 30,   "MAX": 400, "DEFAULT": 180, "LABEL": "Iterations" },
+    { "NAME": "AttractorType", "TYPE": "long",
+      "VALUES": [0,1,2,3], "LABELS": ["Lorenz","Rössler","Thomas","Halvorsen"], "DEFAULT": 0, "LABEL": "Attractor" },
+    { "NAME": "IterCount",     "TYPE": "long",
+      "VALUES": [60,120,180,240,300,400], "LABELS": ["60","120","180","240","300","400"], "DEFAULT": 180, "LABEL": "Iterations" },
     { "NAME": "ViewScale",     "TYPE": "float", "MIN": 0.005,"MAX": 0.08,"DEFAULT": 0.024,"LABEL": "View Scale" },
     { "NAME": "PointBright",   "TYPE": "float", "MIN": 0.2,  "MAX": 6.0, "DEFAULT": 2.5, "LABEL": "Point Brightness" },
-    { "NAME": "RotationSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.1, "LABEL": "Rotation Speed" },
-    { "NAME": "ColourMode",    "TYPE": "long",  "MIN": 0,    "MAX": 2,   "DEFAULT": 0,   "LABEL": "Colour (0=Velocity 1=Time 2=Depth)" }
+    { "NAME": "RotationSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 5.0, "DEFAULT": 0.1, "LABEL": "Rotation Speed" },
+    { "NAME": "ColourMode",    "TYPE": "long",
+      "VALUES": [0,1,2], "LABELS": ["Velocity","Time","Depth"], "DEFAULT": 0, "LABEL": "Colour Mode" }
   ]
 }*/
 

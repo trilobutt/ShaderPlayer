@@ -65,6 +65,14 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
 Forbidden intrinsics (non-exhaustive): `abs`, `acos`, `all`, `any`, `asin`, `atan`, `atan2`, `ceil`, `clamp`, `clip`, `cos`, `cosh`, `cross`, `ddx`, `ddy`, `degrees`, `distance`, `dot`, `exp`, `exp2`, `floor`, `fmod`, `frac`, `fwidth`, `length`, `lerp`, `log`, `log2`, `max`, `min`, `modf`, `mul`, `normalize`, `pow`, `radians`, `reflect`, `refract`, `round`, `rsqrt`, `saturate`, `sign`, `sin`, `sincos`, `sinh`, `smoothstep`, `sqrt`, `step`, `tan`, `tanh`, `transpose`, `trunc`
 
+**`atanh` is NOT a built-in in HLSL ps_5_0.** If you need it, implement manually:
+```hlsl
+float myAtanh(float x) {
+    x = clamp(x, -0.9999, 0.9999);
+    return 0.5 * log((1.0 + x) / (1.0 - x));
+}
+```
+
 Forbidden reserved words: `line`, `point`, `triangle`, `linear`, `sample`, `centroid`, `nointerpolation`, `precise`, `shared`, `groupshared`, `uniform`, `volatile`
 
 Use descriptive names instead: `blurRadius`, `edgeStrength`, `tintColour`, `noiseScale`, etc.
@@ -85,6 +93,8 @@ Use descriptive names instead: `blurRadius`, `edgeStrength`, `tintColour`, `nois
 {"NAME": "BlendMode", "LABEL": "Blend Mode", "TYPE": "long",
  "VALUES": [0, 1, 2], "LABELS": ["Add", "Multiply", "Screen"], "DEFAULT": 0}
 ```
+
+**`long` without `VALUES` is silently broken** — the dropdown renders empty and cannot be changed at runtime. Always include `VALUES`. Never write `"MIN"`/`"MAX"` alone for a `long` type.
 
 **`audio` example (audio shaders only):**
 ```json

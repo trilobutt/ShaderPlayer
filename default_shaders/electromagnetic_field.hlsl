@@ -11,7 +11,8 @@
         {"NAME": "displayMode",   "LABEL": "Display",       "TYPE": "long",
          "VALUES": [0,1,2,3], "LABELS": ["Field Lines","Force Vectors","E Heatmap","Equipotential"], "DEFAULT": 0},
         {"NAME": "colourByMag",   "LABEL": "Colour by |E|", "TYPE": "bool",  "DEFAULT": true},
-        {"NAME": "fieldFalloff",  "LABEL": "Falloff Exp",   "TYPE": "float", "MIN": 0.5,  "MAX": 3.0,  "DEFAULT": 1.0}
+        {"NAME": "fieldFalloff",  "LABEL": "Falloff Exp",   "TYPE": "float", "MIN": 0.5,  "MAX": 3.0,  "DEFAULT": 1.0},
+        {"NAME": "FieldColour",   "LABEL": "Field Colour",  "TYPE": "color", "DEFAULT": [0.65,0.85,1.0,1.0]}
     ]
 }*/
 
@@ -119,7 +120,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float brightness = pow(saturate(licVal), 0.8);
         float hue = colourByMag ? saturate(0.65 - saturate(log(Emag + 1.0) * 0.25) * 0.5)
                                 : frac(Eang / 6.28318 + 0.5);
-        col = hsv2rgb(float3(hue, 0.85, brightness));
+        col = hsv2rgb(float3(hue, 0.85, brightness)) * FieldColour.rgb;
 
     } else if (displayMode == 1) {
         // Force vectors: arrow glyphs at a grid

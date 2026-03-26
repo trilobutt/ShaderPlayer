@@ -17,6 +17,9 @@ ShaderPlayer supports dynamic per-shader parameters. Declare them in an ISF-styl
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
 
+Texture2D noiseTexture : register(t1);
+SamplerState noiseSampler : register(s1);
+
 cbuffer Constants : register(b0) {
     float time;
     float padding1;
@@ -56,7 +59,9 @@ Place the block **before any non-comment HLSL**. It must begin with `/*{` and en
 }*/
 ```
 
-The block is stripped before compilation — it is never seen by the HLSL compiler.
+The block is a standard HLSL block comment — the compiler ignores it. ShaderPlayer reads it before passing the source to `D3DCompile` and prepends `#define` aliases. The source on disk is never modified.
+
+If the JSON block is missing or malformed, no aliases are generated and any `NAME`-referenced identifier will produce an `X3004 undeclared identifier` compile error.
 
 ---
 
@@ -106,16 +111,21 @@ if (EnableVignette) { ... }
     "NAME": "BlendMode",
     "LABEL": "Blend Mode",
     "TYPE": "long",
-    "VALUES": ["Normal", "Multiply", "Screen"],
+    "VALUES": [0, 1, 2],
+    "LABELS": ["Normal", "Multiply", "Screen"],
     "DEFAULT": 0
 }
 ```
 
-Renders as a dropdown. In the shader, `BlendMode` expands to `int(custom[N].x)`. Compare with integer literals:
+Renders as a dropdown. `VALUES` is an integer array (the actual selectable values). `LABELS` is a parallel string array (display text). **Both are required** — omitting `VALUES` produces an empty, un-selectable dropdown.
+
+In the shader, `BlendMode` expands to `int(custom[N].x)`. Compare with integer literals:
 
 ```hlsl
 if (BlendMode == 1) { /* Multiply */ }
 ```
+
+A `DEFAULT` not present in `VALUES` leaves the combo stuck on the first entry.
 
 ---
 
@@ -154,6 +164,8 @@ return col * Tint;
 
 Renders as a clickable/draggable 2D square pad. `DEFAULT` is `[X, Y]`. In the shader, `Center` expands to a `float2` expression (e.g. `float2(custom[0].z, custom[0].w)`). The `point2d` type consumes 2 floats and is aligned to an even float offset.
 
+`MIN`/`MAX` are scalar and apply to both axes.
+
 ```hlsl
 float2 offset = input.uv - Center;
 ```
@@ -176,6 +188,29 @@ Renders as a button. When pressed, the parameter is `1.0` for exactly one render
 if (Flash > 0.5) { return float4(1, 1, 1, 1); }
 ```
 
+Event parameters are not keyframeable.
+
+---
+
+### `audio` — Audio Band (read-only)
+
+```json
+{
+    "NAME": "Bass",
+    "LABEL": "Bass",
+    "TYPE": "audio",
+    "BAND": "bass"
+}
+```
+
+Renders as a read-only level meter. Consumes no `custom[]` slot — the alias maps directly to an `AudioConstants` uniform. Valid `BAND` values: `rms`, `bass`, `mid`, `high`, `beat`, `centroid`.
+
+When any `audio` parameter is present, ShaderPlayer auto-injects the `AudioConstants` cbuffer and `spectrumTexture` declarations into the source before compilation. You do not need to declare these manually.
+
+Audio band values for typical music are in the range 0.01–0.3. Shader multipliers need to be 3–5× higher than intuition suggests for a visible effect.
+
+Audio parameters are not persisted to `config.json` and are not keyframeable.
+
 ---
 
 ## Cbuffer Layout and Limits
@@ -190,8 +225,9 @@ All parameters are packed into the `custom[4]` (`float4[4]` = 16 floats) slot in
 | `event` | 1 | none |
 | `point2d` | 2 | even float offset |
 | `color` | 4 | multiple-of-4 float offset |
+| `audio` | 0 | n/a (no custom[] slot) |
 
-**Maximum: 16 floats total across all parameters.** Parameters that would exceed this limit are ignored (a warning appears in the compile error field).
+**Maximum: 16 floats total across all non-audio parameters.** Parameters that would exceed this limit are skipped with a warning in the compile error field.
 
 ---
 
@@ -213,7 +249,7 @@ All parameters are packed into the `custom[4]` (`float4[4]` = 16 floats) slot in
          "DEFAULT": false},
 
         {"NAME": "BlendMode",  "LABEL": "Blend Mode",     "TYPE": "long",
-         "VALUES": ["Add", "Multiply"], "DEFAULT": 0},
+         "VALUES": [0, 1], "LABELS": ["Add", "Multiply"], "DEFAULT": 0},
 
         {"NAME": "Flash",      "LABEL": "Trigger Flash",  "TYPE": "event"}
     ]
@@ -236,11 +272,36 @@ Total: 13 floats used, 3 remaining.
 
 ---
 
+## Shader Type
+
+Add `"SHADER_TYPE"` to the ISF block to control how ShaderPlayer categorises and handles the shader:
+
+```json
+{
+    "SHADER_TYPE": "audio",
+    "INPUTS": [ ... ]
+}
+```
+
+| Value | Behaviour |
+|---|---|
+| *(absent)* | Video effect — video texture is the primary input |
+| `"video"` | Explicit video effect (same behaviour as absent) |
+| `"generative"` | No video required — `time` drives animation |
+| `"audio"` | Audio reactive — audio uniforms auto-injected |
+
+The Shader Library groups presets into three sections: **Audio Reactive**, **Generative**, and **Video Effects**.
+
+---
+
 ## Rules and Gotchas
 
-- `NAME` must be a valid HLSL identifier (letters, digits, underscores; no spaces; not a reserved keyword).
+- `NAME` must be a valid HLSL identifier (letters, digits, underscores; no spaces; not a reserved keyword or HLSL built-in). Avoid names like `frac`, `min`, `max`, `abs`, `lerp`, `linear`, `sample` — these shadow HLSL intrinsics and cause compile errors.
 - The ISF block must appear before any non-comment HLSL. The first `/*{` in the file is used.
 - Do not declare `custom[]` yourself in the cbuffer — it is part of the standard ShaderPlayer cbuffer. The standard cbuffer block must still appear in your shader.
-- Parameter metadata (min, max, label, etc.) is always read from the shader source on load. Only the **current values** are saved in `config.json` — so changing metadata in the file takes effect on the next compile.
+- `noiseTexture` and `noiseSampler` must be declared in every shader even if unused — they are always bound by the renderer.
+- Parameter metadata (min, max, label, etc.) is always read from the shader source on load. Only the **current values** are saved in `config.json` — changing metadata in the file takes effect on the next compile.
 - `color` defaults are RGBA in 0–1 range, not 0–255.
-- `point2d` `MIN`/`MAX` are scalar and apply to both axes.
+- `long` `VALUES` contains integers; `LABELS` contains strings. Never put strings in `VALUES`.
+- `MIN`/`MAX`/`STEP` must be scalar numbers. Array-form (e.g. `"MIN": [0.0, 0.0]`) is silently ignored and the field stays at its default.
+- If a shader disappears after Scan Folder, it has a compile error. The `ShaderPreset::compileError` field holds the message (no UI surface yet — check in the debugger or add a `// compile error:` guard temporarily).
