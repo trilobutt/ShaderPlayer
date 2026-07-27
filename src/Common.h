@@ -125,16 +125,31 @@ struct ShaderPreset {
     std::unordered_map<std::string, KeyframeTimeline> savedKeyframes;
 };
 
+// Visibility of every closable dockable panel. A workspace preset must carry ALL
+// of them: a panel left hidden while the loaded ImGui layout still holds a dock
+// node for it leaves that node empty, and ImGui deletes empty leaf nodes and
+// merges their siblings — the saved split is destroyed and the panel re-docks
+// somewhere arbitrary when it is next opened. Adding a closable panel to
+// UIManager means adding a field here and a key in WorkspaceManager's
+// read/write pair. Video and Shader Parameters are always submitted, so they
+// are deliberately absent.
+struct PanelVisibility {
+    bool editor      = true;
+    bool library     = true;
+    bool transport   = true;
+    bool recording   = false;
+    bool keybindings = false;
+    bool noise       = false;
+    bool spout       = false;
+    bool audio       = false;
+};
+
 struct WorkspacePreset {
     std::string name;
     std::string filepath;        // absolute path to .ini file; empty = built-in Default
     int shortcutKey = 0;         // VK code; 0 = none
     int shortcutModifiers = 0;   // MOD_CONTROL | MOD_SHIFT | MOD_ALT bitmask
-    bool showEditor = true;
-    bool showLibrary = true;
-    bool showTransport = true;
-    bool showRecording = false;
-    bool showKeybindingsPanel = false;
+    PanelVisibility panels;
 };
 
 // Recording settings

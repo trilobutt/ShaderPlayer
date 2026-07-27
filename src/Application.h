@@ -114,6 +114,8 @@ public:
                                      int excludeWorkspaceIdx,
                                      bool excludePassthrough = false) const;
 
+    // Queues a workspace preset to be applied before the next ImGui frame. Safe to
+    // call from anywhere, including from inside UIManager's draw code.
     void LoadWorkspacePreset(int index);
 
     // Called by UIManager after any shader parameter widget changes value.
@@ -133,10 +135,21 @@ private:
     void ProcessFrame();
     void RenderFrame();
 
+    // Performs the workspace preset load queued by LoadWorkspacePreset(). MUST be
+    // called outside NewFrame()..Render() (see the comment on m_pendingWorkspace).
+    void ApplyPendingWorkspacePreset();
+
     // Window
     HWND m_hwnd = nullptr;
     int m_windowWidth = 1280;
     int m_windowHeight = 720;
+
+    // Workspace preset index queued for loading, -1 when none is pending.
+    // ImGui::LoadIniSettingsFromMemory() destroys every dock node and clears every
+    // window's DockId, so calling it between NewFrame() and Render() leaves the
+    // in-flight frame holding freed nodes and drops the panels out of the layout.
+    // The request is therefore always deferred to ApplyPendingWorkspacePreset().
+    int m_pendingWorkspace = -1;
 
     // Components
     AudioAnalyzer m_audioAnalyzer;

@@ -100,9 +100,16 @@ src/
 └── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
                               exe for `.ini` files (custom [WorkspacePreset] header +
                               verbatim ImGui ini blob). Index 0 = built-in Default
-                              (kDefaultLayoutIni constant — replace after first live run).
+                              (kDefaultLayoutIni constant — the shipped all-panels
+                              layout; its PanelVisibility is set in the ctor and
+                              must match the panels in the ini blob).
                               SavePreset calls ImGui::SaveIniSettingsToMemory; LoadPreset
-                              calls ImGui::LoadIniSettingsFromMemory. Owned by Application.
+                              calls ImGui::LoadIniSettingsFromMemory and so must only be
+                              reached via Application's deferred queue (see ImGui Notes).
+                              Owned by Application.
+                              Application::Initialize applies preset 0 when
+                              UIManager::HadSavedLayout() is false, so a fresh install
+                              starts docked rather than with floating windows.
 ```
 
 ### Shader System
@@ -224,6 +231,8 @@ Presets saved to config include only the `filepath` and shortcut — source is r
 
 Layout presets stored as `.ini` files in `layouts/` next to the executable (path in `AppConfig::layoutsDirectory`). Not referenced in `config.json` — discovered by `WorkspaceManager::ScanDirectory()` at startup. Keybindings are in the `.ini` file headers, not config.json. Access via View > Workspace Presets.
 
+A preset must record the visibility of **every** closable dockable panel, carried as `PanelVisibility` (`Common.h`) in `WorkspacePreset::panels` and moved through `UIManager::GetVisibility()`/`ApplyVisibility()`. Omitting one is not a cosmetic loss: the loaded layout still holds a dock node for the hidden panel, ImGui deletes empty leaf nodes and merges their siblings, so the saved split is destroyed and the panel re-docks arbitrarily when next opened. Adding a closable panel therefore needs a `PanelVisibility` field, a `show*` key in `WorkspaceManager::ParsePresetFile`/`WritePresetFile`, and a matching flag on the built-in Default in the `WorkspaceManager` ctor. `Video` and `Shader Parameters` are always submitted and are deliberately excluded.
+
 ## Development Notes
 
 ### Render Loop (RenderFrame)
@@ -264,6 +273,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 
 ## Live Capture (Webcam / RTSP)
 
+- **libavdevice must be linked and registered.** `avdevice` is in `FFMPEG_LIBRARIES` (CMakeLists) and `VideoDecoder.cpp` calls `avdevice_register_all()` once via `EnsureDevicesRegistered()`. avformat's static init does not register device demuxers — without this `av_find_input_format("dshow")` returns null and every webcam open fails silently before touching the device.
 - `VideoDecoder::OpenCapture(deviceOrUrl, isDshow)` — opens a dshow device (`"video=<name>"`) or any URL (RTSP/RTMP/HTTP). Sets `AVFMT_FLAG_NONBLOCK`; `DecodeNextFrame` returns false on `AVERROR(EAGAIN)` (no frame ready, not an error).
 - DirectShow device enumeration: `#include <dshow.h>` + `strmiids.lib`. `CoCreateInstance(CLSID_SystemDeviceEnum)` → `CreateClassEnumerator(CLSID_VideoInputDeviceCategory)` → `IPropertyBag::Read(L"FriendlyName")`. COM already initialised by WinMain.
 - Live timing uses wall-clock accumulation (`m_generativeTime`), not frame PTS (device clock starts at arbitrary values). `IsLiveCapture()` gate in `ProcessFrame` skips the file-mode frame-rate gate and the end-of-stream `SeekToTime(0.0)`.
@@ -303,7 +313,9 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `ImGui::SameLine(x)` takes absolute offset from window left — use `GetContentRegionMax().x` for right-alignment, not `GetContentRegionAvail().x`
 - Static locals in modal draw functions persist across sessions; use an `s_wasOpen` bool sentinel to reset edge-detection state when a modal reopens
 - `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
-- `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame
+- `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame. `LoadIniSettingsFromMemory` sets ImGui's internal `SettingsLoaded` flag, so calling it before the first `NewFrame` suppresses the automatic `imgui.ini` load
+- `LoadIniSettingsFromMemory` must **never** be called between `NewFrame()` and `Render()`. Its pre-read handler (`DockSettingsHandler_ClearAll`) destroys every dock node and clears every window's `DockId`, so an in-flight frame is left holding freed nodes: the dock tree collapses to a bare `CentralNode`, every panel drops out to a floating window at a stale position, and the wreckage is then serialised to `imgui.ini`. ImGui's own assert against this is commented out, so it fails silently rather than aborting. Workspace preset loads are requested via `Application::LoadWorkspacePreset` (which only queues an index) and applied by `ApplyPendingWorkspacePreset()` in `Run()` between frames. Any new caller must go through that queue, never `WorkspaceManager::LoadPreset` directly. `SaveIniSettingsToMemory` has no such restriction (ImGui itself calls it from inside `NewFrame`)
+- Dock splitter minimums come from the single global `style.WindowMinSize`; there is no per-node minimum, and `SetNextWindowSizeConstraints` is explicitly discarded for docked windows. Keep it below the smallest node dimension in the shipped layout (299px side columns, 72px transport bar) or existing layouts fight the floor
 - `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
 - Toggle buttons using `PushStyleColor`/`PopStyleColor`: snapshot the bool BEFORE the button call (`bool wasActive = m_flag; if (wasActive) Push...; if (Button(...)) m_flag=!m_flag; if (wasActive) Pop...`). Checking `m_flag` after the button call breaks push/pop symmetry on the click frame.
 - `DrawKeyframeDetail` receives `anyChanged` by reference — set it on ALL mutation paths including early returns, or `OnParamChanged()` won't fire for that edit.

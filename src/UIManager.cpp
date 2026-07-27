@@ -4,6 +4,7 @@
 #include "imgui_impl_dx11.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <dshow.h>
 #pragma comment(lib, "strmiids.lib")
 
@@ -37,6 +38,7 @@ bool UIManager::Initialize(HWND hwnd, ID3D11Device* device, ID3D11DeviceContext*
         if (lastSlash) *(lastSlash + 1) = '\0';
         m_iniFilePath = std::string(exePath) + "imgui.ini";
         io.IniFilename = m_iniFilePath.c_str();
+        m_hadSavedLayout = std::filesystem::exists(m_iniFilePath);
     }
 
     // Fonts — DPI-aware sizes so the UI is legible at 4K.
@@ -90,6 +92,14 @@ bool UIManager::Initialize(HWND hwnd, ID3D11Device* device, ID3D11DeviceContext*
     style.ItemInnerSpacing  = ImVec2(4.0f, 4.0f);
     style.ScrollbarSize     = 14.0f;
     style.GrabMinSize       = 10.0f;
+
+    // Floor for dock splitter drags. ImGui reads this single global value in
+    // DockNodeTreeUpdateSplitter — there is no per-node minimum, and
+    // SetNextWindowSizeConstraints is explicitly discarded for docked windows.
+    // 280x64 sits just under the tightest node in the shipped layout (299px side
+    // columns, 72px transport bar), so no panel can be crushed into a sliver by
+    // its neighbour while every existing layout still loads unchanged.
+    style.WindowMinSize     = ImVec2(280.0f, 64.0f);
 
     ImVec4* c = style.Colors;
 
@@ -317,10 +327,8 @@ void UIManager::Render() {
         ImGui::SameLine();
         if (ImGui::Button("Save") || submit) {
             if (m_saveWorkspaceName[0] != '\0') {
-                m_app.GetWorkspaceManager().SavePreset(
-                    m_saveWorkspaceName,
-                    m_showEditor, m_showLibrary, m_showTransport,
-                    m_showRecording, m_showKeybindingsPanel);
+                m_app.GetWorkspaceManager().SavePreset(m_saveWorkspaceName,
+                                                       GetVisibility());
                 ShowNotification("Workspace saved: " + std::string(m_saveWorkspaceName));
             }
             ImGui::CloseCurrentPopup();

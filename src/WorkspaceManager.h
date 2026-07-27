@@ -21,15 +21,11 @@ public:
 
     // Capture current ImGui layout + visibility state and write to a new .ini file.
     // Returns the new preset index (>= 1), or -1 on failure.
-    int SavePreset(const std::string& name,
-                   bool showEditor, bool showLibrary, bool showTransport,
-                   bool showRecording, bool showKeybindingsPanel);
+    int SavePreset(const std::string& name, const PanelVisibility& panels);
 
     // Load preset by index: apply ImGui layout and return visibility flags.
     // Index 0 loads the hardcoded Default layout.
-    bool LoadPreset(int index,
-                    bool& showEditor, bool& showLibrary, bool& showTransport,
-                    bool& showRecording, bool& showKeybindingsPanel);
+    bool LoadPreset(int index, PanelVisibility& panels);
 
     // Delete preset file and remove from vector. No-op for index 0 (Default).
     void DeletePreset(int index);

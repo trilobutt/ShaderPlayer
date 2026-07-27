@@ -61,14 +61,34 @@ public:
         m_keyframeFollowMode    = false;
     }
 
-    // Apply a full set of panel visibility flags (used by workspace preset load).
-    void ApplyVisibility(bool showEditor, bool showLibrary, bool showTransport,
-                         bool showRecording, bool showKeybindingsPanel) {
-        m_showEditor           = showEditor;
-        m_showLibrary          = showLibrary;
-        m_showTransport        = showTransport;
-        m_showRecording        = showRecording;
-        m_showKeybindingsPanel = showKeybindingsPanel;
+    // False when no imgui.ini existed at startup, i.e. this is a fresh install
+    // and the built-in Default workspace should be applied.
+    bool HadSavedLayout() const { return m_hadSavedLayout; }
+
+    // Panel visibility as a whole (workspace preset save/load). Every closable
+    // dockable panel must appear in both directions — see PanelVisibility.
+    PanelVisibility GetVisibility() const {
+        PanelVisibility v;
+        v.editor      = m_showEditor;
+        v.library     = m_showLibrary;
+        v.transport   = m_showTransport;
+        v.recording   = m_showRecording;
+        v.keybindings = m_showKeybindingsPanel;
+        v.noise       = m_showNoisePanel;
+        v.spout       = m_showSpoutPanel;
+        v.audio       = m_showAudioPanel;
+        return v;
+    }
+
+    void ApplyVisibility(const PanelVisibility& v) {
+        m_showEditor           = v.editor;
+        m_showLibrary          = v.library;
+        m_showTransport        = v.transport;
+        m_showRecording        = v.recording;
+        m_showKeybindingsPanel = v.keybindings;
+        m_showNoisePanel       = v.noise;
+        m_showSpoutPanel       = v.spout;
+        m_showAudioPanel       = v.audio;
     }
 
 private:
@@ -150,6 +170,9 @@ private:
 
     // ImGui ini path — must outlive the ImGui context (io.IniFilename is a raw ptr)
     std::string m_iniFilePath;
+
+    // False when no imgui.ini existed at startup (fresh install / first run)
+    bool m_hadSavedLayout = false;
 
     // Monospace font for the shader editor (Consolas; null = use default)
     ImFont* m_editorFont = nullptr;

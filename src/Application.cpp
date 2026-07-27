@@ -104,6 +104,16 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     m_workspaceManager = std::make_unique<WorkspaceManager>();
     m_workspaceManager->Initialize(m_configManager.GetConfig().layoutsDirectory);
 
+    // Fresh install (no imgui.ini yet): apply the built-in Default workspace so
+    // every release starts on the shipped layout instead of floating windows.
+    // LoadIniSettingsFromMemory sets ImGui's SettingsLoaded flag, so the first
+    // NewFrame will not overwrite this with disk contents.
+    if (!m_uiManager->HadSavedLayout()) {
+        PanelVisibility panels;
+        if (m_workspaceManager->LoadPreset(0, panels))
+            m_uiManager->ApplyVisibility(panels);
+    }
+
     // Open last video if available
     if (!m_configManager.GetConfig().lastOpenedVideo.empty()) {
         OpenVideo(m_configManager.GetConfig().lastOpenedVideo);
@@ -421,6 +431,10 @@ int Application::Run() {
         }
 
         if (m_exitRequested) break;
+
+        // Between frames: the only point at which ImGui's settings/dock state can
+        // be replaced wholesale without corrupting an in-flight frame.
+        ApplyPendingWorkspacePreset();
 
         ProcessFrame();
         RenderFrame();
@@ -1087,9 +1101,20 @@ std::string Application::GetComboName(int vkCode, int modifiers) const {
 }
 
 void Application::LoadWorkspacePreset(int index) {
-    bool se, sl, st, sr, sk;
-    if (m_workspaceManager->LoadPreset(index, se, sl, st, sr, sk)) {
-        m_uiManager->ApplyVisibility(se, sl, st, sr, sk);
+    // Queue only. The View menu calls this from inside the ImGui frame, and the
+    // actual load tears down the whole dock tree (see m_pendingWorkspace).
+    m_pendingWorkspace = index;
+}
+
+void Application::ApplyPendingWorkspacePreset() {
+    if (m_pendingWorkspace < 0) return;
+
+    const int index = m_pendingWorkspace;
+    m_pendingWorkspace = -1;
+
+    PanelVisibility panels;
+    if (m_workspaceManager->LoadPreset(index, panels)) {
+        m_uiManager->ApplyVisibility(panels);
         const std::string& name = m_workspaceManager->GetPresets()[index].name;
         m_uiManager->ShowNotification("Workspace: " + name);
     }

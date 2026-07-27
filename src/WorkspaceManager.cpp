@@ -8,55 +8,109 @@
 
 namespace SP {
 
-// Hardcoded factory layout. To update: arrange the windows as desired,
-// then copy the contents of imgui.ini (written to CWD by ImGui automatically)
-// and paste it here, replacing everything between the quotes.
-// NOTE: Placeholder layout — replace with actual imgui.ini content after a live run.
-static const char* const kDefaultLayoutIni = R"(
+// Hardcoded factory layout: every panel docked and visible. To update, arrange
+// the windows as desired, save a workspace preset, then paste that .ini file's
+// ImGui section here (drop the [WorkspacePreset] header and the LastUsed lines)
+// and mirror its visibility flags in the WorkspaceManager constructor below.
+static const char* const kDefaultLayoutIni = R"INI(
 [Window][DockSpace]
 Pos=0,0
-Size=1280,720
+Size=1920,1171
 Collapsed=0
 
 [Window][Video]
-Pos=0,19
-Size=780,640
+Pos=301,25
+Size=1178,871
 Collapsed=0
-DockId=0x00000001,0
+DockId=0x00000009,0
 
-[Window][Shader Editor]
-Pos=782,19
-Size=498,450
+[Window][Shader Parameters]
+Pos=0,25
+Size=299,793
 Collapsed=0
-DockId=0x00000002,0
+DockId=0x00000007,0
 
-[Window][Shader Library]
-Pos=782,471
-Size=498,208
+[Window][Noise Generator]
+Pos=0,820
+Size=299,191
 Collapsed=0
-DockId=0x00000003,0
+DockId=0x0000000B,0
+
+[Window][Audio Monitor]
+Pos=0,1013
+Size=299,158
+Collapsed=0
+DockId=0x0000000C,0
 
 [Window][Transport]
-Pos=0,661
-Size=780,59
+Pos=301,898
+Size=1178,72
+Collapsed=0
+DockId=0x00000005,0
+
+[Window][Recording Settings]
+Pos=301,972
+Size=1178,199
+Collapsed=0
+DockId=0x0000000D,0
+
+[Window][Spout Output]
+Pos=301,1059
+Size=1178,112
+Collapsed=0
+DockId=0x0000000E,0
+
+[Window][Shader Library]
+Pos=1481,25
+Size=439,1146
 Collapsed=0
 DockId=0x00000004,0
 
+[Window][Shader Editor]
+Pos=1481,25
+Size=439,1146
+Collapsed=0
+DockId=0x00000004,1
+
+[Window][Keybindings]
+Pos=1481,25
+Size=439,1146
+Collapsed=0
+DockId=0x00000004,2
+
 [Docking][Data]
-DockSpace     ID=0x7B8B77F5 Window=0x4647B76E Pos=0,19 Size=1280,701 Split=X Selected=0x995B0CF8
-  DockNode    ID=0x00000001 Parent=0x7B8B77F5 SizeRef=780,701 Split=Y Selected=0x995B0CF8
-    DockNode  ID=0x00000004 Parent=0x00000001 SizeRef=780,59 HiddenTabBar=1 Selected=0xF1B6D904
-    DockNode  ID=0x00000005 Parent=0x00000001 SizeRef=780,640 CentralNode=1 HiddenTabBar=1 Selected=0x995B0CF8
-  DockNode    ID=0x00000002 Parent=0x7B8B77F5 SizeRef=498,701 Split=Y Selected=0xA9E9B638
-    DockNode  ID=0x00000006 Parent=0x00000002 SizeRef=498,450 HiddenTabBar=1 Selected=0xA9E9B638
-    DockNode  ID=0x00000003 Parent=0x00000002 SizeRef=498,208 HiddenTabBar=1 Selected=0x1E3B62AB
-)";
+DockSpace           ID=0xD71539A0 Window=0x3DA2F1DE Pos=0,25 Size=1920,1146 Split=X
+  DockNode          ID=0x00000003 Parent=0xD71539A0 SizeRef=1479,1146 Split=X
+    DockNode        ID=0x00000001 Parent=0x00000003 SizeRef=299,1146 Split=Y Selected=0xAF40F580
+      DockNode      ID=0x00000007 Parent=0x00000001 SizeRef=299,793 Selected=0xAF40F580
+      DockNode      ID=0x00000008 Parent=0x00000001 SizeRef=299,351 Split=Y Selected=0xE1E349A6
+        DockNode    ID=0x0000000B Parent=0x00000008 SizeRef=299,191 Selected=0xE1E349A6
+        DockNode    ID=0x0000000C Parent=0x00000008 SizeRef=299,158 Selected=0x2BE082FB
+    DockNode        ID=0x00000002 Parent=0x00000003 SizeRef=1178,1146 Split=Y
+      DockNode      ID=0x00000009 Parent=0x00000002 SizeRef=1317,871 CentralNode=1 Selected=0x954F7004
+      DockNode      ID=0x0000000A Parent=0x00000002 SizeRef=1317,273 Split=Y Selected=0x00A96232
+        DockNode    ID=0x00000005 Parent=0x0000000A SizeRef=1317,72 Selected=0x04C1370C
+        DockNode    ID=0x00000006 Parent=0x0000000A SizeRef=1317,199 Split=Y Selected=0x00A96232
+          DockNode  ID=0x0000000D Parent=0x00000006 SizeRef=1178,211 Selected=0x00A96232
+          DockNode  ID=0x0000000E Parent=0x00000006 SizeRef=1178,112 Selected=0x8D9B226A
+  DockNode          ID=0x00000004 Parent=0xD71539A0 SizeRef=439,1146 Selected=0x5DAA59D9
+)INI";
 
 WorkspaceManager::WorkspaceManager() {
     // Index 0 is always the built-in Default preset
     WorkspacePreset defaultPreset;
     defaultPreset.name = "Default";
     defaultPreset.filepath = "";  // no file
+    // Must match the panels present in kDefaultLayoutIni above — every panel with
+    // a dock node in that blob has to be visible, or ImGui drops the empty node.
+    defaultPreset.panels.editor      = true;
+    defaultPreset.panels.library     = true;
+    defaultPreset.panels.transport   = true;
+    defaultPreset.panels.recording   = true;
+    defaultPreset.panels.keybindings = true;
+    defaultPreset.panels.noise       = true;
+    defaultPreset.panels.spout       = true;
+    defaultPreset.panels.audio       = true;
     m_presets.push_back(std::move(defaultPreset));
 }
 
@@ -97,10 +151,7 @@ void WorkspaceManager::ScanDirectory() {
     }
 }
 
-int WorkspaceManager::SavePreset(const std::string& name,
-                                  bool showEditor, bool showLibrary,
-                                  bool showTransport, bool showRecording,
-                                  bool showKeybindingsPanel)
+int WorkspaceManager::SavePreset(const std::string& name, const PanelVisibility& panels)
 {
     // Capture current ImGui layout
     size_t iniSize = 0;
@@ -109,11 +160,7 @@ int WorkspaceManager::SavePreset(const std::string& name,
 
     WorkspacePreset preset;
     preset.name = name;
-    preset.showEditor = showEditor;
-    preset.showLibrary = showLibrary;
-    preset.showTransport = showTransport;
-    preset.showRecording = showRecording;
-    preset.showKeybindingsPanel = showKeybindingsPanel;
+    preset.panels = panels;
 
     // Generate filepath
     std::string filename = SanitiseName(name) + ".ini";
@@ -158,21 +205,12 @@ int WorkspaceManager::SavePreset(const std::string& name,
     return static_cast<int>(m_presets.size()) - 1;
 }
 
-bool WorkspaceManager::LoadPreset(int index,
-                                   bool& showEditor, bool& showLibrary,
-                                   bool& showTransport, bool& showRecording,
-                                   bool& showKeybindingsPanel)
+bool WorkspaceManager::LoadPreset(int index, PanelVisibility& panels)
 {
     if (index < 0 || index >= static_cast<int>(m_presets.size())) return false;
 
     const WorkspacePreset& preset = m_presets[index];
-
-    // Apply visibility
-    showEditor = preset.showEditor;
-    showLibrary = preset.showLibrary;
-    showTransport = preset.showTransport;
-    showRecording = preset.showRecording;
-    showKeybindingsPanel = preset.showKeybindingsPanel;
+    panels = preset.panels;
 
     if (index == 0) {
         // Built-in Default
@@ -249,11 +287,14 @@ bool WorkspaceManager::ParsePresetFile(const std::string& filepath,
             else if (key == "shortcutModifiers") {
                 std::from_chars(val.data(), val.data() + val.size(), out.shortcutModifiers);
             }
-            else if (key == "showEditor")         out.showEditor         = (val == "1");
-            else if (key == "showLibrary")        out.showLibrary        = (val == "1");
-            else if (key == "showTransport")      out.showTransport      = (val == "1");
-            else if (key == "showRecording")      out.showRecording      = (val == "1");
-            else if (key == "showKeybindingsPanel") out.showKeybindingsPanel = (val == "1");
+            else if (key == "showEditor")           out.panels.editor      = (val == "1");
+            else if (key == "showLibrary")          out.panels.library     = (val == "1");
+            else if (key == "showTransport")        out.panels.transport   = (val == "1");
+            else if (key == "showRecording")        out.panels.recording   = (val == "1");
+            else if (key == "showKeybindingsPanel") out.panels.keybindings = (val == "1");
+            else if (key == "showNoisePanel")       out.panels.noise       = (val == "1");
+            else if (key == "showSpoutPanel")       out.panels.spout       = (val == "1");
+            else if (key == "showAudioPanel")       out.panels.audio       = (val == "1");
         } else {
             imguiAccum += line + '\n';
         }
@@ -274,11 +315,14 @@ bool WorkspaceManager::WritePresetFile(const WorkspacePreset& preset,
     file << "name=" << preset.name << '\n';
     file << "shortcutKey=" << preset.shortcutKey << '\n';
     file << "shortcutModifiers=" << preset.shortcutModifiers << '\n';
-    file << "showEditor=" << (preset.showEditor ? 1 : 0) << '\n';
-    file << "showLibrary=" << (preset.showLibrary ? 1 : 0) << '\n';
-    file << "showTransport=" << (preset.showTransport ? 1 : 0) << '\n';
-    file << "showRecording=" << (preset.showRecording ? 1 : 0) << '\n';
-    file << "showKeybindingsPanel=" << (preset.showKeybindingsPanel ? 1 : 0) << '\n';
+    file << "showEditor=" << (preset.panels.editor ? 1 : 0) << '\n';
+    file << "showLibrary=" << (preset.panels.library ? 1 : 0) << '\n';
+    file << "showTransport=" << (preset.panels.transport ? 1 : 0) << '\n';
+    file << "showRecording=" << (preset.panels.recording ? 1 : 0) << '\n';
+    file << "showKeybindingsPanel=" << (preset.panels.keybindings ? 1 : 0) << '\n';
+    file << "showNoisePanel=" << (preset.panels.noise ? 1 : 0) << '\n';
+    file << "showSpoutPanel=" << (preset.panels.spout ? 1 : 0) << '\n';
+    file << "showAudioPanel=" << (preset.panels.audio ? 1 : 0) << '\n';
     file << '\n';
     file << imguiBlob;
 

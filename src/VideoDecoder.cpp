@@ -2,7 +2,19 @@
 #include <stdexcept>
 #include <cstring>
 
+extern "C" {
+#include <libavdevice/avdevice.h>
+}
+
 namespace SP {
+
+// libavdevice demuxers (dshow among them) are not registered by avformat's
+// static init — without this av_find_input_format("dshow") returns null and
+// every webcam open fails before it reaches the device.
+static void EnsureDevicesRegistered() {
+    static const bool registered = [] { avdevice_register_all(); return true; }();
+    (void)registered;
+}
 
 VideoDecoder::VideoDecoder() {
     m_frame      = av_frame_alloc();
@@ -162,16 +174,21 @@ bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     std::string url = deviceOrUrl;
 
     if (isDshow) {
+        EnsureDevicesRegistered();
         fmt = av_find_input_format("dshow");
         if (!fmt) return false;
         url = "video=" + deviceOrUrl;
     }
 
-    // Request a common default; fall back to whatever the device offers.
+    // Request a common default; fall back to whatever the device offers. Many
+    // integrated laptop cameras top out below 720p or only offer 15/20 fps at
+    // higher resolutions, so the unconstrained retry is the path that succeeds.
     AVDictionary* opts = nullptr;
     av_dict_set(&opts, "video_size", "1280x720", 0);
     av_dict_set(&opts, "framerate", "30", 0);
 
+    // avformat_open_input nulls m_formatCtx itself on failure, so the retry
+    // starts from a clean context.
     if (avformat_open_input(&m_formatCtx, url.c_str(), fmt, &opts) < 0) {
         av_dict_free(&opts);
         if (avformat_open_input(&m_formatCtx, url.c_str(), fmt, nullptr) < 0)
