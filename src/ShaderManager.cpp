@@ -121,6 +121,11 @@ bool ShaderManager::RecompilePreset(int index) {
         m_presets[index].isValid = true;
         m_presets[index].compileError.clear();
         m_compiledShaders[index] = shader;
+        // The renderer holds its own reference to the previous shader object, so it
+        // would keep drawing the stale one until the preset was re-selected. Push the
+        // new shader through immediately when the recompiled preset is the active one.
+        if (index == m_activeIndex)
+            m_renderer.SetActivePixelShader(shader.Get());
         return true;
     } else {
         m_presets[index].isValid = false;
@@ -204,6 +209,10 @@ void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
         m_presets[index].isValid = true;
         m_presets[index].compileError.clear();
         m_compiledShaders[index] = shader;
+        // Same as RecompilePreset: hot-reloading the active shader must reach the GPU
+        // now, otherwise the renderer's held reference keeps the pre-edit version live.
+        if (index == m_activeIndex)
+            m_renderer.SetActivePixelShader(shader.Get());
     } else {
         m_presets[index].isValid = false;
         m_presets[index].compileError = error;
@@ -333,7 +342,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -377,7 +386,7 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
                                                 endPos - startPos - openTag.size()) + "}";
 
     std::vector<ShaderParam> params;
-    int offset = 0;  // Current float index into custom[16]
+    int offset = 0;  // Current float index into custom[]
 
     try {
         nlohmann::json j = nlohmann::json::parse(jsonText);
@@ -455,7 +464,7 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
             if (p.type == ShaderParamType::Point2D) size = 2;
             else if (p.type == ShaderParamType::Color) size = 4;
 
-            if (offset + size > 16) {
+            if (offset + size > kCustomFloats) {
                 // Budget exhausted; remaining INPUTS are silently dropped.
                 // D3DCompile will report 'undeclared identifier' for any shader code
                 // that references a dropped param name.
@@ -509,7 +518,7 @@ std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& 
             continue;
         }
 
-        if (p.cbufferOffset < 0 || p.cbufferOffset >= 16) continue;
+        if (p.cbufferOffset < 0 || p.cbufferOffset >= kCustomFloats) continue;
         int idx  = p.cbufferOffset / 4;
         int c    = p.cbufferOffset % 4;
         std::string slot = "custom[" + std::to_string(idx) + "].";

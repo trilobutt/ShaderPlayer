@@ -3,17 +3,24 @@
     "INPUTS": [
         {"NAME": "bassLevel",        "LABEL": "Bass",            "TYPE": "audio",  "BAND": "bass"},
         {"NAME": "highLevel",        "LABEL": "Treble",          "TYPE": "audio",  "BAND": "high"},
+        {"NAME": "TerrainTint",      "LABEL": "Terrain Tint",    "TYPE": "color",  "DEFAULT": [0.35,0.42,0.55,1.0]},
+        {"NAME": "EruptionColor",    "LABEL": "Eruption Colour", "TYPE": "color",  "DEFAULT": [1.0,0.6,0.2,1.0]},
         {"NAME": "meshResolution",   "LABEL": "Depth Layers",    "TYPE": "long",
          "VALUES": [16,32,48,64], "LABELS": ["16 (fast)","32","48","64 (quality)"], "DEFAULT": 32},
-        {"NAME": "heightScale",      "LABEL": "Height Scale",    "TYPE": "float",  "MIN": 0.1, "MAX": 10.0, "DEFAULT": 0.8},
+        {"NAME": "heightScale",      "LABEL": "Height Scale",    "TYPE": "float",  "MIN": 0.1, "MAX": 20.0, "DEFAULT": 2.5},
         {"NAME": "erosionRate",      "LABEL": "Depth Fade",      "TYPE": "float",  "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.6},
         {"NAME": "orbitSpeed",       "LABEL": "Orbit Speed",     "TYPE": "float",  "MIN": 0.0, "MAX": 2.0,  "DEFAULT": 0.3},
         {"NAME": "lightAzimuth",     "LABEL": "Light Azimuth",   "TYPE": "float",  "MIN": 0.0, "MAX": 360.0,"DEFAULT": 45.0},
         {"NAME": "eruptionThreshold","LABEL": "Eruption Thresh", "TYPE": "float",  "MIN": 0.3, "MAX": 1.0,  "DEFAULT": 0.75},
         {"NAME": "showWireframe",    "LABEL": "Wireframe",       "TYPE": "bool",   "DEFAULT": false},
-        {"NAME": "TerrainTint",      "LABEL": "Terrain Tint",    "TYPE": "color",  "DEFAULT": [0.35,0.42,0.55,1.0]}
+        {"NAME": "BgOpacity",        "LABEL": "Sky Opacity",     "TYPE": "float",  "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 1.0}
     ]
 }*/
+
+// Transparency: the alpha channel of Terrain Tint is the terrain's own opacity and the
+// alpha of Eruption Colour the eruption's; Sky Opacity covers the background. Values
+// below 1 only reveal anything when a Video Blend mode other than Off is selected —
+// the compositor multiplies the blend by this shader's alpha.
 
 // Psychoacoustic topography: FFT as terrain surface.
 // The spectrum texture provides a 1D height profile; this shader renders it as
@@ -35,7 +42,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -57,18 +64,17 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv  = input.uv;
     float  ar  = resolution.x / resolution.y;
 
-    float horizY    = 0.52;    // horizon line: slightly above centre
+    // Horizon sits on the bottom edge: terrain is anchored to the bottom of the frame
+    // and rises from there, so peaks can scale all the way to the top rather than being
+    // confined to the lower half.
+    float horizY    = 1.0;
     float fovFactor = 0.35;    // perspective field-of-view scale
     float orbitAng  = time * orbitSpeed * 0.07;
 
-    // Sky gradient (above horizon or initial colour)
-    float skyT = saturate((horizY - uv.y) / horizY);
+    // Sky gradient fills everything the terrain does not cover.
+    float skyT = saturate(1.0 - uv.y);
     float3 col = lerp(float3(0.02, 0.02, 0.06), float3(0.06, 0.04, 0.12), skyT);
-
-    if (uv.y >= horizY) {
-        // Below horizon: ground fog baseline
-        col = float3(0.04, 0.03, 0.08);
-    }
+    float  alpha = BgOpacity;
 
     int numLayers = meshResolution;  // 16..64
 
@@ -134,26 +140,32 @@ float4 main(PS_INPUT input) : SV_TARGET {
         terrainBase = lerp(terrainBase, col, depthT * erosionRate * 0.8);
         float3 litCol = terrainBase * diffuse;
 
-        // Eruption: bright orange-white flash
+        float layerAlpha = TerrainTint.a;
+
+        // Eruption: flash in the selected colour
         if (erupting) {
             float flash = sin(time * 15.0) * 0.3 + 0.7;
-            litCol = lerp(litCol, float3(1.0, 0.6, 0.2), flash * 0.7);
+            litCol     = lerp(litCol, EruptionColor.rgb, flash * 0.7);
+            layerAlpha = lerp(layerAlpha, EruptionColor.a, flash * 0.7);
         }
 
         // Wireframe: bright ridge line at terrain top
         if (showWireframe) {
             float ridgePx = abs(uv.y - sy_top) * resolution.y;
             if (ridgePx < 1.5) {
-                litCol = float3(0.3, 1.0, 0.5);
+                litCol     = float3(0.3, 1.0, 0.5);
+                layerAlpha = max(layerAlpha, 0.85);
             }
         }
 
-        col = litCol;  // nearer layers overwrite (back-to-front)
+        col   = litCol;      // nearer layers overwrite (back-to-front)
+        alpha = layerAlpha;
     }
 
-    // Scanline shimmer from treble energy
+    // Scanline shimmer from treble energy. Scaled by alpha so it does not paint colour
+    // into regions the user has made transparent.
     float shimmer = highLevel * 0.03 * sin(uv.x * 200.0 + time * 10.0);
-    col += shimmer;
+    col += shimmer * alpha;
 
-    return float4(saturate(col), 1.0);
+    return float4(saturate(col), saturate(alpha));
 }

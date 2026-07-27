@@ -168,7 +168,7 @@ private:
         float resolution[2];
         float videoResolution[2];
         float padding2[2];
-        float custom[16];  // Custom uniforms
+        float custom[32];  // Custom uniforms (float4 custom[8] in HLSL)
     };
     ShaderConstants m_constants = {};
 

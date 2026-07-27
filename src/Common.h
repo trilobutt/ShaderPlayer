@@ -68,6 +68,11 @@ struct KeyframeTimeline {
     void RemoveKeyframe(int index);
 };
 
+// Size of the shader-visible custom uniform block, in floats. Shaders see it as
+// `float4 custom[8]`; ISF parameters are packed into it sequentially at parse time.
+// Must match D3D11Renderer::ShaderConstants::custom.
+inline constexpr int kCustomFloats = 32;
+
 enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event, AudioBand };
 
 struct ShaderParam {
@@ -82,7 +87,7 @@ struct ShaderParam {
     float step = 0.01f;
     std::vector<std::string> longLabels; // Dropdown labels for type=Long
     std::vector<int>         longValues; // Selectable int values for type=Long (parallel to longLabels)
-    int cbufferOffset = 0;          // Float index into custom[16]; set at parse time; -1 for AudioBand
+    int cbufferOffset = 0;          // Float index into custom[]; set at parse time; -1 for AudioBand
     std::string audioBand;          // For AudioBand: "bass"|"mid"|"high"|"rms"|"beat"|"centroid"
     std::optional<KeyframeTimeline> timeline;  // nullopt until user enables keyframing
 };

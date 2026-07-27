@@ -5,6 +5,8 @@
     { "NAME": "FoldStrength", "TYPE": "float", "MIN": 0.0, "MAX": 0.3,  "DEFAULT": 0.08, "LABEL": "Fold Strength" },
     { "NAME": "FaultThresh",  "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.55, "LABEL": "Fault Threshold" },
     { "NAME": "ColourSat",    "TYPE": "float", "MIN": 0.0, "MAX": 2.0,  "DEFAULT": 1.2,  "LABEL": "Colour Saturation" },
+    { "NAME": "BedSoftness",  "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.7,  "LABEL": "Bed Softness" },
+    { "NAME": "SeamWidth",    "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.35, "LABEL": "Seam Width" },
     { "NAME": "BaseTint",     "TYPE": "color",                             "DEFAULT": [0.75,0.62,0.40,1.0], "LABEL": "Base Tint" },
     { "NAME": "BassBand",     "TYPE": "audio", "BAND": "bass",  "LABEL": "Bass" },
     { "NAME": "MidBand",      "TYPE": "audio", "BAND": "mid",   "LABEL": "Mid" },
@@ -29,13 +31,35 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
     float4 pos : SV_POSITION;
     float2 uv  : TEXCOORD0;
 };
+
+// Band profile for one stratum period.
+// A raw frac() sawtooth has a hard discontinuity at every bed boundary, which is
+// what reads as "harsh / pixelated": the step lands between samples and stair-steps
+// along the fold. Blending toward a cosine profile removes the discontinuity, and
+// fading to the period mean once the period drops below a pixel (fw > 0.5) removes
+// the moire that otherwise appears in the fine laminae.
+float bedProfile(float phase, float softness, float fw) {
+    float ph   = frac(phase);
+    float saw  = ph;
+    float smth = 0.5 - 0.5 * cos(6.2831853 * ph);
+    float band = lerp(saw, smth, saturate(softness + fw));
+    return lerp(band, 0.5, saturate(fw - 0.5));
+}
+
+// Analytically antialiased boundary line: width never falls below the pixel
+// footprint, so the seam stays a clean line instead of aliasing into dots.
+float bedSeam(float phase, float width, float fw) {
+    float dist = abs(frac(phase + 0.5) - 0.5) * 2.0;   // 0 at boundary, 1 at bed centre
+    float w    = max(width, fw * 2.0);
+    return 1.0 - smoothstep(0.0, w, dist);
+}
 
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
@@ -51,8 +75,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
     warpedDepth += sin(uv.x * 18.0 + depth * 7.0) * FoldStrength * 0.4 * MidBand;
 
     // Beat transients inject fault / unconformity displacements.
-    float faultAmt = (BeatIn > FaultThresh) ? BeatIn * 0.15 : 0.0;
-    float faultDir = sign(sin(uv.x * 30.0 + depth * 5.0));
+    // Ramp in over the threshold rather than switching on it, and use a soft sign so
+    // the fault edge is a gradient rather than a one-pixel tear.
+    float faultAmt  = smoothstep(FaultThresh, FaultThresh + 0.2, BeatIn) * BeatIn * 0.15;
+    float faultWave = sin(uv.x * 30.0 + depth * 5.0);
+    float faultDir  = faultWave * rsqrt(faultWave * faultWave + 0.05);
     float faultedDepth = warpedDepth + faultDir * faultAmt * sin(depth * 20.0 + time * 10.0);
 
     // Sample noise texture for stratum grain at two scales.
@@ -63,8 +90,15 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Stratum thickness: bass creates thick beds, treble creates thin laminae.
     float bedThickness = 3.5 + BassBand * 8.0;
-    float bed          = frac(faultedDepth * bedThickness);
-    float lamina       = frac(faultedDepth * (bedThickness * 4.0 + HighBand * 20.0));
+    float laminaFreq   = bedThickness * 4.0 + HighBand * 20.0;
+
+    float bedPhase    = faultedDepth * bedThickness;
+    float laminaPhase = faultedDepth * laminaFreq;
+    float bedFw       = fwidth(bedPhase);
+    float laminaFw    = fwidth(laminaPhase);
+
+    float bed    = bedProfile(bedPhase,    BedSoftness, bedFw);
+    float lamina = bedProfile(laminaPhase, BedSoftness, laminaFw);
 
     // Grain texture within each bed.
     float grain = coarseGrain * 0.6 + fineGrain * 0.4;
@@ -81,7 +115,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float3 baseCol   = lerp(lerp(neutralCol, warmCol, bassWeight), coolCol, highWeight);
 
     // Darker bands at bed boundaries (compression seams).
-    float seam = pow(1.0 - abs(bed * 2.0 - 1.0), 6.0);
+    float seam = bedSeam(bedPhase, SeamWidth * 0.5, bedFw);
     baseCol    = lerp(baseCol, darkCol, seam * 0.7);
 
     float3 col = baseCol * (0.55 + strataPattern * 0.9);

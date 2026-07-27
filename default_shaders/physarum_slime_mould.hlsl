@@ -8,7 +8,11 @@
         {"NAME": "diffRadius",     "LABEL": "Diffuse Radius","TYPE": "float", "MIN": 0.001,"MAX": 0.05, "DEFAULT": 0.01},
         {"NAME": "attractorCount", "LABEL": "Attractors",    "TYPE": "long",
          "VALUES": [4,8,12,16,24,32], "LABELS": ["4","8","12","16","24","32"], "DEFAULT": 12},
-        {"NAME": "TrailColour",    "LABEL": "Trail Colour",   "TYPE": "color", "DEFAULT": [0.7,1.0,0.4,1.0]}
+        {"NAME": "TrailColour",    "LABEL": "Trail Colour",   "TYPE": "color", "DEFAULT": [0.7,1.0,0.4,1.0]},
+        {"NAME": "audioAmount",    "LABEL": "Audio Amount",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6},
+        {"NAME": "bassIn",         "LABEL": "Bass",          "TYPE": "audio", "BAND": "bass"},
+        {"NAME": "highIn",         "LABEL": "Treble",        "TYPE": "audio", "BAND": "high"},
+        {"NAME": "beatIn",         "LABEL": "Beat",          "TYPE": "audio", "BAND": "beat"}
     ]
 }*/
 
@@ -32,7 +36,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -70,11 +74,18 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float  ar  = resolution.x / resolution.y;
     float2 p   = uv * float2(ar, 1.0);
 
+    // --- Audio modulation ---
+    // Bass thickens the trails, treble perturbs the network geometry, beats fire a
+    // chemoattractant pulse from every node. audioAmount 0 = the static network.
+    float aBass = bassIn * audioAmount;
+    float aHigh = highIn * audioAmount;
+    float aBeat = beatIn * audioAmount;
+
     // Voronoi frequency: more attractors → denser cells
     float vFreq = sqrt(float(attractorCount)) * 1.5;
 
     // Noise perturbation controlled by sensor angle (wider angle = more branching distortion)
-    float noisePerturb = sensorAngleDeg / 90.0 * 0.08;
+    float noisePerturb = sensorAngleDeg / 90.0 * 0.08 * (1.0 + aHigh * 2.5);
     float2 noiseOff = (noiseTexture.SampleLevel(noiseSampler, uv * 3.0 + float2(time * 0.02, 0), 0).rg * 2.0 - 1.0)
                       * noisePerturb;
 
@@ -84,7 +95,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Trail: SDF along the Voronoi edge (F2 - F1 ridge)
     float edgeDist  = F2 - F1;
-    float trailW    = diffRadius * 0.12 * vFreq;   // trail width scales with cell size
+    float trailW    = diffRadius * 0.12 * vFreq * (1.0 + aBass * 2.0);   // width scales with cell size
     float trailSDF  = smoothstep(trailW, 0.0, edgeDist);
 
     // Turn-angle affects trail texture via a secondary noise modulation
@@ -93,7 +104,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Pulsing chemoattractant wave: travels outward from nearest attractor at wave speed
     float distToSeed    = length(p - nearSeed);
-    float waveSpeed     = 0.4;
+    float waveSpeed     = 0.4 * (1.0 + aBass * 2.0);
     float waveFreq      = 6.0;
     float wavePhase     = frac(distToSeed * waveFreq - time * waveSpeed);
     float wavePulse     = exp(-wavePhase * 5.0) * 0.6 + 0.4;
@@ -104,7 +115,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Node glow at Voronoi seeds
     float2 seedUV  = nearSeed / float2(ar, 1.0);
     float  nodeDist = length(uv - seedUV);
-    float  nodeGlow = exp(-nodeDist * vFreq * 12.0) * (0.6 + 0.4 * sin(time * 3.0 + h21(nearSeed) * 6.28));
+    float  nodeGlow = exp(-nodeDist * vFreq * max(3.0, 12.0 - aBeat * 7.0))
+                    * (0.6 + 0.4 * sin(time * 3.0 + h21(nearSeed) * 6.28) + aBeat * 0.9);
 
     // Combine: bright trail + node glow
     float brightness = trailSDF * wavePulse * decay + nodeGlow;

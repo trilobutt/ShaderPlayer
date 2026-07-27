@@ -6,16 +6,13 @@
         { "NAME": "DEIter",     "LABEL": "DE Iterations", "TYPE": "long",
           "VALUES": [4,6,8,10,12,16], "LABELS": ["4","6","8","10","12","16"], "DEFAULT": 10  },
         { "NAME": "OrbitSpeed", "LABEL": "Orbit Speed",   "TYPE": "float", "DEFAULT": 0.08,"MIN": 0.0,  "MAX": 1.0,  "STEP": 0.01 },
-        { "NAME": "GlowColour", "LABEL": "Glow Colour",   "TYPE": "color", "DEFAULT": [0.2, 0.5, 1.0, 1.0]                    }
+        { "NAME": "AudioAmount","LABEL": "Audio Amount",  "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0,  "MAX": 1.0,  "STEP": 0.01 },
+        { "NAME": "GlowColour", "LABEL": "Glow Colour",   "TYPE": "color", "DEFAULT": [0.2, 0.5, 1.0, 1.0]                    },
+        { "NAME": "BassIn",     "LABEL": "Bass",          "TYPE": "audio", "BAND": "bass" },
+        { "NAME": "MidIn",      "LABEL": "Mid",           "TYPE": "audio", "BAND": "mid"  },
+        { "NAME": "BeatIn",     "LABEL": "Beat",          "TYPE": "audio", "BAND": "beat" }
     ]
 }*/
-
-// ISF packing:
-// BulbPower  offset 0 → custom[0].x
-// DEIter     offset 1 → int(custom[0].y)
-// OrbitSpeed offset 2 → custom[0].z
-// (offset 3 is a hole — color requires mult-of-4 alignment, next is offset 4)
-// GlowColour offset 4 → custom[1]  (xyzw = rgba)
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -28,7 +25,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -82,15 +79,23 @@ float deMandelbulb(float3 pos, float pw, int maxIter, out float trap) {
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
-    float   bulbPow   = custom[0].x;
-    int     deIterVal = int(custom[0].y);
-    float   orbitSpd  = custom[0].z;
-    float4  glowCol   = custom[1];
+    // --- Audio modulation ---
+    // Bass warps the bulb exponent (the lobes fold and unfold), mid drives the camera
+    // orbit, beats pull the camera in and flare the glow. AudioAmount 0 = static bulb.
+    float aBass = BassIn * AudioAmount;
+    float aMid  = MidIn  * AudioAmount;
+    float aBeat = BeatIn * AudioAmount;
 
-    // Orbiting camera — slow azimuth + gentle elevation bob
+    float   bulbPow   = clamp(BulbPower + aBass * 5.0, 2.0, 20.0);
+    int     deIterVal = DEIter;
+    float   orbitSpd  = OrbitSpeed * (1.0 + aMid * 2.5);
+    float4  glowCol   = GlowColour;
+
+    // Orbiting camera — slow azimuth + gentle elevation bob; beats dolly in.
     float camAngle  = time * orbitSpd;
     float camHeight = sin(time * orbitSpd * 0.3) * 0.4;
-    float3 camPos   = float3(sin(camAngle) * 2.4, camHeight, cos(camAngle) * 2.4);
+    float camDist   = 2.4 - aBeat * 0.55;
+    float3 camPos   = float3(sin(camAngle) * camDist, camHeight, cos(camAngle) * camDist);
     float3 target   = float3(0.0, 0.0, 0.0);
 
     float3 fw = normalize(target - camPos);
@@ -132,7 +137,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float ao       = 1.0 - (stepsTaken / 80.0);
     float colParam = frac(trap * 2.0 + time * 0.03);
     float3 baseCol = hsv2rgb(colParam, 0.8, ao);
-    float3 finalCol = baseCol * glowCol.rgb * 2.0;
+    float3 finalCol = baseCol * glowCol.rgb * 2.0 * (1.0 + aBeat * 1.2);
 
     return float4(saturate(finalCol), 1.0);
 }

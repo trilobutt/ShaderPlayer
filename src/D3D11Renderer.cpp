@@ -39,7 +39,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 blendParams;     // blendParams.x = blendMode (as float int)
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -89,8 +89,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
         r = g.rgb;
     }
 
-    // Blend: lerp video toward blended result by blendAmount
-    float3 out_rgb = lerp(v.rgb, r, blendAmount);
+    // Blend: lerp video toward blended result by blendAmount, modulated by the
+    // shader's own alpha. Shaders that write alpha < 1 (transparent background /
+    // transparent overlay regions) therefore let the video through in those pixels
+    // under every blend mode. Shaders that write alpha = 1 are unaffected.
+    float3 out_rgb = lerp(v.rgb, r, blendAmount * g.a);
     return float4(out_rgb, 1.0);
 }
 )";
@@ -106,7 +109,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -1011,7 +1014,7 @@ void D3D11Renderer::SetShaderResolution(float width, float height) {
 }
 
 void D3D11Renderer::SetCustomUniforms(const float* data, size_t floatCount) {
-    size_t copyCount = std::min(floatCount, size_t(16));
+    size_t copyCount = std::min(floatCount, size_t(32));
     memcpy(m_constants.custom, data, copyCount * sizeof(float));
 }
 

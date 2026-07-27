@@ -26,7 +26,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -215,7 +215,7 @@ Audio parameters are not persisted to `config.json` and are not keyframeable.
 
 ## Cbuffer Layout and Limits
 
-All parameters are packed into the `custom[4]` (`float4[4]` = 16 floats) slot in the existing cbuffer. Packing is sequential with alignment:
+All parameters are packed into the `custom` block (`float4 custom[8]` = 32 floats) in the existing cbuffer. Packing is sequential with alignment:
 
 | Type | Floats consumed | Alignment |
 |---|---|---|
@@ -227,7 +227,7 @@ All parameters are packed into the `custom[4]` (`float4[4]` = 16 floats) slot in
 | `color` | 4 | multiple-of-4 float offset |
 | `audio` | 0 | n/a (no custom[] slot) |
 
-**Maximum: 16 floats total across all non-audio parameters.** Parameters that would exceed this limit are skipped with a warning in the compile error field.
+**Maximum: 32 floats total across all non-audio parameters.** Parameters that would exceed this limit are skipped with a warning in the compile error field.
 
 ---
 

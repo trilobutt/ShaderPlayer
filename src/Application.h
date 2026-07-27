@@ -126,7 +126,7 @@ private:
     bool CreateMainWindow(HINSTANCE hInstance, int nCmdShow);
     void HandleDroppedFiles(HDROP hDrop);
     void HandleKeyboardShortcuts(UINT vkCode);
-    static void PackParamValues(const ShaderPreset& preset, float out[16]);
+    static void PackParamValues(const ShaderPreset& preset, float out[32]);
     void EvaluateKeyframes();
 
     // Frame processing

@@ -9,7 +9,11 @@
         {"NAME": "trailFade",      "LABEL": "Trail Length",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6},
         {"NAME": "stepSz",         "LABEL": "Step Size",     "TYPE": "float", "MIN": 0.5,  "MAX": 8.0,  "DEFAULT": 2.0},
         {"NAME": "colourByAngle",  "LABEL": "Colour By Angle","TYPE": "bool", "DEFAULT": true},
-        {"NAME": "FlowTint",       "LABEL": "Flow Tint",      "TYPE": "color","DEFAULT": [0.6,0.9,1.0,1.0]}
+        {"NAME": "FlowTint",       "LABEL": "Flow Tint",      "TYPE": "color","DEFAULT": [0.6,0.9,1.0,1.0]},
+        {"NAME": "audioAmount",    "LABEL": "Audio Amount",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6},
+        {"NAME": "bassIn",         "LABEL": "Bass",          "TYPE": "audio", "BAND": "bass"},
+        {"NAME": "midIn",          "LABEL": "Mid",           "TYPE": "audio", "BAND": "mid"},
+        {"NAME": "beatIn",         "LABEL": "Beat",          "TYPE": "audio", "BAND": "beat"}
     ]
 }*/
 
@@ -31,7 +35,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -70,8 +74,15 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 px  = 1.0 / resolution;
     float  ar  = resolution.x / resolution.y;
 
-    int   trailSteps = max(4, int(trailFade * 18.0 + 4.0));
-    float pxStep     = stepSz;  // step length in pixels
+    // --- Audio modulation ---
+    // Bass lengthens the streamline trails, mid stretches the step (the flow speeds up),
+    // beats flare the brightness. audioAmount 0 = the unmodulated field.
+    float aBass = bassIn * audioAmount;
+    float aMid  = midIn  * audioAmount;
+    float aBeat = beatIn * audioAmount;
+
+    int   trailSteps = clamp(int(trailFade * 18.0 + 4.0 + aBass * 10.0), 4, 24);
+    float pxStep     = stepSz * (1.0 + aMid * 1.6);  // step length in pixels
 
     // --- LIC integration (backward trace) ---
     float licVal = 0.0;
@@ -93,7 +104,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     licVal /= float(max(trailSteps, 1));
 
     // Brightness: squash into a nice range, apply slight gamma lift
-    float brightness = pow(saturate(licVal * 1.4 - 0.1), 0.7);
+    float brightness = pow(saturate(licVal * 1.4 - 0.1), 0.7) * (1.0 + aBeat * 1.1);
 
     // Colour by local flow angle
     float ang0 = flowAngle(uv * float2(ar, 1.0), noiseFreq, octaveCount, persistence, lacunarity);

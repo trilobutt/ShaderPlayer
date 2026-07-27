@@ -6,7 +6,13 @@
     { "NAME": "MobiusSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 3.0, "DEFAULT": 0.06,         "LABEL": "Möbius Drift Speed" },
     { "NAME": "EdgeWidth",   "TYPE": "float", "MIN": 0.001,"MAX": 0.03,"DEFAULT": 0.006,        "LABEL": "Edge Width" },
     { "NAME": "TileColourA", "TYPE": "color",                           "DEFAULT": [0.15,0.35,0.75,1], "LABEL": "Tile Colour A" },
-    { "NAME": "TileColourB", "TYPE": "color",                           "DEFAULT": [0.75,0.18,0.18,1], "LABEL": "Tile Colour B" }
+    { "NAME": "TileColourB", "TYPE": "color",                           "DEFAULT": [0.75,0.18,0.18,1], "LABEL": "Tile Colour B" },
+    { "NAME": "FillFrame",   "TYPE": "bool",  "DEFAULT": 1.0, "LABEL": "Fill Frame" },
+    { "NAME": "DiscScale",   "TYPE": "float", "MIN": 0.25, "MAX": 3.0, "DEFAULT": 1.0, "LABEL": "Disc Scale" },
+    { "NAME": "AudioAmount", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.6, "LABEL": "Audio Amount" },
+    { "NAME": "BassIn",      "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
+    { "NAME": "HighIn",      "TYPE": "audio", "BAND": "high", "LABEL": "Treble" },
+    { "NAME": "BeatIn",      "TYPE": "audio", "BAND": "beat", "LABEL": "Beat" }
   ]
 }*/
 
@@ -26,7 +32,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -81,20 +87,43 @@ float fundamentalR(int p, int q) {
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
+    // --- Audio modulation ---
+    // Bass pushes the Mobius drift out toward the ideal boundary (tiles rush past),
+    // treble thickens the geodesic edges, beats brighten the tiles.
+    float aBass = BassIn * AudioAmount;
+    float aHigh = HighIn * AudioAmount;
+    float aBeat = BeatIn * AudioAmount;
+
     // Map UV to the unit disc, corrected for aspect.
     float aspect = resolution.x / resolution.y;
     float2 z = (uv - 0.5) * 2.0;
     z.x *= aspect;
+    z /= max(DiscScale, 0.01);
 
-    // Points outside the disc are outside hyperbolic space.
     float rSq = dot(z, z);
-    if (rSq >= 0.998) {
+    if (FillFrame) {
+        // Inversion in the unit circle, z -> z/|z|^2, maps the exterior of the Poincare
+        // disc conformally onto its interior. The tiling therefore continues past the
+        // disc boundary as a mirrored copy and fills the frame, instead of leaving the
+        // flat surround that made the effect read as a circle on a background.
+        if (rSq > 1.0) {
+            z   /= rSq;
+            rSq  = dot(z, z);
+        }
+        // Keep strictly inside the disc: the folding loop below is only defined there.
+        if (rSq >= 0.9975) {
+            z   *= sqrt(0.9975 / rSq);
+            rSq  = 0.9975;
+        }
+    } else if (rSq >= 0.998) {
+        // Points outside the disc are outside hyperbolic space.
         return float4(0.02, 0.02, 0.02, 1.0);
     }
 
     // Animated Möbius drift: a point orbiting near the disc centre.
     float driftAngle = time * MobiusSpeed;
-    float driftR     = 0.15 + 0.12 * sin(time * MobiusSpeed * 0.37);
+    float driftR     = (0.15 + 0.12 * sin(time * MobiusSpeed * 0.37)) * (1.0 + aBass * 2.2);
+    driftR           = min(driftR, 0.92);
     float2 driftPt   = float2(cos(driftAngle), sin(driftAngle)) * driftR;
     z = mobius(z, driftPt);
 
@@ -137,14 +166,14 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 centre2 = float2(polyR, 0.0);
     float2 zLocal  = mobius(z, centre2);
     float  edgeDist = abs(zLocal.y);               // distance to real axis (one edge)
-    float  edgeMask = smoothstep(0.0, EdgeWidth, edgeDist);
+    float  edgeMask = smoothstep(0.0, EdgeWidth * (1.0 + aHigh * 3.0), edgeDist);
 
     // Edge colour is black; tiles alternate between TileColourA and TileColourB.
     float3 tileCol = (parity == 0) ? TileColourA.rgb : TileColourB.rgb;
 
     // Subtle depth shading by distance from disc centre.
     float disc_r = length(z);
-    tileCol *= (0.6 + 0.4 * (1.0 - disc_r));
+    tileCol *= (0.6 + 0.4 * (1.0 - disc_r)) * (1.0 + aBeat * 0.8);
 
     float3 col = lerp(float3(0.0, 0.0, 0.0), tileCol, edgeMask);
 

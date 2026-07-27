@@ -10,6 +10,9 @@
         {"NAME": "injectionPoints",    "LABEL": "Vortex Points",   "TYPE": "long",
          "VALUES": [1,2,3,4], "LABELS": ["1","2","3","4"], "DEFAULT": 2},
         {"NAME": "colourByVorticity",  "LABEL": "Colour Vorticity","TYPE": "bool",  "DEFAULT": true},
+        {"NAME": "spectrumSpread",     "LABEL": "Spectrum Spread", "TYPE": "float", "MIN": 1.0,  "MAX": 6.0,  "DEFAULT": 3.0},
+        {"NAME": "dyeFill",            "LABEL": "Dye Fill",        "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.55},
+        {"NAME": "brightness",         "LABEL": "Brightness",      "TYPE": "float", "MIN": 0.1,  "MAX": 3.0,  "DEFAULT": 1.2},
         {"NAME": "FluidTint",          "LABEL": "Fluid Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]}
     ]
 }*/
@@ -33,7 +36,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -69,13 +72,15 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float bassAmp   = bassLevel   * bassInfluenceScale;
     float trebleAmp = trebleLevel * trebleScale;
 
-    // Injection: additional vortex sources driven by bass peaks
+    // Injection: additional vortex sources driven by bass peaks.
+    // Sites sit well out toward the corners with a wide falloff so the extra rotation
+    // reaches the frame edges rather than pooling in the centre.
     float injectionBoost = 0.0;
     if (injectionPoints >= 2) {
         float2 p2 = float2(uv.x - 0.5, uv.y - 0.5) * float2(ar, 1.0);
-        injectionBoost += exp(-length(p2 - float2(0.25, 0.25)) * 8.0) * bassAmp * 0.5;
-        if (injectionPoints >= 3) injectionBoost += exp(-length(p2 - float2(-0.25, -0.2)) * 8.0) * bassAmp * 0.4;
-        if (injectionPoints >= 4) injectionBoost += exp(-length(p2 - float2(0.2, -0.25)) * 8.0) * bassAmp * 0.4;
+        injectionBoost += exp(-length(p2 - float2( 0.32,  0.30)) * 3.5) * bassAmp * 0.5;
+        if (injectionPoints >= 3) injectionBoost += exp(-length(p2 - float2(-0.34, -0.26)) * 3.5) * bassAmp * 0.4;
+        if (injectionPoints >= 4) injectionBoost += exp(-length(p2 - float2( 0.28, -0.32)) * 3.5) * bassAmp * 0.4;
     }
 
     // --- Backward advection through the velocity field ---
@@ -84,15 +89,28 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     int advSteps = 16;
     [loop] for (int s = 0; s < 16; s++) {
-        float2 vCoarse = curlNoise(p * float2(ar, 1.0), coarseFreq, time) * bassAmp;
+        float2 vCoarse = curlNoise(p * float2(ar, 1.0), coarseFreq, time) * (bassAmp + injectionBoost);
         float2 vFine   = curlNoise(p * float2(ar, 1.0), fineFreq,   time) * trebleAmp * 0.4;
         float2 vel     = (vCoarse + vFine) * px * 0.8;
         p             -= vel;
         p              = frac(p);
     }
 
-    // Sample spectrum texture as the "dye" being advected
-    float specVal = spectrumTexture.Sample(videoSampler, float2(p.x, 0.5)).r;
+    // --- Dye field ---
+    // Sampling the spectrum linearly in x confines every visible bin to the left edge:
+    // music puts almost no energy above bin ~40 of 256, so the frame only lit up at the
+    // margins. The power curve redistributes those populated low bins across the full
+    // width, and folding p.y into the lookup stops the result being vertically uniform.
+    float2 q     = frac(p);
+    float  specX = pow(saturate(q.x * 0.72 + q.y * 0.28), spectrumSpread);
+    float  specE = spectrumTexture.SampleLevel(videoSampler, float2(specX, 0.5), 0).r;
+
+    // Advected body dye. Carries the flow structure into regions the spectrum leaves
+    // quiet, so the vortices read across the whole viewport instead of only where the
+    // energy happens to land.
+    float  bodyDye = noiseTexture.SampleLevel(noiseSampler, q * 2.5 + time * 0.01, 0).r;
+    float  specVal = saturate(specE * 1.6 +
+                              dyeFill * bodyDye * (0.25 + bassLevel * 2.5 + trebleLevel * 1.5));
 
     // Compute local vorticity for colouring
     float eps2 = 2.0 / max(resolution.x, resolution.y);
@@ -105,13 +123,13 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Build colour from dye + vorticity
     float3 col;
     if (colourByVorticity) {
-        float hue = frac(vortMag * 0.8 + p.x * 0.3 + time * 0.03);
+        float hue = frac(vortMag * 0.8 + q.x * 0.3 + q.y * 0.15 + time * 0.03);
         float sat = 0.6 + vortMag * 0.4;
-        col = hsv2rgb(float3(hue, sat, specVal * 1.5 + 0.1));
+        col = hsv2rgb(float3(hue, sat, saturate(specVal * brightness)));
     } else {
         // Spectrum rainbow without vorticity tint
-        float hue = frac(specVal * 0.8 + p.x * 0.5);
-        col = hsv2rgb(float3(hue, 0.8, specVal * 1.8 + 0.05));
+        float hue = frac(specVal * 0.8 + q.x * 0.5 + q.y * 0.2);
+        col = hsv2rgb(float3(hue, 0.8, saturate(specVal * brightness * 1.15)));
     }
 
     // Diffusion: blend with a blurred neighbour sample

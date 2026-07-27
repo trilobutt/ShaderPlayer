@@ -12,7 +12,12 @@
          "VALUES": [0,1,2,3], "LABELS": ["Field Lines","Force Vectors","E Heatmap","Equipotential"], "DEFAULT": 0},
         {"NAME": "colourByMag",   "LABEL": "Colour by |E|", "TYPE": "bool",  "DEFAULT": true},
         {"NAME": "fieldFalloff",  "LABEL": "Falloff Exp",   "TYPE": "float", "MIN": 0.5,  "MAX": 3.0,  "DEFAULT": 1.0},
-        {"NAME": "FieldColour",   "LABEL": "Field Colour",  "TYPE": "color", "DEFAULT": [0.65,0.85,1.0,1.0]}
+        {"NAME": "FieldColour",   "LABEL": "Field Colour",  "TYPE": "color", "DEFAULT": [0.65,0.85,1.0,1.0]},
+        {"NAME": "bassIn",        "LABEL": "Bass",          "TYPE": "audio", "BAND": "bass"},
+        {"NAME": "midIn",         "LABEL": "Mid",           "TYPE": "audio", "BAND": "mid"},
+        {"NAME": "highIn",        "LABEL": "Treble",        "TYPE": "audio", "BAND": "high"},
+        {"NAME": "beatIn",        "LABEL": "Beat",          "TYPE": "audio", "BAND": "beat"},
+        {"NAME": "audioAmount",   "LABEL": "Audio Amount",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6}
     ]
 }*/
 
@@ -32,7 +37,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -78,19 +83,31 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Work in aspect-corrected space to preserve Euclidean field geometry
     float2 pos = uv * float2(ar, 1.0);
 
+    // --- Audio modulation ---
+    // Mid drives the ring's rotation, bass the charge magnitude and ring radius,
+    // treble the contour/heatmap detail, and beats flash the charge glyphs.
+    // audioAmount at 0 restores the original static field.
+    float aBass = bassIn * audioAmount;
+    float aMid  = midIn  * audioAmount;
+    float aHigh = highIn * audioAmount;
+    float aBeat = beatIn * audioAmount;
+
     // --- Generate charge positions (UV space, slowly rotating ring) ---
-    float  rotate = time * 0.12;
+    float  rotate  = time * (0.12 + aMid * 0.55);
+    float  ringR   = 1.0 + aBass * 0.4;
+    float  qScale  = 1.0 + aBass * 2.5;   // charge magnitude; sign is preserved
     float2 cPos [8];
     float  cSign[8];
     [unroll] for (int i = 0; i < 8; i++) {
         float theta  = float(i) / 8.0 * 6.28318 + rotate;
         float jitter = frac(sin(float(i) * 127.1) * 43758.5453) * 0.1;
-        cPos[i]  = float2(0.5, 0.5) + float2(cos(theta), sin(theta)) * (0.28 + jitter);
+        cPos[i]  = float2(0.5, 0.5) + float2(cos(theta), sin(theta)) * (0.28 + jitter) * ringR;
         float hr = frac(sin(float(i) * 311.7) * 43758.5453);
         if      (chargeSignMode == 0) cSign[i] = (i % 2 == 0) ? 1.0 : -1.0;
         else if (chargeSignMode == 1) cSign[i] = 1.0;
         else if (chargeSignMode == 2) cSign[i] = -1.0;
         else                          cSign[i] = hr > 0.5 ? 1.0 : -1.0;
+        cSign[i] *= qScale;
     }
 
     float2 E; float V;
@@ -113,7 +130,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
             float enL  = max(length(En), 0.0001);
             float2 dir = En / enL;
             p2        += dir * integrationStep;
-            float2 hiUV = p2 * 28.0;
+            float2 hiUV = p2 * (28.0 + aHigh * 40.0);
             licVal += (frac(hiUV.x + hiUV.y) > 0.5) ? 1.0 : 0.0;
         }
         licVal /= float(max(licSteps, 1));
@@ -145,13 +162,13 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     } else if (displayMode == 2) {
         // |E| heat map
-        float logE = log(Emag + 1.0) * 0.4;
+        float logE = log(Emag + 1.0) * 0.4 * (1.0 + aBass * 0.8);
         col = colourByMag ? heatmap(saturate(logE))
                           : hsv2rgb(float3(frac(Eang / 6.28318), 0.8, saturate(logE)));
 
     } else {
         // Equipotential contours
-        float contour = 1.0 - abs(frac(V * 0.25) - 0.5) * 2.0;
+        float contour = 1.0 - abs(frac(V * 0.25 * (1.0 + aHigh * 1.8)) - 0.5) * 2.0;
         contour = smoothstep(0.85, 1.0, contour);
         float3 contourCol = (V > 0.0) ? float3(1.0, 0.4, 0.2) : float3(0.3, 0.6, 1.0);
         col = contourCol * contour + float3(0.01, 0.01, 0.04);
@@ -161,7 +178,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     [loop] for (int ci = 0; ci < 8; ci++) {
         if (ci >= chargeCount) break;
         float  cdist   = length(uv - cPos[ci]) * resolution.y;
-        float  glow    = exp(-cdist * 0.12) * 0.4;
+        float  glow    = exp(-cdist * max(0.04, 0.12 - aBeat * 0.06)) * (0.4 + aBeat * 0.9);
         float3 chgCol  = cSign[ci] > 0.0 ? float3(1.0, 0.3, 0.2) : float3(0.3, 0.5, 1.0);
         col += chgCol * glow;
     }

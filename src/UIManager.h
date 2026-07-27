@@ -4,6 +4,8 @@
 #include "imgui.h"
 #include "TextEditor.h"
 
+#include <random>
+
 namespace SP {
 
 class Application;
@@ -90,7 +92,16 @@ private:
     void DrawSpoutPanel();
     void DrawAudioPanel();
 
+    // Assigns a random value to `param`, always inside the bounds the UI itself
+    // offers for that parameter. Returns false for types with nothing to randomise
+    // (Event triggers and read-only AudioBand meters).
+    bool RandomiseParam(ShaderParam& param);
+
     Application& m_app;
+
+    // Source for the parameter randomiser. Seeded once from the system entropy
+    // source; fixed size, so it is safe to hold for the lifetime of the UI.
+    std::mt19937 m_rng{std::random_device{}()};
     
     // UI state
     bool m_showEditor = true;

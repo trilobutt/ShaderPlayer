@@ -539,8 +539,8 @@ void Application::ProcessFrame() {
     }
 }
 
-/*static*/ void Application::PackParamValues(const ShaderPreset& preset, float out[16]) {
-    std::fill(out, out + 16, 0.0f);
+/*static*/ void Application::PackParamValues(const ShaderPreset& preset, float out[kCustomFloats]) {
+    std::fill(out, out + kCustomFloats, 0.0f);
     for (const auto& p : preset.params) {
         if (p.type == ShaderParamType::AudioBand) continue;  // Lives in b1, not custom[]
         const int off = p.cbufferOffset;
@@ -549,13 +549,13 @@ void Application::ProcessFrame() {
         case ShaderParamType::Bool:
         case ShaderParamType::Long:
         case ShaderParamType::Event:
-            if (off < 16)       out[off] = p.values[0];
+            if (off < kCustomFloats)       out[off] = p.values[0];
             break;
         case ShaderParamType::Point2D:
-            if (off + 1 < 16) { out[off] = p.values[0]; out[off + 1] = p.values[1]; }
+            if (off + 1 < kCustomFloats) { out[off] = p.values[0]; out[off + 1] = p.values[1]; }
             break;
         case ShaderParamType::Color:
-            if (off + 3 < 16) {
+            if (off + 3 < kCustomFloats) {
                 out[off] = p.values[0]; out[off + 1] = p.values[1];
                 out[off + 2] = p.values[2]; out[off + 3] = p.values[3];
             }
@@ -568,9 +568,9 @@ void Application::OnParamChanged() {
     ShaderPreset* preset = m_shaderManager->GetActivePreset();
     if (!preset) return;
 
-    float packed[16] = {};
+    float packed[kCustomFloats] = {};
     PackParamValues(*preset, packed);
-    m_renderer.SetCustomUniforms(packed, 16);
+    m_renderer.SetCustomUniforms(packed, kCustomFloats);
 
     for (const auto& p : preset->params) {
         if (p.type == ShaderParamType::Event && p.values[0] > 0.5f) {
@@ -692,9 +692,9 @@ void Application::RenderFrame() {
                 if (p.type == ShaderParamType::Event)
                     p.values[0] = 0.0f;
             }
-            float packed[16] = {};
+            float packed[kCustomFloats] = {};
             PackParamValues(*preset, packed);
-            m_renderer.SetCustomUniforms(packed, 16);
+            m_renderer.SetCustomUniforms(packed, kCustomFloats);
         }
     }
 

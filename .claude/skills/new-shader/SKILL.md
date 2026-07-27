@@ -28,7 +28,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -57,7 +57,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 - `point2d`: 2 slots, must start at next even cbufferOffset
 - `color`: 4 slots, must start at next multiple-of-4 cbufferOffset
 - `audio` (AudioBand): cbufferOffset = −1, consumes NO `custom[]` slot
-- Maximum 16 floats total across all non-audio INPUTS — extras are silently skipped
+- Maximum 32 floats total across all non-audio INPUTS — extras are silently skipped
 
 ---
 

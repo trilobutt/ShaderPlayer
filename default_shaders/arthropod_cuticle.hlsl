@@ -10,7 +10,13 @@
          "VALUES": [0,1,2,3], "LABELS": ["Cylinder","Carapace","Wing","Abdomen"], "DEFAULT": 1},
         {"NAME": "segmentCount",   "LABEL": "Segments",        "TYPE": "long",
          "VALUES": [2,3,4,5,6,8,10,12], "LABELS": ["2","3","4","5","6","8","10","12"], "DEFAULT": 6},
-        {"NAME": "bgColour",       "LABEL": "Background",      "TYPE": "color", "DEFAULT": [0.92, 0.88, 0.80, 1.0]}
+        {"NAME": "bgColour",       "LABEL": "Background",      "TYPE": "color", "DEFAULT": [0.92, 0.88, 0.80, 1.0]},
+        {"NAME": "wingCentre",     "LABEL": "Wing Centre",     "TYPE": "point2d","MIN": 0.0, "MAX": 1.0, "DEFAULT": [0.5, 0.5]},
+        {"NAME": "wingAngle",      "LABEL": "Wing Direction",  "TYPE": "float",  "MIN": 0.0, "MAX": 360.0, "DEFAULT": 0.0},
+        {"NAME": "bassIn",         "LABEL": "Bass",            "TYPE": "audio",  "BAND": "bass"},
+        {"NAME": "highIn",         "LABEL": "Treble",          "TYPE": "audio",  "BAND": "high"},
+        {"NAME": "beatIn",         "LABEL": "Beat",            "TYPE": "audio",  "BAND": "beat"},
+        {"NAME": "audioAmount",    "LABEL": "Audio Amount",    "TYPE": "float",  "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.6}
     ]
 }*/
 
@@ -35,7 +41,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -43,8 +49,10 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-// UV distortion for each body plan
-float2 applyGeometry(float2 uv, int geom, int segs) {
+// UV distortion for each body plan.
+// centre/angleRad only affect the Wing plan: the wing's radial fan is built about
+// `centre` and its axis of bilateral symmetry points along `angleRad`.
+float2 applyGeometry(float2 uv, int geom, int segs, float2 centre, float angleRad) {
     float segW = 1.0 / float(segs);
     if (geom == 0) {
         // Cylinder: u wraps per segment (periodic cuticle rings)
@@ -55,10 +63,12 @@ float2 applyGeometry(float2 uv, int geom, int segs) {
         float offset = (fmod(row, 2.0) > 0.5) ? segW * 0.5 : 0.0;
         return float2(frac((uv.x + offset) / segW), uv.y);
     } else if (geom == 2) {
-        // Wing: bilateral symmetry + radial coordinates
-        float2 c = uv - 0.5;
+        // Wing: bilateral symmetry + radial coordinates about the chosen centre,
+        // with the symmetry axis rotated to the chosen direction.
+        float2 c = uv - centre;
         float r = length(c);
-        float a = atan2(c.y, c.x) / (3.14159 * 2.0) + 0.5;
+        float a = (atan2(c.y, c.x) - angleRad) / (3.14159 * 2.0) + 0.5;
+        a = frac(a);
         return float2(abs(a - 0.5) * 2.0 * float(segs), r * 2.0);
     } else {
         // Abdomen: strong horizontal segmentation bands
@@ -72,15 +82,23 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
     // Apply body geometry
-    float2 gUV = applyGeometry(uv, bodyGeometry, segmentCount);
+    float2 gUV = applyGeometry(uv, bodyGeometry, segmentCount, wingCentre, radians(wingAngle));
+
+    // --- Audio modulation ---
+    // Bass swells the activator wavelength (pattern coarsens under load), treble
+    // sharpens the inhibitor, and beats push the pigment threshold so the markings
+    // bloom on transients. audioAmount scales all three; 0 = the static pattern.
+    float aBass = bassIn * audioAmount;
+    float aHigh = highIn * audioAmount;
+    float aBeat = beatIn * audioAmount;
 
     // Two-scale noise sampling for activator and inhibitor
     // Shorter wavelength = smaller diff constant (tighter sampling)
-    float actFreq  = 1.0 / max(activatorDiff,  0.001) * 0.25;
-    float inhFreq  = 1.0 / max(inhibitorDiff,   0.001) * 0.25;
+    float actFreq  = 1.0 / max(activatorDiff * (1.0 + aBass * 2.5), 0.001) * 0.25;
+    float inhFreq  = 1.0 / max(inhibitorDiff * (1.0 - aHigh * 0.7),  0.001) * 0.25;
 
-    // Slow temporal drift to avoid perfectly static pattern
-    float2 drift = float2(time * 0.007, time * 0.005);
+    // Slow temporal drift to avoid perfectly static pattern; beats nudge it along.
+    float2 drift = float2(time * 0.007, time * 0.005) + aBeat * 0.05;
 
     float actVal = noiseTexture.SampleLevel(noiseSampler, frac(gUV * actFreq * 0.1 + drift),       0).r;
     float inhVal = noiseTexture.SampleLevel(noiseSampler, frac(gUV * inhFreq * 0.1 + drift * 0.5), 0).r;
@@ -88,16 +106,18 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Activator-inhibitor: net concentration
     float conc = actVal * activationRate - inhVal * inhibitionRate;
 
-    // Threshold to produce discrete pigmented / unpigmented regions
-    float threshLow  =  0.0;
-    float threshHigh =  0.1;
+    // Threshold to produce discrete pigmented / unpigmented regions.
+    // The beat lowers the threshold, so pigment spreads on transients.
+    float threshLow  =  0.0 - aBeat * 0.12;
+    float threshHigh =  0.1 - aBeat * 0.06;
     float pigment    = smoothstep(threshLow, threshHigh, conc);
 
     float3 col = lerp(bgColour.rgb, pigmentColour.rgb, pigment);
 
-    // Add subtle specular sheen (chitin iridescence)
+    // Add subtle specular sheen (chitin iridescence); treble brightens the highlight.
     float2 normDir = gUV * 2.0 - 1.0;
-    float specular = pow(max(0.0, dot(normDir, normalize(float2(0.5, -0.5)))), 6.0) * 0.15;
+    float specular = pow(max(0.0, dot(normDir, normalize(float2(0.5, -0.5)))), 6.0)
+                   * (0.15 + aHigh * 0.5);
     col += float3(0.9, 0.95, 1.0) * specular;
 
     return float4(saturate(col), 1.0);

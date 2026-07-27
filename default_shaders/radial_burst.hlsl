@@ -4,11 +4,13 @@
     { "NAME": "SymmetryOrder", "TYPE": "long",
       "VALUES": [1,2,3,4,5,6,8,12], "LABELS": ["1","2","3","4","5","6","8","12"],
       "DEFAULT": 4, "LABEL": "Symmetry" },
-    { "NAME": "InnerRadius",   "TYPE": "float", "MIN": 0.0, "MAX": 0.45, "DEFAULT": 0.08,"LABEL": "Inner Radius" },
+    { "NAME": "InnerRadius",   "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.08,"LABEL": "Inner Radius" },
     { "NAME": "RotSpeed",      "TYPE": "float", "MIN": -2.0,"MAX": 2.0,  "DEFAULT": 0.2, "LABEL": "Rotation Speed" },
     { "NAME": "GlowWidth",     "TYPE": "float", "MIN": 0.5, "MAX": 8.0,  "DEFAULT": 3.0, "LABEL": "Glow Width" },
     { "NAME": "CoreColour",    "TYPE": "color",             "DEFAULT": [0.2, 0.5, 1.0, 1.0], "LABEL": "Core Colour" },
     { "NAME": "OuterColour",   "TYPE": "color",             "DEFAULT": [1.0, 0.25, 0.05, 1.0], "LABEL": "Outer Colour" },
+    { "NAME": "CoreSize",      "TYPE": "float", "MIN": 0.0, "MAX": 2.0,  "DEFAULT": 0.35,"LABEL": "Core Size" },
+    { "NAME": "RingRadius",    "TYPE": "float", "MIN": 0.1, "MAX": 1.5,  "DEFAULT": 0.42,"LABEL": "Ring Radius" },
     { "NAME": "AudioBassIn",   "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
     { "NAME": "AudioHighIn",   "TYPE": "audio", "BAND": "high", "LABEL": "Treble" }
   ]
@@ -29,7 +31,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -65,9 +67,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Sample spectrum at this angular position.
     float specVal = spectrumTexture.SampleLevel(videoSampler, float2(t, 0.5), 0).r;
 
-    // Bass widens the core more aggressively.
-    float coreR   = AudioBassIn * 0.28;
-    float targetR = InnerRadius + coreR + specVal * max(0.0, 0.42 - InnerRadius - coreR);
+    // Core size: CoreSize sets the resting radius, bass expands it from there.
+    // Previously the core existed only while bass was present and was hard-capped at
+    // 0.28, so it could never be made large.
+    float coreR   = CoreSize * (0.22 + AudioBassIn * 1.1);
+    float targetR = InnerRadius + coreR + specVal * max(0.0, RingRadius - InnerRadius - coreR);
 
     // Treble adds a fine inner ring.
     float trebleR = InnerRadius * 0.4 + AudioHighIn * 0.1;
@@ -87,8 +91,9 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float3 userCol = lerp(CoreColour.rgb, OuterColour.rgb, radialT);
     float3 col = lerp(hsvCol, hsvCol * userCol * 2.0, 0.55);
 
-    // Luminous core that pulses hard with bass.
-    float coreGlow = exp(-r * r / max(0.0001, coreR * coreR + 0.003)) * AudioBassIn * 3.5;
+    // Luminous core that pulses hard with bass. The 0.4 floor keeps the core visible
+    // (and sizeable) between beats instead of collapsing to nothing.
+    float coreGlow = exp(-r * r / max(0.0001, coreR * coreR + 0.003)) * (0.4 + AudioBassIn * 3.1);
     col += CoreColour.rgb * hsv2rgb(0.62 + AudioBassIn * 0.15, 0.6, coreGlow);
 
     // Extra brightness boost on strong bass.

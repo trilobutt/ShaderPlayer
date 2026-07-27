@@ -119,7 +119,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;      // output resolution
     float2 videoResolution; // source video resolution
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -130,23 +130,13 @@ struct PS_INPUT {
 float4 main(PS_INPUT input) : SV_TARGET { ... }
 ```
 
-Included shaders in `default_shaders/`:
-- `audio_spectrum.hlsl` - Spectrum bar visualiser with beat flash (SHADER_TYPE: "audio")
-- `audio_bass_pulse.hlsl` - Bass-reactive chromatic aberration + beat flash on video (SHADER_TYPE: "audio")
-- `audio_waveform.hlsl` - Spectrum waveform overlay on video (SHADER_TYPE: "audio")
-- `plasma.hlsl` - Generative animated plasma (SHADER_TYPE: "generative")
-- `passthrough.hlsl` - Direct video pass-through (no effect)
-- `grayscale.hlsl` - Luminance-based desaturation
-- `vignette.hlsl` - Radial darkening
-- `chromatic_aberration.hlsl` - RGB channel offset
-- `sharpen.hlsl` - Convolution-based sharpening
-- `false_colour.hlsl` - Luminance-based false colour mapping
-- `focus_peaking.hlsl` - Sobel edge-detection overlay highlighting sharp regions in a chosen colour
-- `rgb_parade.hlsl` - RGB parade scope overlay
-- `safe_areas.hlsl` - Broadcast safe area guides (action/title safe)
-- `vectorscope.hlsl` - Vectorscope display overlay
-- `waveform.hlsl` - Waveform monitor overlay
-- `zebra.hlsl` - Zebra stripes overexposure indicator
+`default_shaders/` is the shipped shader set and the authoritative inventory — each file's ISF block carries its own description and `SHADER_TYPE`. Many generative shaders also declare AudioBand inputs plus an `Audio Amount` scale; setting that to 0 gives the unmodulated pattern.
+
+### Output Alpha
+
+The compositor multiplies the video blend by the shader's output alpha (`blendAmount * g.a`), so a shader can write `alpha < 1` to let the video through in those pixels under any blend mode. Shaders writing `alpha = 1` are unaffected. Alpha only has a visible effect when a Video Blend mode other than Off is selected — with blending off, the shader draws straight to the display texture.
+
+Colour params expose an alpha channel in `ColorEdit4`, so `SomeColour.a` is the idiomatic per-element opacity control (used by `psychoacoustic_topography`); a standalone `float` is used when an element has no colour of its own (`audio_spectrum`'s `BgOpacity`/`BarOpacity`).
 
 ### Audio Data (b1 / t3)
 
@@ -200,7 +190,13 @@ If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>`
 
 ### Building
 
-**Build via Visual Studio IDE, not the command line.** CMake generator is Ninja + MSVC (`build.ninja` in `build/`). Running `cmake --build` from a plain shell fails at link with `memcpy` unresolved because the MSVC CRT environment is not set up. Open the project in Visual Studio and build from there.
+CMake generator is Visual Studio 17 2022 (`build/ShaderPlayer.sln`). Command-line builds work, but only from a shell where the MSVC environment has been initialised — otherwise the link fails with `memcpy` unresolved:
+
+```
+cmd /c "call \"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat\" >nul && cmake --build build --config Release"
+```
+
+Building from the Visual Studio IDE works without the extra step.
 
 ```bash
 cmake -B build
@@ -395,21 +391,25 @@ The original source on disk is never modified.
 
 ### Cbuffer Packing Rules
 
-Parameters packed into `custom[16]` (= `float4 custom[4]`) sequentially:
+Parameters packed into `custom` (`float4 custom[8]` = 32 floats, `kCustomFloats` in `Common.h`) sequentially:
 - `float`, `bool`, `long`, `event`: 1 float, no alignment
 - `point2d`: 2 floats, aligned to next even offset
 - `color`: 4 floats, aligned to next multiple-of-4 offset
 
-Parameters exceeding 16 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
+Parameters exceeding 32 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
 
 **Diagnosing missing shaders**: if a shader doesn't appear after Scan Folder, it has a compile error. Check `ShaderPreset::compileError` in the debugger — no UI currently surfaces this field.
 
 ### Value Storage and GPU Upload
 
 - `ShaderParam::values[4]` holds current values; `defaultValues[4]` holds parsed defaults.
-- On any widget change: `Application::OnParamChanged()` packs all `params` into a `float[16]` scratch buffer at their `cbufferOffset`s, then calls `D3D11Renderer::SetCustomUniforms`. Effect visible on next `BeginFrame`.
+- On any widget change: `Application::OnParamChanged()` packs all `params` into a `float[kCustomFloats]` scratch buffer at their `cbufferOffset`s, then calls `D3D11Renderer::SetCustomUniforms`. Effect visible on next `BeginFrame`.
 - `event` type: set `values[0] = 1.0f` on button press; a one-frame flag in `Application` zeros it after the next `RenderFrame` submission.
 - No per-frame CPU cost — `SetCustomUniforms` called only on user interaction and on shader activation. Exception: during keyframe playback, `OnParamChanged` fires every frame for animated parameters (the interpolated value changes each frame).
+
+### Randomiser
+
+`UIManager::RandomiseParam(ShaderParam&)` rolls one parameter and returns false for types with no value to roll (Event, AudioBand, and Long with an empty `VALUES` list). Every branch draws from the same range its widget exposes, so a rolled value is always one the user could have set by hand. Colour alpha is deliberately left alone — it is an opacity everywhere it is read, and randomising it makes effects invisible. The per-parameter `R` button and the panel's "Randomise all" both skip parameters under active keyframe control, since the timeline would overwrite the roll on the next frame.
 
 ### Persistence
 

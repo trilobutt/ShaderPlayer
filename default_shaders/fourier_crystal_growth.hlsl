@@ -34,7 +34,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -101,8 +101,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float audioRadius  = bassLevel   * 1.1 + midLevel * 0.45;
     float latticeScale = 0.04 + midLevel * 0.04;   // spacing modulated by mid
 
-    // Crystal growth radius: grows over time, pulsed by bass
-    float growthPhase = frac(time * growthSpeed * 0.1) * maxRadius;
+    // Crystal growth radius: ramps up once and then holds at maxRadius, pulsed by bass.
+    // This was a frac() cycle, which restarted the crystal every few seconds and read
+    // as a repeating fade in / fade out; growth is now permanent.
+    float growthPhase = saturate(time * growthSpeed * 0.1) * maxRadius;
     float crystalR    = growthPhase + audioRadius * 0.15;
 
     // Displacive noise perturbation of the sampling position
@@ -130,7 +132,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
         // Radial envelope: crystal has grown to crystalR from this nucleus
         float rad = length(rp);
-        if (rad > maxRadius * ar) continue;
+        if (rad > (crystalR + 0.05) * ar) continue;   // cull in the same units the envelope uses
 
         float envelope = smoothstep(crystalR + 0.05, crystalR - 0.05, rad / ar);
         if (envelope < 0.001) continue;

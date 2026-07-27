@@ -9,7 +9,11 @@
         {"NAME": "formulation",     "LABEL": "Geometry",         "TYPE": "long",
          "VALUES": [0,1,2], "LABELS": ["Radial","Linear","Branching"], "DEFAULT": 0},
         {"NAME": "animSpeed",       "LABEL": "Anim Speed",       "TYPE": "float", "MIN": 0.0, "MAX": 5.0, "DEFAULT": 1.0},
-        {"NAME": "FluidColour",     "LABEL": "Fluid Colour",     "TYPE": "color", "DEFAULT": [0.3,0.7,1.0,1.0]}
+        {"NAME": "FluidColour",     "LABEL": "Fluid Colour",     "TYPE": "color", "DEFAULT": [0.3,0.7,1.0,1.0]},
+        {"NAME": "bassIn",          "LABEL": "Bass",             "TYPE": "audio", "BAND": "bass"},
+        {"NAME": "highIn",          "LABEL": "Treble",           "TYPE": "audio", "BAND": "high"},
+        {"NAME": "beatIn",          "LABEL": "Beat",             "TYPE": "audio", "BAND": "beat"},
+        {"NAME": "audioAmount",     "LABEL": "Audio Amount",     "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.6}
     ]
 }*/
 
@@ -34,7 +38,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -56,12 +60,26 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float  ar  = resolution.x / resolution.y;
     float2 p   = (uv - 0.5) * float2(ar, 1.0);
 
-    // Growth radius driven by injection rate + time
-    float growthR = injectionRate * (0.3 + frac(time * 0.08 * animSpeed) * 0.5);
+    // --- Audio modulation ---
+    // Bass and beats drive injection (the finger front advances), treble raises the
+    // dominant unstable mode so the fingers split more finely. 0 = unmodulated growth.
+    float aBass = bassIn * audioAmount;
+    float aHigh = highIn * audioAmount;
+    float aBeat = beatIn * audioAmount;
+
+    // Growth radius: the front advances once and settles at its full extent.
+    // This was frac()-cycled, which snapped the fingers back to the injection point
+    // every ~12 s; the interface now grows monotonically and stays.
+    float growthT = saturate(time * 0.08 * animSpeed);
+    float growthR = injectionRate * (0.3 + growthT * 0.5) * (1.0 + aBass * 0.6 + aBeat * 0.35);
+
+    // Slow, non-repeating drift of the perturbation field keeps the fingers alive
+    // once the front has settled, without the interface ever resetting.
+    float drift = time * animSpeed * 0.015;
 
     // Angular frequency for dominant unstable mode
     // surfaceTension stabilises short wavelengths: low tension → more/finer fingers
-    float fingerFreq = 2.0 + (1.0 - surfaceTension) * 18.0;
+    float fingerFreq = 2.0 + (1.0 - surfaceTension) * 18.0 + aHigh * 14.0;
 
     float fingerRadius = 0.0;
 
@@ -71,7 +89,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float rad = length(p);
 
         // Base angular perturbation at dominant wavelength
-        float2 angUV = float2(ang / 6.28318 + 0.5, 0.5);
+        float2 angUV = float2(ang / 6.28318 + 0.5, 0.5 + drift);
         float basePerturb = noiseTexture.SampleLevel(noiseSampler, angUV * float2(fingerFreq * 0.15, 1.0), 0).r;
 
         // Sub-octave branching (tip-splitting)
@@ -79,7 +97,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float subFreq = fingerFreq * 2.0;
         float subAmp  = 0.5;
         [loop] for (int i = 0; i < 5; i++) {
-            float2 sUV = float2(ang / 6.28318 + float(i) * 0.13 + 0.5, float(i) * 0.3);
+            float2 sUV = float2(ang / 6.28318 + float(i) * 0.13 + 0.5, float(i) * 0.3 + drift * (1.0 + float(i)));
             subPerturb += noiseTexture.SampleLevel(noiseSampler, sUV * float2(subFreq * 0.12, 1.0), 0).r * subAmp;
             subFreq   *= 1.9;
             subAmp    *= 0.5;
@@ -89,8 +107,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     } else if (formulation == 1) {
         // Linear: horizontal displacement front
-        float basePerturb = noiseTexture.SampleLevel(noiseSampler, float2(uv.y * fingerFreq * 0.1, 0.3), 0).r;
-        float subPerturb  = noiseTexture.SampleLevel(noiseSampler, float2(uv.y * fingerFreq * 0.2, 0.7), 0).r;
+        float basePerturb = noiseTexture.SampleLevel(noiseSampler, float2(uv.y * fingerFreq * 0.1, 0.3 + drift), 0).r;
+        float subPerturb  = noiseTexture.SampleLevel(noiseSampler, float2(uv.y * fingerFreq * 0.2, 0.7 + drift * 2.0), 0).r;
         float frontX = 0.0 + (basePerturb * 0.3 + subPerturb * 0.15) * noiseAmplitude + growthR;
         fingerRadius = (p.x + 0.01 < frontX * ar) ? 1.0 : 0.0;
         // Use fingerRadius as a binary mask for linear mode
@@ -107,7 +125,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         // Branching: combine radial and perpendicular modulations
         float ang = atan2(p.y, p.x);
         float rad = length(p);
-        float2 branchUV = float2(frac(ang / 6.28318 * fingerFreq * 0.5), rad * 4.0);
+        float2 branchUV = float2(frac(ang / 6.28318 * fingerFreq * 0.5), rad * 4.0 + drift);
         float branchVal = noiseTexture.SampleLevel(noiseSampler, branchUV * 0.3, 0).r;
         float subVal    = noiseTexture.SampleLevel(noiseSampler, branchUV * 0.6 + 0.5, 0).r;
         fingerRadius = growthR * (1.5 + (branchVal * 0.6 + subVal * 0.3) * noiseAmplitude * 2.0);

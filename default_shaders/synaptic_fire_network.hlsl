@@ -2,6 +2,8 @@
     "SHADER_TYPE": "audio",
     "INPUTS": [
         {"NAME": "ampLevel",         "LABEL": "Amplitude",      "TYPE": "audio",  "BAND": "rms"},
+        {"NAME": "AxonColour",       "LABEL": "Axon Colour",    "TYPE": "color",  "DEFAULT": [0.2,0.7,0.3,1.0]},
+        {"NAME": "NodeColour",       "LABEL": "Node Colour",    "TYPE": "color",  "DEFAULT": [0.4,0.9,0.5,1.0]},
         {"NAME": "nodeCount",        "LABEL": "Node Count",     "TYPE": "long",
          "VALUES": [8,16,24,32], "LABELS": ["8","16","24","32"], "DEFAULT": 16},
         {"NAME": "kNeighbours",      "LABEL": "k Neighbours",   "TYPE": "long",
@@ -10,10 +12,13 @@
         {"NAME": "refractoryPeriod", "LABEL": "Refractory (s)", "TYPE": "float",  "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.3},
         {"NAME": "propagationDelay", "LABEL": "Propagation (s)","TYPE": "float",  "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.25},
         {"NAME": "spontaneousRate",  "LABEL": "Spontaneous Hz", "TYPE": "float",  "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
-        {"NAME": "AxonColour",       "LABEL": "Axon Colour",    "TYPE": "color",  "DEFAULT": [0.2,0.7,0.3,1.0]},
-        {"NAME": "NodeColour",       "LABEL": "Node Colour",    "TYPE": "color",  "DEFAULT": [0.4,0.9,0.5,1.0]}
+        {"NAME": "networkScale",     "LABEL": "Network Scale",  "TYPE": "float",  "MIN": 0.2,  "MAX": 3.0,  "DEFAULT": 1.0},
+        {"NAME": "nodeSize",         "LABEL": "Node Size (px)", "TYPE": "float",  "MIN": 1.0,  "MAX": 40.0, "DEFAULT": 6.0}
     ]
 }*/
+
+// Colours are declared first so both float4s land on their 4-float alignment boundaries
+// without wasting padding on the colour alignment gaps.
 
 // Synaptic fire network visualiser.
 // nodeCount nodes are placed via a deterministic hash; each node connects to
@@ -35,7 +40,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -75,17 +80,18 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float2 hv  = float2(h21(float2(float(ni), 7.3)), h21(float2(float(ni), 13.7)));
         // Use a quasi-regular layout: Halton-like spread, slightly jittered
         float phi  = frac(float(ni) * 0.618034);          // golden-ratio sequence
-        float rad  = sqrt((float(ni) + 0.5) / 32.0) * 0.42;
+        float rad  = sqrt((float(ni) + 0.5) / 32.0) * 0.42 * networkScale;
         float ang  = phi * 6.28318;
         float2 base = float2(0.5, 0.5) + float2(cos(ang), sin(ang)) * rad;
-        nodePos[ni]  = (base + (hv - 0.5) * 0.06) * float2(ar, 1.0);
+        nodePos[ni]  = (base + (hv - 0.5) * 0.06 * networkScale) * float2(ar, 1.0);
         nodeSeed[ni] = h21(float2(float(ni) * 17.3, float(ni) * 5.7));
     }
 
     float3 col = float3(0.01, 0.01, 0.03);  // dark background
 
     int   halfK = kNeighbours / 2;
-    float axonWidth = 0.003 * ar;
+    // Axon gauge tracks the network scale so a scaled-up network keeps its proportions.
+    float axonWidth = 0.0015 * ar * sqrt(networkScale);
 
     // --- Draw axons and action potentials ---
     [loop] for (int i = 0; i < 32; i++) {
@@ -97,9 +103,12 @@ float4 main(PS_INPUT input) : SV_TARGET {
             float2 ni2 = nodePos[i];
             float2 nj  = nodePos[j];
 
-            // Axon SDF
+            // Axon SDF. Antialias over one pixel of screen-space footprint rather than
+            // ramping across the whole line width: that ramp is what made the axons read
+            // as soft, chunky smears instead of clean lines.
             float dist = segmentSDF(p, ni2, nj);
-            float axon = smoothstep(axonWidth, 0.0, dist);
+            float aa   = max(fwidth(dist), 1e-6);
+            float axon = smoothstep(axonWidth + aa, axonWidth - aa, dist);
             if (axon < 0.001) continue;
 
             // --- Action potential pulse ---
@@ -137,8 +146,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
     [loop] for (int ni3 = 0; ni3 < 32; ni3++) {
         if (ni3 >= nodeCount) break;
         float nodeDist = length(p - nodePos[ni3]) * resolution.y;
-        float nodeR    = 6.0 + ampLevel * 4.0;
-        float nodeMask = smoothstep(nodeR, 0.0, nodeDist);
+        float nodeR    = nodeSize * (1.0 + ampLevel * 0.7);
+        // One-pixel edge: nodeDist is already in pixels, so a fixed 1.0 band gives a
+        // crisp disc at any radius instead of a blur that scales with the node.
+        float nodeMask = smoothstep(nodeR + 1.0, nodeR - 1.0, nodeDist);
         if (nodeMask < 0.001) continue;
 
         float period2   = 1.0 / max(spontaneousRate, 0.01);

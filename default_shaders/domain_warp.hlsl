@@ -2,7 +2,7 @@
     "DESCRIPTION": "Fractal domain warping (Inigo Quilez fbm style) applied to video, with optional chromatic aberration",
     "INPUTS": [
         { "NAME": "WarpStrength", "LABEL": "Warp Strength",  "TYPE": "float", "DEFAULT": 0.12, "MIN": 0.0, "MAX": 0.5,  "STEP": 0.005 },
-        { "NAME": "WarpLayers",   "LABEL": "Warp Layers",    "TYPE": "long",  "DEFAULT": 2,   "MIN": 1,   "MAX": 3               },
+        { "NAME": "WarpLayers",   "LABEL": "Warp Layers",    "TYPE": "long",  "VALUES": [1,2,3], "LABELS": ["1","2","3"], "DEFAULT": 2 },
         { "NAME": "NoiseFreq",    "LABEL": "Noise Frequency","TYPE": "float", "DEFAULT": 2.5, "MIN": 0.5, "MAX": 10.0, "STEP": 0.1  },
         { "NAME": "WarpSpeed",    "LABEL": "Warp Speed",     "TYPE": "float", "DEFAULT": 0.06,"MIN": 0.0, "MAX": 0.5,  "STEP": 0.01 },
         { "NAME": "ChromaSplit",  "LABEL": "Chroma Split",   "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0, "MAX": 0.04, "STEP": 0.001}
@@ -27,7 +27,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {

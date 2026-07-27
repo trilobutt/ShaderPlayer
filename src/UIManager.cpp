@@ -579,6 +579,53 @@ void UIManager::DrawShaderEditor() {
     ImGui::End();
 }
 
+bool UIManager::RandomiseParam(ShaderParam& p) {
+    // Every branch draws from exactly the range the corresponding widget exposes, so a
+    // randomised value is always one the user could have dialled in by hand.
+    std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+
+    auto randomInRange = [&](float lo, float hi, float step) {
+        if (hi < lo) std::swap(lo, hi);
+        float v = lo + unit(m_rng) * (hi - lo);
+        if (step > 0.0f) v = std::round(v / step) * step;
+        return std::clamp(v, lo, hi);
+    };
+
+    switch (p.type) {
+    case ShaderParamType::Float:
+        p.values[0] = randomInRange(p.min, p.max, p.step);
+        return true;
+
+    case ShaderParamType::Bool:
+        p.values[0] = (unit(m_rng) < 0.5f) ? 0.0f : 1.0f;
+        return true;
+
+    case ShaderParamType::Long: {
+        if (p.longValues.empty()) return false;   // combo has no selectable entries
+        std::uniform_int_distribution<size_t> pick(0, p.longValues.size() - 1);
+        p.values[0] = static_cast<float>(p.longValues[pick(m_rng)]);
+        return true;
+    }
+
+    case ShaderParamType::Color:
+        // RGB only. Alpha is an opacity in every shader that reads it, and rolling it
+        // at random would silently make the effect invisible.
+        for (int i = 0; i < 3; ++i) p.values[i] = unit(m_rng);
+        return true;
+
+    case ShaderParamType::Point2D:
+        // The XY pad maps both axes onto [min, max], so both components use that range.
+        p.values[0] = randomInRange(p.min, p.max, 0.0f);
+        p.values[1] = randomInRange(p.min, p.max, 0.0f);
+        return true;
+
+    case ShaderParamType::Event:
+    case ShaderParamType::AudioBand:
+        return false;   // a trigger and a live meter — neither holds a value to roll
+    }
+    return false;
+}
+
 void UIManager::DrawShaderParameters() {
     ImGui::SetNextWindowSize(ImVec2(300, 350), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Shader Parameters")) {
@@ -749,6 +796,18 @@ void UIManager::DrawShaderParameters() {
             if (atDefault) ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Reset to default");
+
+            // --- Per-parameter randomise ---
+            // Disabled while a keyframe timeline is driving the value, matching the
+            // widget above: the animation would overwrite the roll on the next frame.
+            ImGui::SameLine();
+            if (kfDriven) ImGui::BeginDisabled();
+            if (ImGui::SmallButton("R##rand")) {
+                if (RandomiseParam(p)) anyChanged = true;
+            }
+            if (kfDriven) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Randomise this parameter within its range");
         }
 
         // --- Keyframe toggle (skip Event and AudioBand — both are non-user-driven) ---
@@ -822,13 +881,26 @@ void UIManager::DrawShaderParameters() {
         ImGui::PopID();
     }
 
-    // Reset to defaults button
+    // Reset / randomise all
     ImGui::Spacing();
     if (ImGui::SmallButton("Reset to defaults")) {
         for (auto& p : preset->params)
             std::copy(p.defaultValues, p.defaultValues + 4, p.values);
         anyChanged = true;
     }
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Randomise all")) {
+        for (auto& p : preset->params) {
+            // Skip parameters under keyframe control — the timeline owns their value.
+            if (p.timeline && p.timeline->enabled && !p.timeline->keyframes.empty())
+                continue;
+            if (RandomiseParam(p)) anyChanged = true;
+        }
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Randomise every parameter within its range.\n"
+                          "Keyframed parameters and colour alpha are left alone.");
 
     if (anyChanged) {
         m_app.OnParamChanged();

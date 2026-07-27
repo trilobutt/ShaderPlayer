@@ -1,28 +1,32 @@
 /*{
-    "DESCRIPTION": "Newton's method fractal for f(z) = z^n - 1, coloured by convergence basin and speed",
+    "DESCRIPTION": "Newton's method fractal for f(z) = z^n - 1, with a selectable colour per convergence basin",
     "SHADER_TYPE": "generative",
     "INPUTS": [
+        { "NAME": "RootColour1", "LABEL": "Root 1 Colour",     "TYPE": "color", "DEFAULT": [1.00,0.28,0.24,1.0] },
+        { "NAME": "RootColour2", "LABEL": "Root 2 Colour",     "TYPE": "color", "DEFAULT": [0.24,0.86,0.42,1.0] },
+        { "NAME": "RootColour3", "LABEL": "Root 3 Colour",     "TYPE": "color", "DEFAULT": [0.26,0.52,1.00,1.0] },
+        { "NAME": "RootColour4", "LABEL": "Root 4 Colour",     "TYPE": "color", "DEFAULT": [1.00,0.82,0.20,1.0] },
+        { "NAME": "RootColour5", "LABEL": "Root 5 Colour",     "TYPE": "color", "DEFAULT": [0.82,0.32,0.95,1.0] },
+        { "NAME": "RootColour6", "LABEL": "Root 6 Colour",     "TYPE": "color", "DEFAULT": [0.20,0.90,0.90,1.0] },
         { "NAME": "Degree",      "LABEL": "Polynomial Degree", "TYPE": "long",
-          "VALUES": [2,3,4,5,6,7], "LABELS": ["2","3","4","5","6","7"], "DEFAULT": 3       },
+          "VALUES": [2,3,4,5,6], "LABELS": ["2","3","4","5","6"], "DEFAULT": 3 },
         { "NAME": "ZoomN",       "LABEL": "Zoom",              "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1,"MAX": 5.0, "STEP": 0.05 },
-        { "NAME": "ColourOffset","LABEL": "Colour Offset",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 1.0, "STEP": 0.01 },
         { "NAME": "Damping",     "LABEL": "Relaxation",        "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1,"MAX": 2.0, "STEP": 0.05 },
         { "NAME": "MaxIterN",    "LABEL": "Max Iterations",    "TYPE": "long",
           "VALUES": [8,16,32,48,64,128], "LABELS": ["8","16","32","48","64","128"], "DEFAULT": 48 },
         { "NAME": "AnimSpeedN",  "LABEL": "Animate Speed",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 0.5, "STEP": 0.01 },
-        { "NAME": "PaletteTint", "LABEL": "Palette Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0] }
+        { "NAME": "AudioAmount", "LABEL": "Audio Amount",      "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0,"MAX": 1.0, "STEP": 0.01 },
+        { "NAME": "BassIn",      "LABEL": "Bass",              "TYPE": "audio", "BAND": "bass" },
+        { "NAME": "MidIn",       "LABEL": "Mid",               "TYPE": "audio", "BAND": "mid"  },
+        { "NAME": "BeatIn",      "LABEL": "Beat",              "TYPE": "audio", "BAND": "beat" }
     ]
 }*/
 
-// ISF packing:
-// Degree       offset 0 → int(custom[0].x)
-// ZoomN        offset 1 → custom[0].y
-// ColourOffset offset 2 → custom[0].z
-// Damping      offset 3 → custom[0].w
-// MaxIterN     offset 4 → int(custom[1].x)
-// AnimSpeedN   offset 5 → custom[1].y
-// (hole at 6,7)
-// PaletteTint  offset 8 → custom[2] (rgba)
+// Each convergence basin gets its own colour rather than a single tint over a
+// generated hue ramp. Six explicit root colours are the most the 32-float uniform
+// block holds alongside the numeric controls, so the polynomial degree tops out at 6.
+// The old Colour Offset control is gone — it shifted a generated hue wheel that no
+// longer exists.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -35,18 +39,13 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
     float4 pos : SV_POSITION;
     float2 uv  : TEXCOORD0;
 };
-
-float3 hsv2rgb(float h, float s, float v) {
-    float3 p = abs(frac(float3(h, h, h) + float3(1.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
-    return v * lerp(float3(1, 1, 1), saturate(p - 1.0), s);
-}
 
 float2 cmul(float2 a, float2 b) {
     return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
@@ -67,19 +66,25 @@ float2 cpow_int(float2 z, int n) {
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
-    int   degreeVal   = int(custom[0].x);
-    float zoomVal     = custom[0].y;
-    float colOffset   = custom[0].z;
-    float dampVal     = custom[0].w;
-    int   maxIterVal  = int(custom[1].x);
-    float animSpd     = custom[1].y;
+    // --- Audio modulation ---
+    // Bass drives the relaxation factor, which makes the basin boundaries churn and
+    // fold; mid spins the plane; beats lift the exposure. AudioAmount 0 = static.
+    float aBass = BassIn * AudioAmount;
+    float aMid  = MidIn  * AudioAmount;
+    float aBeat = BeatIn * AudioAmount;
+
+    int   degreeVal  = clamp(Degree, 2, 6);
+    float zoomVal    = ZoomN;
+    float dampVal    = clamp(Damping + aBass * 0.7, 0.1, 2.5);
+    int   maxIterVal = MaxIterN;
+    float animSpd    = AnimSpeedN + aMid * 0.35;
 
     static const float TWO_PI = 6.28318530718;
 
     // Map UV to complex plane
     float2 z0 = (input.uv - 0.5) * float2(resolution.x / resolution.y, 1.0) * zoomVal * 3.0;
 
-    // Rotate slowly when AnimSpeedN > 0
+    // Rotate slowly when Animate Speed > 0 (or when mid energy is driving it)
     float ca = cos(time * animSpd);
     float sa = sin(time * animSpd);
     float2 zvar = float2(z0.x * ca - z0.y * sa, z0.x * sa + z0.y * ca);
@@ -103,7 +108,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float minRootDist = 1e10;
 
     [loop]
-    for (int k = 0; k < 8; ++k) {
+    for (int k = 0; k < 6; ++k) {
         if (k >= degreeVal) break;
         float rootAngle = TWO_PI * float(k) / float(degreeVal);
         float2 root = float2(cos(rootAngle), sin(rootAngle));
@@ -114,10 +119,15 @@ float4 main(PS_INPUT input) : SV_TARGET {
         }
     }
 
-    float hue  = frac(float(closestRoot) / float(degreeVal) + colOffset + time * animSpd * 0.02);
-    float bri  = pow(1.0 - float(ni) / float(maxIterVal), 0.4);
-    float sat  = saturate(0.9 - sqrt(minRootDist) * 2.0);
+    float4 rootCols[6] = { RootColour1, RootColour2, RootColour3,
+                           RootColour4, RootColour5, RootColour6 };
+    float3 basin = rootCols[closestRoot].rgb;
 
-    float3 col = hsv2rgb(hue, sat, bri) * custom[2].rgb;
-    return float4(col, 1.0);
+    // Convergence speed shades the basin; distance to the root fades the boundary
+    // filaments toward black so the fractal structure stays legible.
+    float shade = pow(1.0 - float(ni) / float(maxIterVal), 0.4);
+    float grip  = saturate(0.9 - sqrt(minRootDist) * 2.0);
+
+    float3 col = basin * shade * (0.3 + 0.7 * grip) * (1.0 + aBeat * 0.8);
+    return float4(saturate(col), 1.0);
 }

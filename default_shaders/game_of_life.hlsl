@@ -6,7 +6,11 @@
         {"NAME": "initialDensity", "LABEL": "Density",        "TYPE": "float", "MIN": 0.1,  "MAX": 0.9,  "DEFAULT": 0.45},
         {"NAME": "ageSaturation",  "LABEL": "Age Colour",     "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.8},
         {"NAME": "wrapEdges",      "LABEL": "Wrap Edges",     "TYPE": "bool",  "DEFAULT": true},
-        {"NAME": "CellTint",       "LABEL": "Cell Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]}
+        {"NAME": "CellTint",       "LABEL": "Cell Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]},
+        {"NAME": "rmsIn",          "LABEL": "Level",          "TYPE": "audio", "BAND": "rms"},
+        {"NAME": "bassIn",         "LABEL": "Bass",           "TYPE": "audio", "BAND": "bass"},
+        {"NAME": "beatIn",         "LABEL": "Beat",           "TYPE": "audio", "BAND": "beat"},
+        {"NAME": "audioAmount",    "LABEL": "Audio Amount",   "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6}
     ]
 }*/
 
@@ -30,7 +34,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -60,12 +64,21 @@ bool golRule(bool alive, int nb) {
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv   = input.uv;
 
+    // --- Audio modulation ---
+    // Level accelerates the generation clock, bass tightens the grid and seeds a
+    // denser soup, beats brighten the surviving cells. audioAmount 0 = static rules.
+    float aRms  = rmsIn  * audioAmount;
+    float aBass = bassIn * audioAmount;
+    float aBeat = beatIn * audioAmount;
+
     // Map UV to cell coordinates
-    float2 cellPx   = resolution / max(cellSz, 1.0);
+    float  cellPix  = max(cellSz * (1.0 - aBass * 0.45), 2.0);
+    float2 cellPx   = resolution / cellPix;
     int2   cell     = int2(floor(uv * cellPx));
     int    cx       = cell.x;
     int    cy       = cell.y;
-    float  seed     = floor(time * updateHz);
+    float  seed     = floor(time * updateHz * (1.0 + aRms * 3.0));
+    float  density  = saturate(initialDensity + aBass * 0.25);
 
     // --- Fill 7×7 initial state centred on (cx, cy) ---
     bool initG[49];
@@ -77,7 +90,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
                 nx = ((nx % (int)cellPx.x) + (int)cellPx.x) % (int)cellPx.x;
                 ny = ((ny % (int)cellPx.y) + (int)cellPx.y) % (int)cellPx.y;
             }
-            initG[iy * 7 + ix] = initCell(nx, ny, seed, initialDensity);
+            initG[iy * 7 + ix] = initCell(nx, ny, seed, density);
         }
     }
 
@@ -132,7 +145,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Hue: red (new) → yellow → green → cyan → blue (long-lived)
     float hue = float(age - 1) / 4.0 * 0.65;  // 0=red, 0.65=blue
     float sat = ageSaturation;
-    float3 col = hsv2rgb(float3(hue, sat, 0.95)) * CellTint.rgb;
+    float3 col = hsv2rgb(float3(hue, sat, saturate(0.95 + aBeat * 0.6))) * CellTint.rgb;
+    col += CellTint.rgb * aBeat * 0.35;
 
     return float4(saturate(col), 1.0);
 }

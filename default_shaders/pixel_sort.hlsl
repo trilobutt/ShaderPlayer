@@ -1,11 +1,11 @@
 /*{
   "SHADER_TYPE": "video",
   "INPUTS": [
-    { "NAME": "SortAxis",     "TYPE": "long",  "MIN": 0,   "MAX": 1,   "DEFAULT": 0,  "LABEL": "Axis (0=Horizontal 1=Vertical)" },
+    { "NAME": "SortAxis",     "TYPE": "long",  "VALUES": [0,1], "LABELS": ["Horizontal","Vertical"], "DEFAULT": 0, "LABEL": "Axis" },
     { "NAME": "ThresholdLow", "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.25,"LABEL": "Threshold Low" },
     { "NAME": "ThresholdHigh","TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.85,"LABEL": "Threshold High" },
     { "NAME": "MaxRunLen",    "TYPE": "float", "MIN": 0.01,"MAX": 0.8, "DEFAULT": 0.25,"LABEL": "Max Run Length" },
-    { "NAME": "SortDirection","TYPE": "long",  "MIN": 0,   "MAX": 1,   "DEFAULT": 0,  "LABEL": "Direction (0=Fwd 1=Back)" }
+    { "NAME": "SortDirection","TYPE": "long",  "VALUES": [0,1], "LABELS": ["Forward","Backward"], "DEFAULT": 0, "LABEL": "Direction" }
   ]
 }*/
 
@@ -27,7 +27,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {

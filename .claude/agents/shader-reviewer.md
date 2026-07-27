@@ -18,7 +18,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 ```
 
@@ -89,7 +89,7 @@ Walk the INPUTS array in order, tracking a running `cbufferOffset` (starts at 0)
 Flag any of:
 - `point2d` starting at an odd offset
 - `color` starting at a non-multiple-of-4 offset
-- Total non-audio floats exceeding 16 (extras are silently dropped)
+- Total non-audio floats exceeding 32 (extras are silently dropped)
 - `audio` type used in a non-audio shader (SHADER_TYPE must be "audio")
 
 ### 7. ISF `point2d` and `color` MIN/MAX

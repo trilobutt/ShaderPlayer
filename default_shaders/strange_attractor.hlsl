@@ -9,7 +9,11 @@
     { "NAME": "PointBright",   "TYPE": "float", "MIN": 0.2,  "MAX": 6.0, "DEFAULT": 2.5, "LABEL": "Point Brightness" },
     { "NAME": "RotationSpeed", "TYPE": "float", "MIN": 0.0,  "MAX": 5.0, "DEFAULT": 0.1, "LABEL": "Rotation Speed" },
     { "NAME": "ColourMode",    "TYPE": "long",
-      "VALUES": [0,1,2], "LABELS": ["Velocity","Time","Depth"], "DEFAULT": 0, "LABEL": "Colour Mode" }
+      "VALUES": [0,1,2], "LABELS": ["Velocity","Time","Depth"], "DEFAULT": 0, "LABEL": "Colour Mode" },
+    { "NAME": "AudioAmount",   "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.6, "LABEL": "Audio Amount" },
+    { "NAME": "BassIn",        "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
+    { "NAME": "MidIn",         "TYPE": "audio", "BAND": "mid",  "LABEL": "Mid" },
+    { "NAME": "BeatIn",        "TYPE": "audio", "BAND": "beat", "LABEL": "Beat" }
   ]
 }*/
 
@@ -30,7 +34,7 @@ cbuffer Constants : register(b0) {
     float2 resolution;
     float2 videoResolution;
     float2 padding2;
-    float4 custom[4];
+    float4 custom[8];
 };
 
 struct PS_INPUT {
@@ -90,8 +94,15 @@ float3 attractorConfig() {
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
+    // --- Audio modulation ---
+    // Mid spins the camera, bass zooms the phase-space view, beats brighten the
+    // trajectory density. AudioAmount 0 = the unmodulated attractor.
+    float aBass = BassIn * AudioAmount;
+    float aMid  = MidIn  * AudioAmount;
+    float aBeat = BeatIn * AudioAmount;
+
     // Camera rotation angle (slow drift to expose 3D structure).
-    float camAngle = time * RotationSpeed;
+    float camAngle = time * (RotationSpeed + aMid * 1.6);
     float cosA     = cos(camAngle);
     float sinA     = sin(camAngle);
 
@@ -99,7 +110,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Map pixel UV to a phase-space starting position.
     // X and Z (or X and Y for Rössler) span the visible range.
-    float halfRange = 1.0 / max(ViewScale, 0.001) * 0.5;
+    float viewScale = ViewScale * (1.0 + aBass * 0.7);
+    float halfRange = 1.0 / max(viewScale, 0.001) * 0.5;
     float ax = (uv.x - 0.5) * halfRange * 2.0;
     float az = (uv.y - 0.5) * halfRange * 2.0 + cfg.y;
 
@@ -137,7 +149,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         }
 
         // Screen UV of this trajectory point.
-        float2 sUV  = float2(projA, projB) * ViewScale + 0.5;
+        float2 sUV  = float2(projA, projB) * viewScale + 0.5;
         float2 dUV  = uv - sUV;
         // Aspect-correct distance.
         dUV.x      *= resolution.x / resolution.y;
@@ -154,7 +166,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         accC += w * cParam;
     }
 
-    float density  = saturate(acc * PointBright * 0.1);
+    float density  = saturate(acc * PointBright * 0.1 * (1.0 + aBeat * 1.5));
     float colParam = (acc > 0.0001) ? (accC / acc) : 0.0;
 
     float3 col = hsv2rgb(colParam * 0.65 + 0.55, 0.85, density);
