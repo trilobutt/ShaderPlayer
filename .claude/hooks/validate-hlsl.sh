@@ -1,33 +1,39 @@
 #!/usr/bin/env bash
-# PostToolUse hook: validate .hlsl files with fxc.exe after Write/Edit
-# Reads tool output JSON from stdin; exits 0 always (non-blocking).
+# PostToolUse hook: compile the edited shader the way ShaderPlayer actually does.
+#
+# Running fxc on the raw file reports undeclared-identifier errors for every ISF
+# parameter, because the #define aliases and the shared helper library live in the
+# injected preamble. tools/validate_shaders.py reproduces that preamble, so its
+# output is trustworthy and its line numbers match the file on disk.
+#
+# Reads tool input JSON from stdin; exits 0 always (non-blocking).
 
 input=$(cat)
 
-fp=$(echo "$input" | python3 -c "
+fp=$(echo "$input" | python -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
-    print(d.get('filePath', d.get('file_path', d.get('path', ''))))
+    ti = d.get('tool_input') or {}
+    print(d.get('filePath') or d.get('file_path') or d.get('path')
+          or ti.get('file_path') or ti.get('filePath') or ti.get('path') or '')
 except Exception:
     print('')
 " 2>/dev/null)
 
-[[ "$fp" == *.hlsl ]] || exit 0
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-wfp=$(cygpath -w "$fp" 2>/dev/null)
-[[ -z "$wfp" ]] && wfp="$fp"
-
-FXC="C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\fxc.exe"
+case "$fp" in
+    *.hlsl) ;;
+    *.hlsli)
+        echo "--- $fp changed: the shared helper library affects every shader."
+        echo "    Run: python tools/validate_shaders.py"
+        exit 0
+        ;;
+    *) exit 0 ;;
+esac
 
 echo "--- HLSL validation: $fp ---"
-powershell.exe -NoProfile -Command "& '$FXC' /T ps_5_0 /E main /nologo '$wfp'" 2>&1
-status=$?
-
-if [[ $status -eq 0 ]]; then
-    echo "OK — shader compiled successfully."
-else
-    echo "HLSL compile error(s) in $fp (see above). Fix before committing."
-fi
+python "$root/tools/validate_shaders.py" "$fp" 2>&1
 
 exit 0  # never block the edit; errors are informational

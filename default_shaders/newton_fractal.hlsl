@@ -16,6 +16,8 @@
           "VALUES": [8,16,32,48,64,128], "LABELS": ["8","16","32","48","64","128"], "DEFAULT": 48 },
         { "NAME": "AnimSpeedN",  "LABEL": "Animate Speed",     "TYPE": "float", "DEFAULT": 0.0, "MIN": 0.0,"MAX": 0.5, "STEP": 0.01 },
         { "NAME": "AudioAmount", "LABEL": "Audio Amount",      "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0,"MAX": 1.0, "STEP": 0.01 },
+        { "NAME": "Exposure",    "LABEL": "Exposure",          "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1,"MAX": 4.0, "STEP": 0.01 },
+        { "NAME": "VignetteAmt", "LABEL": "Vignette",          "TYPE": "float", "DEFAULT": 0.25,"MIN": 0.0,"MAX": 1.0, "STEP": 0.01 },
         { "NAME": "BassIn",      "LABEL": "Bass",              "TYPE": "audio", "BAND": "bass" },
         { "NAME": "MidIn",       "LABEL": "Mid",               "TYPE": "audio", "BAND": "mid"  },
         { "NAME": "BeatIn",      "LABEL": "Beat",              "TYPE": "audio", "BAND": "beat" }
@@ -23,10 +25,15 @@
 }*/
 
 // Each convergence basin gets its own colour rather than a single tint over a
-// generated hue ramp. Six explicit root colours are the most the 32-float uniform
-// block holds alongside the numeric controls, so the polynomial degree tops out at 6.
-// The old Colour Offset control is gone — it shifted a generated hue wheel that no
-// longer exists.
+// generated hue ramp. Six explicit root colours plus the numeric controls fill the
+// 32-float uniform block exactly, so the polynomial degree tops out at 6 and there
+// is no room for a separate glow control — Exposure drives the whole image.
+//
+// Basin boundaries are not anti-aliased and deliberately so: the boundary between
+// any two basins contains points of every basin at every scale (it is the Julia set
+// of the Newton map), so there is no footprint over which a filtered edge is
+// meaningful. What removes the aliasing there instead is the orbit-trap glow, which
+// is a smooth field over exactly that region.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -89,18 +96,28 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float sa = sin(time * animSpd);
     float2 zvar = float2(z0.x * ca - z0.y * sa, z0.x * sa + z0.y * ca);
 
-    int ni = 0;
+    int   ni   = 0;
+    float trap = 1e9;   // closest approach of the orbit to the origin
 
     [loop]
     for (ni = 0; ni < maxIterVal; ++ni) {
-        float2 zn   = cpow_int(zvar, degreeVal);
+        // z^(n-1) once, then z^n by one more multiply. The old form evaluated three
+        // separate cpow_int calls per iteration (z^n, z^(n-1) and a residual), which
+        // was roughly three times the complex multiplies for the same step.
         float2 znm1 = cpow_int(zvar, degreeVal - 1);
-        float2 denom = float(degreeVal) * znm1;
-        float2 step_val = cdiv(zn - float2(1.0, 0.0), denom);
+        float2 zn   = cmul(znm1, zvar);
+        float2 step_val = cdiv(zn - float2(1.0, 0.0), float(degreeVal) * znm1);
         zvar -= dampVal * step_val;
-        // Check convergence to any root — all roots have |z^n - 1| → 0
-        float2 residual = cpow_int(zvar, degreeVal) - float2(1.0, 0.0);
-        if (dot(residual, residual) < 1e-8) break;
+
+        // The orbit of a boundary pixel swings past the pole at the origin before it
+        // settles; the interior of a basin never does. Trapping that distance gives a
+        // smooth field concentrated exactly on the boundary filigree.
+        trap = min(trap, length(zvar));
+
+        // Converged once the correction stops moving. Cheaper than re-evaluating the
+        // residual, and the right test under relaxation, where the residual can stall
+        // while the iterate is still walking.
+        if (dot(step_val, step_val) < 1e-12) { ++ni; break; }
     }
 
     // Find closest root: roots at exp(2πi k/n)
@@ -121,13 +138,44 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     float4 rootCols[6] = { RootColour1, RootColour2, RootColour3,
                            RootColour4, RootColour5, RootColour6 };
-    float3 basin = rootCols[closestRoot].rgb;
+    // Root colours are picked in sRGB; shade and blend in linear light.
+    float3 basin = spSrgbToLinear(rootCols[closestRoot].rgb);
+
+    // Smooth (fractional) iteration count. Newton converges quadratically at
+    // Relaxation 1.0, so the error satisfies log|e_n| ~ 2^n·log|e_0| and the
+    // fractional part falls out as a log2 of the log ratio. Away from 1.0 the
+    // convergence is linear instead and the fraction is only approximate — it still
+    // varies continuously with the pixel, which is all the shading needs, and it is
+    // what removes the integer contour steps the raw count produced.
+    float dRoot   = max(sqrt(minRootDist), 1e-30);
+    float ratio   = max(log(dRoot) / log(1e-6), 1.0);
+    float smoothN = float(ni) - log(ratio) / 0.6931472;
 
     // Convergence speed shades the basin; distance to the root fades the boundary
     // filaments toward black so the fractal structure stays legible.
-    float shade = pow(1.0 - float(ni) / float(maxIterVal), 0.4);
-    float grip  = saturate(0.9 - sqrt(minRootDist) * 2.0);
+    float shade = pow(saturate(1.0 - smoothN / float(maxIterVal)), 0.4);
+    float grip  = saturate(0.9 - dRoot * 2.0);
 
-    float3 col = basin * shade * (0.3 + 0.7 * grip) * (1.0 + aBeat * 0.8);
+    // Fine contour rings on the fractional iteration count add a second scale of
+    // detail across the otherwise flat basin interiors. Band-limited, so where the
+    // count is discontinuous (across a basin boundary) the rings fade to flat
+    // instead of aliasing into a moire.
+    float ringPhase = SP_TAU * smoothN * 0.5;
+    float ring = 0.5 + 0.5 * spBandLimitedCos(ringPhase, fwidth(ringPhase));
+
+    float3 col = basin * shade * (0.3 + 0.7 * grip) * (0.82 + 0.18 * ring);
+
+    // Inverse-distance glow on the orbit trap. Unbounded near the boundary, where
+    // the orbit passes closest to the pole, so the filigree genuinely blooms.
+    col += basin * 0.05 / max(trap, 0.02);
+
+    col *= Exposure * (1.0 + aBeat * 0.8);
+    col *= spVignette(input.uv, VignetteAmt, 0.8);
+
+    // tanh rather than ACES: the trap term is unbounded and tanh keeps each basin's
+    // hue through its hot core instead of desaturating the boundaries to white.
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
+
     return float4(saturate(col), 1.0);
 }

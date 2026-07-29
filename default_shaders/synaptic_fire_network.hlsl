@@ -13,12 +13,16 @@
         {"NAME": "propagationDelay", "LABEL": "Propagation (s)","TYPE": "float",  "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.25},
         {"NAME": "spontaneousRate",  "LABEL": "Spontaneous Hz", "TYPE": "float",  "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
         {"NAME": "networkScale",     "LABEL": "Network Scale",  "TYPE": "float",  "MIN": 0.2,  "MAX": 3.0,  "DEFAULT": 1.0},
-        {"NAME": "nodeSize",         "LABEL": "Node Size (px)", "TYPE": "float",  "MIN": 1.0,  "MAX": 40.0, "DEFAULT": 6.0}
+        {"NAME": "nodeSize",         "LABEL": "Node Size (px)", "TYPE": "float",  "MIN": 1.0,  "MAX": 40.0, "DEFAULT": 6.0},
+        {"NAME": "GlowAmt",          "LABEL": "Glow",           "TYPE": "float",  "MIN": 0.0,  "MAX": 3.0,  "DEFAULT": 0.8},
+        {"NAME": "Exposure",         "LABEL": "Exposure",       "TYPE": "float",  "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
+        {"NAME": "VignetteAmt",      "LABEL": "Vignette",       "TYPE": "float",  "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.35}
     ]
 }*/
 
 // Colours are declared first so both float4s land on their 4-float alignment boundaries
 // without wasting padding on the colour alignment gaps.
+// ISF packing: AxonColour 0..3, NodeColour 4..7, eleven scalars at 8..18. 19/32 floats.
 
 // Synaptic fire network visualiser.
 // nodeCount nodes are placed via a deterministic hash; each node connects to
@@ -28,6 +32,9 @@
 // potential pulse travels each axon over propagationDelay seconds, visible as
 // a bright white bolus.  Nodes enter a dimmer refractory state for
 // refractoryPeriod seconds after each spike.
+//
+// Light is accumulated as inverse distance in linear HDR and tonemapped at the end,
+// so an axon is a thin core wrapped in a real falloff instead of a flat-topped stroke.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -72,6 +79,15 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float  ar  = resolution.x / resolution.y;
     float2 p   = uv * float2(ar, 1.0);
 
+    // Screen-space size of one pixel in p's units. p.y is uv.y, so a pixel spans
+    // 1/resolution.y; p.x is uv.x*ar with ar = resX/resY, so a pixel spans ar/resX,
+    // which is the same number. The footprint is therefore isotropic and exact, and it
+    // has to be computed this way: the axon and node loops both have varying trip counts
+    // and early-outs, so fwidth() inside them returns an undefined derivative (fxc says
+    // as much — X3595) and was smearing the line edges by whatever the neighbouring
+    // lane happened to be doing.
+    float px = 1.0 / max(resolution.y, 1.0);
+
     // --- Generate node positions (up to 32) ---
     float2 nodePos [32];
     float  nodeSeed[32];
@@ -87,33 +103,45 @@ float4 main(PS_INPUT input) : SV_TARGET {
         nodeSeed[ni] = h21(float2(float(ni) * 17.3, float(ni) * 5.7));
     }
 
-    float3 col = float3(0.01, 0.01, 0.03);  // dark background
+    float3 axonLin = spSrgbToLinear(AxonColour.rgb);
+    float3 nodeLin = spSrgbToLinear(NodeColour.rgb);
+    float3 col     = spSrgbToLinear(float3(0.01, 0.01, 0.03));  // dark background
 
-    int   halfK = kNeighbours / 2;
-    // Axon gauge tracks the network scale so a scaled-up network keeps its proportions.
-    float axonWidth = 0.0015 * ar * sqrt(networkScale);
+    uint  nCount = uint(max(nodeCount, 1));
+    uint  halfK  = uint(max(kNeighbours, 2)) / 2u;
+    // Axon gauge tracks the network scale so a scaled-up network keeps its proportions,
+    // but never falls below a pixel — below that the line stops being a line.
+    float axonWidth = max(0.0015 * ar * sqrt(networkScale), px * 0.6);
 
     // --- Draw axons and action potentials ---
-    [loop] for (int i = 0; i < 32; i++) {
-        if (i >= nodeCount) break;
-        [loop] for (int k = 1; k <= 4; k++) {
+    [loop] for (uint i = 0; i < 32; i++) {
+        if (i >= nCount) break;
+        [loop] for (uint k = 1; k <= 4; k++) {
             if (k > halfK) break;
-            int j = (i + k) % nodeCount;
+            uint j = (i + k) % nCount;
 
             float2 ni2 = nodePos[i];
             float2 nj  = nodePos[j];
 
-            // Axon SDF. Antialias over one pixel of screen-space footprint rather than
-            // ramping across the whole line width: that ramp is what made the axons read
-            // as soft, chunky smears instead of clean lines.
             float dist = segmentSDF(p, ni2, nj);
-            float aa   = max(fwidth(dist), 1e-6);
-            float axon = smoothstep(axonWidth + aa, axonWidth - aa, dist);
-            if (axon < 0.001) continue;
+
+            // Crisp core, antialiased over exactly one pixel.
+            float axon = smoothstep(axonWidth + px, axonWidth - px, dist);
+
+            // Halo. Inverse distance, so it has the long tail a line of light actually
+            // has; this is also what stops the background being a flat dead field
+            // between the axons. Evaluated before the early-out below, since a pixel
+            // well off the line still receives some of it.
+            float halo = axonWidth / (dist + axonWidth * 2.0);
+            halo = halo * halo;
+
+            if (axon < 0.001 && halo < 0.004) continue;
 
             // --- Action potential pulse ---
             float period   = 1.0 / max(spontaneousRate, 0.01);
-            // Node i fires when phase crosses firingThreshold; audio shortens cycle
+            // Node i fires when phase crosses firingThreshold; audio shortens cycle.
+            // RMS runs 0.01-0.3 on real music, so the 0.5 coefficient here is doing
+            // very little on its own — it is the period shortening that carries it.
             float audioBoost = ampLevel * 0.5;
             float phase    = frac(time / max(period - audioBoost * period * 0.6, 0.05) + nodeSeed[i]);
             bool  hasFired = phase > (1.0 - firingThreshold * 0.4);
@@ -126,31 +154,28 @@ float4 main(PS_INPUT input) : SV_TARGET {
             // Pixel's t along axon
             float pixelT = segmentT(p, ni2, nj);
             float pulseDist = abs(pixelT - pulseT);
-            float pulseGlow = exp(-pulseDist * 40.0) * (hasFired ? 1.0 : 0.0);
+            float pulseGlow = (hasFired ? 1.0 : 0.0) / (1.0 + pulseDist * 55.0);
 
             // Refractory dim: after pulse passes, axon is dimmer
             float refractPulse = exp(-max(pixelT - pulseT, 0.0) * 10.0) * (hasFired ? 0.4 : 0.1);
 
-            // Axon base glow (faint persistent signal)
-            float baseGlow = axon * (0.05 + refractPulse * 0.15);
-            float3 axonCol = AxonColour.rgb * baseGlow;
+            // Axon base glow (faint persistent signal) plus the halo.
+            float3 axonCol = axonLin * (axon * (0.05 + refractPulse * 0.15)
+                                        + halo * GlowAmt * 0.09);
 
-            // Bright action potential bolus
-            axonCol += float3(0.9, 1.0, 0.8) * pulseGlow * axon * 0.8;
+            // Bright action potential bolus, spreading into the halo as well as the core.
+            axonCol += spSrgbToLinear(float3(0.9, 1.0, 0.8)) * pulseGlow
+                     * (axon * 0.8 + halo * GlowAmt * 0.9);
 
             col += axonCol;
         }
     }
 
     // --- Draw nodes ---
-    [loop] for (int ni3 = 0; ni3 < 32; ni3++) {
-        if (ni3 >= nodeCount) break;
-        float nodeDist = length(p - nodePos[ni3]) * resolution.y;
+    [loop] for (uint ni3 = 0; ni3 < 32; ni3++) {
+        if (ni3 >= nCount) break;
+        float nodeDist = length(p - nodePos[ni3]) * resolution.y;   // pixels
         float nodeR    = nodeSize * (1.0 + ampLevel * 0.7);
-        // One-pixel edge: nodeDist is already in pixels, so a fixed 1.0 band gives a
-        // crisp disc at any radius instead of a blur that scales with the node.
-        float nodeMask = smoothstep(nodeR + 1.0, nodeR - 1.0, nodeDist);
-        if (nodeMask < 0.001) continue;
 
         float period2   = 1.0 / max(spontaneousRate, 0.01);
         float audioB2   = ampLevel * 0.5;
@@ -159,10 +184,31 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float refractory = max(0.0, phase2 - (1.0 - refractoryPeriod / max(period2, 0.01))) > 0.0 &&
                            phase2 > firingThreshold ? 0.3 : 1.0;
 
-        float3 nodeCol = NodeColour.rgb * nodeMask * refractory;
-        if (firing) nodeCol += float3(0.6, 0.3, 0.1) * nodeMask * 1.5;  // fire flash (warm)
+        // Soma halo, again inverse distance. Reaches far enough to give the whole field
+        // a faint cellular haze rather than leaving the background flat.
+        float halo = nodeR / (nodeDist + nodeR * 0.8);
+        halo = halo * halo * halo;
+        col += nodeLin * halo * GlowAmt * 0.12 * (firing ? 3.0 : 1.0);
+
+        // One-pixel edge: nodeDist is already in pixels, so a fixed 1.0 band gives a
+        // crisp disc at any radius instead of a blur that scales with the node.
+        float nodeMask = smoothstep(nodeR + 1.0, nodeR - 1.0, nodeDist);
+        if (nodeMask < 0.001) continue;
+
+        float3 nodeCol = nodeLin * nodeMask * refractory;
+        if (firing) nodeCol += spSrgbToLinear(float3(0.6, 0.3, 0.1)) * nodeMask * 1.5;  // fire flash (warm)
         col += nodeCol;
     }
+
+    col *= spVignette(uv, VignetteAmt, 0.8);
+    col *= Exposure;
+
+    // tanh: overlapping halos accumulate without bound where the network is dense.
+    col = spLinearToSrgb(spTonemapTanh(col));
+
+    // The halos are wide, low-slope gradients over a near-black background — where
+    // 8-bit banding is most visible.
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);
 }

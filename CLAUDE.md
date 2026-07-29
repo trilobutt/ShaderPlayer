@@ -266,6 +266,26 @@ Each frame:
 
 Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffer layout and ISF block. Then Shader Library → "Scan Folder" to load it.
 
+### Shared HLSL Helper Library
+
+`src/ShaderCommon.hlsli` is injected ahead of every shader by `ShaderManager::BuildDefinesPreamble`, before the AudioConstants block and the param `#define`s. Every symbol is `sp`-prefixed (`SP_` for macros) so it cannot collide with per-shader helpers. Contents: tonemaps (`spTonemapACES`/`Tanh`/`Unreal`), sRGB conversion, `spPalette` (IQ cosine), hashes (`spHash12`/`22`/`33`, `spIGN`), `spDither`, `spAAStep`/`spAALine`/`spBandLimitedCos`, `spHsv2rgb`/`spRgb2hsv`, `spLuma`, `spVignette`, `spAspectUV`. Read the file for signatures and usage notes.
+
+The `.hlsli` is the single source of truth. CMake runs `tools/embed_hlsli.cmake` to generate `build/generated/ShaderCommonEmbedded.h` (a raw string literal, `kShaderCommonHLSL`) which `ShaderManager.cpp` includes, and `tools/validate_shaders.py` reads the `.hlsli` directly. Nothing is hand-mirrored and the exe has no runtime file dependency. The generated header carries CRLF where the source has LF; only line endings differ, so line counts still match.
+
+fxc dead-strips unused functions — a shader that calls none of the helpers compiles to byte-identical bytecode.
+
+The preamble ends with `#line 1 "<preset name>"` so fxc error line numbers refer to the shader file on disk, not to preamble-inflated positions.
+
+### Validating Shaders
+
+```
+python tools/validate_shaders.py                 # all of default_shaders/
+python tools/validate_shaders.py <file.hlsl>     # one file
+python tools/validate_shaders.py --dump <file>   # print the combined preamble+source
+```
+
+Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `D3DCOMPILE_OPTIMIZATION_LEVEL3`), reports the packed `custom[]` float count per shader, and fails on budget overflow as well as on compile errors. Non-zero exit on any failure. Running fxc on a raw shader file instead is worthless — every ISF param reads as an undeclared identifier.
+
 ## Live Capture (Webcam / RTSP)
 
 - **libavdevice must be linked and registered.** `avdevice` is in `FFMPEG_LIBRARIES` (CMakeLists) and `VideoDecoder.cpp` calls `avdevice_register_all()` once via `EnsureDevicesRegistered()`. avformat's static init does not register device demuxers — without this `av_find_input_format("dshow")` returns null and every webcam open fails silently before touching the device.
@@ -480,4 +500,4 @@ Defined in `.claude/settings.json`:
 
 **PreToolUse — block config.json edits**: Intercepts Write/Edit calls targeting `config.json` and exits with an error message. `config.json` is written by ShaderPlayer at runtime; source-of-truth for shader presets is the `.hlsl` files and the in-app library.
 
-**PostToolUse — HLSL syntax validation**: After any Write/Edit to a `.hlsl` file, runs `fxc.exe /T ps_5_0 /E main` against the file using the Windows SDK compiler at `C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe`. Compile errors appear immediately in the tool output without requiring a full CMake build cycle.
+**PostToolUse — HLSL syntax validation**: After any Write/Edit to a `.hlsl` file, runs `tools/validate_shaders.py` on it (see Validating Shaders), so compile errors appear immediately without a CMake build cycle. Editing `src/ShaderCommon.hlsli` prints a reminder to run the full pass instead — a 45-shader sweep takes ~15 s, too slow to block every edit.

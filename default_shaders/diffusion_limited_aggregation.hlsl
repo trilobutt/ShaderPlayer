@@ -9,10 +9,14 @@
         {"NAME": "branchDetail",  "LABEL": "Branch Detail",  "TYPE": "float", "MIN": 1.0,  "MAX": 8.0,   "DEFAULT": 4.0},
         {"NAME": "AnimSpeed",     "LABEL": "Anim Speed",     "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,   "DEFAULT": 0.3},
         {"NAME": "edgeSoftness",  "LABEL": "Edge Softness",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.4},
+        {"NAME": "audioAmount",   "LABEL": "Audio Amount",   "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.6},
+        {"NAME": "PaletteShift",  "LABEL": "Palette Shift",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.0},
+        {"NAME": "GlowAmount",    "LABEL": "Filament Glow",  "TYPE": "float", "MIN": 0.0,  "MAX": 3.0,   "DEFAULT": 0.7},
+        {"NAME": "Exposure",      "LABEL": "Exposure",       "TYPE": "float", "MIN": 0.1,  "MAX": 4.0,   "DEFAULT": 1.0},
+        {"NAME": "VignetteAmt",   "LABEL": "Vignette",       "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.3},
         {"NAME": "bassIn",        "LABEL": "Bass",           "TYPE": "audio", "BAND": "bass"},
         {"NAME": "highIn",        "LABEL": "Treble",         "TYPE": "audio", "BAND": "high"},
-        {"NAME": "beatIn",        "LABEL": "Beat",           "TYPE": "audio", "BAND": "beat"},
-        {"NAME": "audioAmount",   "LABEL": "Audio Amount",   "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,   "DEFAULT": 0.6}
+        {"NAME": "beatIn",        "LABEL": "Beat",           "TYPE": "audio", "BAND": "beat"}
     ]
 }*/
 
@@ -25,6 +29,11 @@
 // actual DLA clusters.  driftAngle introduces anisotropic directional bias
 // matching the asymmetric DLA variant.  The resulting structure exhibits
 // self-similar branching across scales controlled by branchDetail octaves.
+//
+// The aggregate is emissive rather than masked. Local density above the
+// attachment threshold is carried as an unbounded signal, so a dense junction
+// overexposes and blooms while a single-walker tip stays a thin line, and the
+// tonemap rather than a saturate() decides where white lands.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -45,10 +54,14 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 hsv2rgb(float3 c) {
-    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+// Warm-core to cool-tip cosine ramp. Replaces an HSV hue sweep, which spent a third
+// of its range in greens the aggregate never reads well in and wrapped with a seam.
+float3 dlaPalette(float t) {
+    return max(spPalette(t + PaletteShift,
+                         float3(0.48, 0.36, 0.42),
+                         float3(0.48, 0.36, 0.42),
+                         float3(1.0,  1.0,  1.0),
+                         float3(0.02, 0.20, 0.52)), 0.0);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
@@ -76,7 +89,6 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float reach = max(0.25, 1.0 - aBass * 0.55);
 
     // Walker density lowers the attachment threshold: more walkers, denser branching.
-    // (This parameter previously fed a variable that was never read, so it did nothing.)
     float densityBias = 1.35 - walkerDensity * 0.6;
 
     // Multi-scale fractal noise: DLA-like dendritic branching via iterated threshold
@@ -92,7 +104,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
     [loop] for (int i = 0; i < 8; i++) {
         if (i >= iOcts) break;
         float2 fp      = pb * freq + float2(float(i) * 1.73, float(i) * 2.31) + animOffset * (1.0 + float(i) * 0.4);
-        float  noiseVal = noiseTexture.SampleLevel(noiseSampler, frac(fp * 0.2 + 0.5), 0).r;
+        // No frac() on the lookup: the noise sampler already wraps, and folding the
+        // coordinate by hand put a discontinuity in the field that fwidth reported as
+        // an infinitely wide pixel, smearing a grey seam across the aggregate wherever
+        // an octave happened to cross a tile boundary.
+        float  noiseVal = noiseTexture.SampleLevel(noiseSampler, fp * 0.2 + 0.5, 0).r;
         // Apply threshold at this scale; stickingProb controls density of branches.
         // A hard step() here quantised every branch to a binary in/out decision, which
         // is what made the aggregate look blocky. The transition band is at least one
@@ -112,24 +128,48 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float nucleus = exp(-rad * (20.0 - aBeat * 12.0));
     cluster = max(cluster, nucleus);
 
-    // Threshold to make fractal sparse, like actual DLA. The transition band widens
-    // with edgeSoftness and never falls below the pixel footprint of `cluster`.
+    // Threshold to make the fractal sparse, like actual DLA. The transition band
+    // widens with edgeSoftness and never falls below the pixel footprint of `cluster`.
     float threshold = 0.35 * stickingProb * (1.0 - aBeat * 0.35);
     float maskAA    = max(fwidth(cluster), 1e-4) + edgeSoftness * 0.15 + 0.01;
-    float mask      = smoothstep(threshold - maskAA, threshold + maskAA, cluster);
 
-    if (mask < 0.002) return float4(0.0, 0.0, 0.0, 1.0);
+    // Signed density in units of the filter width. Positive inside a branch, negative
+    // outside; the zero crossing is the aggregate's boundary.
+    float dens = (cluster - threshold) / maskAA;
+    float body = saturate(dens * 0.5 + 0.5);
 
-    // Colouring
-    float3 col;
+    float3 palCol;
     if (colourByRadius) {
-        // Hue encodes radius: centre = warm (red/orange), tips = cool (blue/violet)
-        float hue = frac(rad * 0.6 + 0.05);
-        col = hsv2rgb(float3(hue, 0.75, mask));
+        // Colour encodes radius: warm at the seed, cool at the tips.
+        palCol = dlaPalette(rad * 0.6 + 0.05);
     } else {
-        // White/cyan dendritic structure
-        col = lerp(float3(0.3, 0.6, 1.0), float3(1.0, 1.0, 1.0), mask) * mask;
+        // Cool-to-white dendritic structure, tipping toward white with density.
+        palCol = lerp(spSrgbToLinear(float3(0.3, 0.6, 1.0)), float3(1.0, 1.0, 1.0),
+                      saturate(dens * 0.2));
     }
+
+    // The medium the cluster grows in: a very dark radial gradient rather than the
+    // flat black the old early-out returned, which also skipped the dither and left
+    // the surrounding field banding on any real display.
+    float3 col = float3(0.004, 0.006, 0.014) * (1.0 - rad * 0.35);
+
+    // Filament body, brightening without bound where branches pile up.
+    col += palCol * body * (0.30 + 0.85 * saturate(dens * 0.22));
+
+    // Edge-lit rim: peaks exactly on the aggregate boundary and falls off both ways,
+    // so every tip carries a halo instead of ending on a hard silhouette.
+    col += palCol * GlowAmount * 0.45 / (abs(dens) * 0.6 + 1.0);
+
+    // Nucleus as an actual light source.
+    col += dlaPalette(0.05) * (0.03 + aBeat * 0.05) * (1.0 + aBeat * 2.0) / max(rad, 0.015);
+
+    col *= Exposure;
+    col *= spVignette(uv, VignetteAmt, 0.85);
+
+    // tanh: the rim and nucleus terms are unbounded, and it keeps the warm core warm
+    // where ACES would flatten it to white.
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);
 }

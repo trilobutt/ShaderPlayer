@@ -172,8 +172,26 @@ target_include_directories(imgui_lib PUBLIC
     ${imgui_color_text_edit_SOURCE_DIR}
 )
 
+# src/ShaderCommon.hlsli is the single source of truth for the injected shader
+# helper library: embedded here as a raw string literal for the runtime compiler,
+# and read directly off disk by tools/validate_shaders.py.
+set(SHADER_COMMON_HLSLI "${CMAKE_SOURCE_DIR}/src/ShaderCommon.hlsli")
+set(SHADER_COMMON_HEADER "${CMAKE_BINARY_DIR}/generated/ShaderCommonEmbedded.h")
+add_custom_command(
+    OUTPUT  "${SHADER_COMMON_HEADER}"
+    COMMAND ${CMAKE_COMMAND}
+            -DINPUT=${SHADER_COMMON_HLSLI}
+            -DOUTPUT=${SHADER_COMMON_HEADER}
+            -DSYMBOL=kShaderCommonHLSL
+            -P "${CMAKE_SOURCE_DIR}/tools/embed_hlsli.cmake"
+    DEPENDS "${SHADER_COMMON_HLSLI}" "${CMAKE_SOURCE_DIR}/tools/embed_hlsli.cmake"
+    COMMENT "Embedding ShaderCommon.hlsli"
+    VERBATIM
+)
+
 # Main executable
 add_executable(ShaderPlayer WIN32
+    ${SHADER_COMMON_HEADER}
     src/main.cpp
     src/Application.cpp
     src/AudioAnalyzer.cpp
@@ -193,6 +211,7 @@ add_executable(ShaderPlayer WIN32
 
 target_include_directories(ShaderPlayer PRIVATE
     src
+    ${CMAKE_BINARY_DIR}/generated
     ${FFMPEG_INCLUDE_DIRS}
     ${miniaudio_SOURCE_DIR}
 )

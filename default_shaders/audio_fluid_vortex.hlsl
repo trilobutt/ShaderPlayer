@@ -12,18 +12,25 @@
         {"NAME": "colourByVorticity",  "LABEL": "Colour Vorticity","TYPE": "bool",  "DEFAULT": true},
         {"NAME": "spectrumSpread",     "LABEL": "Spectrum Spread", "TYPE": "float", "MIN": 1.0,  "MAX": 6.0,  "DEFAULT": 3.0},
         {"NAME": "dyeFill",            "LABEL": "Dye Fill",        "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.55},
-        {"NAME": "brightness",         "LABEL": "Brightness",      "TYPE": "float", "MIN": 0.1,  "MAX": 3.0,  "DEFAULT": 1.2},
+        {"NAME": "brightness",         "LABEL": "Dye Density",     "TYPE": "float", "MIN": 0.1,  "MAX": 3.0,  "DEFAULT": 1.2},
+        {"NAME": "TrailAmt",           "LABEL": "Flow Trails",     "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,  "DEFAULT": 0.7},
+        {"NAME": "PaletteShift",       "LABEL": "Palette Shift",   "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.0},
+        {"NAME": "Exposure",           "LABEL": "Exposure",        "TYPE": "float", "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
+        {"NAME": "VignetteAmt",        "LABEL": "Vignette",        "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25},
         {"NAME": "FluidTint",          "LABEL": "Fluid Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]}
     ]
 }*/
+
+// ISF packing: the fifteen scalars occupy offsets 0..14, FluidTint takes 16..19 on its
+// 4-float boundary (offset 15 is a padding hole). 20/32 floats used.
 
 // Audio-driven incompressible fluid vortex.
 // A divergence-free velocity field is derived from the curl of the Perlin noise
 // texture: Vx = dN/dy, Vy = -dN/dx.  Bass energy injects large-scale vortices
 // (coarse noise) while treble drives fine viscous streaks (high-frequency noise).
 // UV coordinates are advected backward through the combined field to fetch the
-// dye colour from the spectrum visualisation.  colourByVorticity tints regions
-// by local rotation magnitude.
+// dye colour from the spectrum visualisation.  colourByVorticity selects whether
+// local rotation or dye density drives the palette.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -44,12 +51,6 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 hsv2rgb(float3 c) {
-    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
-
 // Curl of the noise field at uv, sampled at given frequency scale
 float2 curlNoise(float2 uv, float freq, float timeOff) {
     float2 fp  = uv * freq + float2(timeOff * 0.03, timeOff * 0.021);
@@ -59,6 +60,28 @@ float2 curlNoise(float2 uv, float freq, float timeOff) {
     float ny   = noiseTexture.SampleLevel(noiseSampler, fp + float2(0, eps), 0).r
                - noiseTexture.SampleLevel(noiseSampler, fp - float2(0, eps), 0).r;
     return float2(ny, -nx) / (2.0 * eps);  // curl: (dN/dy, -dN/dx)
+}
+
+// Dye concentration at an advected position.
+// Sampling the spectrum linearly in x confines every visible bin to the left edge:
+// music puts almost no energy above bin ~40 of 256, so the frame only lit up at the
+// margins. The power curve redistributes those populated low bins across the full
+// width, and folding q.y into the lookup stops the result being vertically uniform.
+// The body dye carries flow structure into regions the spectrum leaves quiet; it
+// takes two octaves so the field still has something to show under a zoom, where a
+// single 2.5x octave went flat.
+// Every fetch is SampleLevel: q is loop-carried and wrapped through frac(), so its
+// screen-space derivatives are meaningless and an implicit-LOD Sample picks a garbage
+// mip along every wrap seam.
+float dyeAt(float2 q) {
+    float specX = pow(saturate(q.x * 0.72 + q.y * 0.28), spectrumSpread);
+    float specE = spectrumTexture.SampleLevel(videoSampler, float2(specX, 0.5), 0).r;
+
+    float bodyDye = noiseTexture.SampleLevel(noiseSampler, q * 2.5 + time * 0.010, 0).r * 0.65
+                  + noiseTexture.SampleLevel(noiseSampler, q * 7.3 - time * 0.024, 0).r * 0.35;
+
+    return specE * 1.6 +
+           dyeFill * bodyDye * (0.25 + bassLevel * 2.5 + trebleLevel * 1.5);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
@@ -84,33 +107,38 @@ float4 main(PS_INPUT input) : SV_TARGET {
     }
 
     // --- Backward advection through the velocity field ---
-    float2 p = uv;
-    float2 px = 1.0 / resolution * viscosity;
+    float2 p   = uv;
+    float2 px  = 1.0 / resolution * viscosity;
+    float2 vel = 0.0.xx;
 
-    int advSteps = 16;
     [loop] for (int s = 0; s < 16; s++) {
         float2 vCoarse = curlNoise(p * float2(ar, 1.0), coarseFreq, time) * (bassAmp + injectionBoost);
         float2 vFine   = curlNoise(p * float2(ar, 1.0), fineFreq,   time) * trebleAmp * 0.4;
-        float2 vel     = (vCoarse + vFine) * px * 0.8;
-        p             -= vel;
-        p              = frac(p);
+        vel = (vCoarse + vFine) * px * 0.8;
+        p  -= vel;
+        p   = frac(p);
     }
 
-    // --- Dye field ---
-    // Sampling the spectrum linearly in x confines every visible bin to the left edge:
-    // music puts almost no energy above bin ~40 of 256, so the frame only lit up at the
-    // margins. The power curve redistributes those populated low bins across the full
-    // width, and folding p.y into the lookup stops the result being vertically uniform.
-    float2 q     = frac(p);
-    float  specX = pow(saturate(q.x * 0.72 + q.y * 0.28), spectrumSpread);
-    float  specE = spectrumTexture.SampleLevel(videoSampler, float2(specX, 0.5), 0).r;
+    float2 q = frac(p);
 
-    // Advected body dye. Carries the flow structure into regions the spectrum leaves
-    // quiet, so the vortices read across the whole viewport instead of only where the
-    // energy happens to land.
-    float  bodyDye = noiseTexture.SampleLevel(noiseSampler, q * 2.5 + time * 0.01, 0).r;
-    float  specVal = saturate(specE * 1.6 +
-                              dyeFill * bodyDye * (0.25 + bassLevel * 2.5 + trebleLevel * 1.5));
+    // --- Dye field, with an analytic trail along the streamline ---
+    // There is no previous-frame texture to accumulate into, so the trail is built by
+    // continuing the march past the advected point and summing the dye found there,
+    // weighted by 1/(1+ks). That is the same integral a feedback trail approximates,
+    // evaluated in one pass. It is added rather than blended, so dense flow lines
+    // accumulate real energy for the tonemap to roll off.
+    float dye   = dyeAt(q);
+    float trail = 0.0;
+    if (TrailAmt > 0.001) {
+        float wsum = 0.0;
+        [unroll] for (int i = 1; i <= 6; i++) {
+            float w = 1.0 / (1.0 + float(i) * 1.4);
+            trail += dyeAt(frac(q - vel * float(i) * 6.0)) * w;
+            wsum  += w;
+        }
+        trail /= max(wsum, 1e-4);
+    }
+    float specVal = dye + TrailAmt * trail * 0.6;
 
     // Compute local vorticity for colouring
     float eps2 = 2.0 / max(resolution.x, resolution.y);
@@ -120,22 +148,49 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 vDown  = curlNoise(float2(uv.x * ar, uv.y - eps2), coarseFreq, time);
     float vortMag = abs((vRight.y - vLeft.y - vUp.x + vDown.x) / (2.0 * eps2)) * 0.02;
 
-    // Build colour from dye + vorticity
-    float3 col;
-    if (colourByVorticity) {
-        float hue = frac(vortMag * 0.8 + q.x * 0.3 + q.y * 0.15 + time * 0.03);
-        float sat = 0.6 + vortMag * 0.4;
-        col = hsv2rgb(float3(hue, sat, saturate(specVal * brightness)));
-    } else {
-        // Spectrum rainbow without vorticity tint
-        float hue = frac(specVal * 0.8 + q.x * 0.5 + q.y * 0.2);
-        col = hsv2rgb(float3(hue, 0.8, saturate(specVal * brightness * 1.15)));
-    }
+    // Palette. The previous HSV rainbow put a full hue sweep across every gradient,
+    // which is the classic "shader rainbow" read: every region equally saturated and
+    // nothing to look at. The IQ cosine palette stays continuous, keeps a coherent
+    // warm/cool axis, and PaletteShift exposes the phase rather than a raw hue.
+    float pt = colourByVorticity
+             ? vortMag * 0.8 + q.x * 0.3 + q.y * 0.15 + time * 0.03
+             : specVal * 0.5 + q.x * 0.4 + q.y * 0.15;
+    pt += PaletteShift;
 
-    // Diffusion: blend with a blurred neighbour sample
-    float3 blurCol = noiseTexture.Sample(noiseSampler, frac(p + float2(0.001, 0))).rrr;
-    col = lerp(col, blurCol * 0.2, dyeDiffusion * 0.15);
-    col *= FluidTint.rgb;
+    float3 col = spPalette(pt,
+                           float3(0.50, 0.42, 0.48),
+                           float3(0.48, 0.46, 0.50),
+                           float3(1.00, 1.00, 1.00),
+                           float3(0.00, 0.15, 0.35));
+
+    // Dye density drives brightness. Left unbounded on purpose — the tonemap decides
+    // where the highlights roll, not a saturate().
+    col *= specVal * brightness;
+
+    // Vorticity picks out the shear filaments as extra energy rather than as a hue
+    // change, so the rotating structure reads even where the dye is thin.
+    col += spPalette(pt + 0.12,
+                     float3(0.50, 0.42, 0.48),
+                     float3(0.48, 0.46, 0.50),
+                     float3(1.00, 1.00, 1.00),
+                     float3(0.00, 0.15, 0.35))
+         * vortMag * (0.35 + trebleLevel * 2.5);
+
+    // Diffusion: bleed toward a neighbouring dye sample.
+    float diffuse = dyeAt(frac(q + float2(0.012, 0.008)));
+    col = lerp(col, col * 0.35 + diffuse * 0.25, dyeDiffusion * 0.5);
+
+    col *= spSrgbToLinear(FluidTint.rgb);
+    col *= spVignette(uv, VignetteAmt, 0.8);
+    col *= Exposure;
+
+    // No procedural step edges here — every boundary is a smooth field — so there is
+    // nothing for spAAStep to band-limit; the aliasing risk is all in the texture
+    // fetches, which the SampleLevel note above covers.
+
+    // tanh: the trail and vorticity terms both accumulate without bound.
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);
 }

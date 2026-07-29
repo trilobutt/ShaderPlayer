@@ -64,7 +64,10 @@ private:
     static std::vector<ShaderParam> ParseISFParams(const std::string& source,
                                                     bool* outIsGenerative = nullptr,
                                                     bool* outIsAudio      = nullptr);
-    static std::string BuildDefinesPreamble(const std::vector<ShaderParam>& params);
+    // sourceName appears in the trailing `#line 1 "<name>"` directive, so fxc error
+    // line numbers match the shader file on disk instead of the inflated preamble.
+    static std::string BuildDefinesPreamble(const std::vector<ShaderParam>& params,
+                                            const std::string& sourceName);
 };
 
 } // namespace SP

@@ -7,6 +7,10 @@
     { "NAME": "RenderMode",  "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Fill","Border","Both"], "DEFAULT": 0, "LABEL": "Render Mode" },
     { "NAME": "BorderColour","TYPE": "color",                            "DEFAULT": [0,0,0,1],     "LABEL": "Border Colour" },
     { "NAME": "CellSoftness","TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25,          "LABEL": "Cell Softness" },
+    { "NAME": "PaletteShift","TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.0,           "LABEL": "Palette Shift" },
+    { "NAME": "SeedGlow",    "TYPE": "float", "MIN": 0.0,  "MAX": 3.0,  "DEFAULT": 0.6,           "LABEL": "Seed Glow" },
+    { "NAME": "Exposure",    "TYPE": "float", "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0,           "LABEL": "Exposure" },
+    { "NAME": "VignetteAmt", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25,          "LABEL": "Vignette" },
     { "NAME": "AudioAmount", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.6,           "LABEL": "Audio Amount" },
     { "NAME": "BassIn",      "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
     { "NAME": "HighIn",      "TYPE": "audio", "BAND": "high", "LABEL": "Treble" },
@@ -17,6 +21,10 @@
 // Animated Voronoi diagram. Seeds follow individual sinusoidal orbits.
 // Three render modes: cell fill coloured by seed index, border lines only,
 // or filled cells with borders composited on top.
+//
+// Colour comes from an IQ cosine palette indexed by a per-seed hash, so the set
+// of cell colours is a coherent ramp rather than the arbitrary rainbow a random
+// hue produces. Everything below is linear light until the final encode.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -37,12 +45,6 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 hsv2rgb(float h, float s, float v) {
-    float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-    float3 p = abs(frac(h + K.xyz) * 6.0 - K.www);
-    return v * lerp(K.xxx, saturate(p - K.xxx), s);
-}
-
 // Pseudo-random float in [0,1] from an integer seed.
 float hashf(int n) {
     uint u = (uint)n;
@@ -52,12 +54,18 @@ float hashf(int n) {
     return float(u) / 4294967295.0;
 }
 
-// Per-cell colour from seed index. Shared by the nearest and second-nearest lookups
-// so the boundary blend interpolates between two real cell colours.
+// Per-cell colour from seed index, in linear light. Shared by the nearest and
+// second-nearest lookups so the boundary blend interpolates between two real
+// cell colours.
 float3 cellColour(int i, float d) {
-    float hue = hashf(i * 13 + 5);
-    float sat = 0.6 + hashf(i * 7 + 2) * 0.4;
-    return hsv2rgb(hue, sat, 0.75 + d * 0.5);
+    float t = hashf(i * 13 + 5) + PaletteShift;
+    float3 base = spPalette(t, float3(0.48, 0.44, 0.46),
+                               float3(0.45, 0.42, 0.44),
+                               float3(1.0,  1.0,  1.0),
+                               float3(0.0,  0.28, 0.58));
+    // Distance shading: cells fall off toward their own boundary, which is what
+    // stops a flat fill from reading as a paper cut-out.
+    return max(base, 0.0) * (0.7 + d * 0.6);
 }
 
 // Animated seed position for seed index i.
@@ -106,16 +114,16 @@ float4 main(PS_INPUT input) : SV_TARGET {
     d2 = sqrt(d2);
     float gap = d2 - d1;   // 0 exactly on the bisector between two cells
 
-    // Border mask: pixels close to the boundary between two cells.
+    // Border mask, filtered over the screen footprint of `gap` so the line keeps
+    // its apparent width at any resolution instead of aliasing to a dotted edge.
     float bw = BorderWidth * (1.0 + aHigh * 2.0);
-    float borderAA = max(fwidth(gap), 1e-6);
-    float borderMask = 1.0 - smoothstep(max(bw - borderAA, 0.0), bw + borderAA, gap);
+    float borderMask = spAALine(gap, bw);
 
     // Cell fill. Picking the nearest seed's colour outright makes the cell boundary a
     // hard index switch with no transition, which is what made borderless cells look
     // stair-stepped. Blending toward the second-nearest cell across a band that is at
     // least one pixel wide resolves the boundary smoothly at any resolution.
-    float blendW = max(borderAA * 1.5, 1e-6) + CellSoftness * 0.06;
+    float blendW = max(fwidth(gap) * 1.5, 1e-6) + CellSoftness * 0.06;
     float w      = saturate(gap / blendW) * 0.5 + 0.5;   // 0.5 on the bisector
     float3 cellC = lerp(cellColour(near2, d2), cellColour(near, d1), w);
     cellC *= 1.0 + aBeat * 0.7;
@@ -123,14 +131,28 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float3 col;
     if (RenderMode == 1) {
         // Border only: dark background, border in BorderColour.
-        col = lerp(float3(0.05, 0.05, 0.08), BorderColour.rgb, borderMask);
+        col = lerp(float3(0.003, 0.003, 0.006), spSrgbToLinear(BorderColour.rgb), borderMask);
     } else {
         // Fill with optional border overlay.
         col = cellC;
         if (RenderMode == 2) {
-            col = lerp(col, BorderColour.rgb, borderMask);
+            col = lerp(col, spSrgbToLinear(BorderColour.rgb), borderMask);
         }
     }
+
+    // Inverse-distance glow at each seed. Accumulating 1/d in linear light and
+    // letting the tonemap roll it off gives a real falloff with a hot core; a
+    // pow() ramp on a saturated colour cannot produce the same core at all.
+    float glow = SeedGlow * 0.012 / max(d1, 0.005);
+    col += cellColour(near, 1.0) * glow;
+
+    col *= Exposure;
+    col *= spVignette(uv, VignetteAmt, 0.8);
+
+    // tanh rather than ACES: the glow term is unbounded, and tanh holds colour
+    // through the very bright cores where ACES desaturates them to white.
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);
 }

@@ -12,7 +12,10 @@
     { "NAME": "BarGap",      "TYPE": "float", "DEFAULT": 0.25, "MIN": 0.0, "MAX": 0.9, "LABEL": "Segment Gap" },
     { "NAME": "BgOpacity",   "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 1.0, "LABEL": "Background Opacity" },
     { "NAME": "BarOpacity",  "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.0, "MAX": 1.0, "LABEL": "Spectrum Opacity" },
-    { "NAME": "LogScale",    "TYPE": "bool",  "DEFAULT": 1.0,  "LABEL": "Log Frequency" }
+    { "NAME": "LogScale",    "TYPE": "bool",  "DEFAULT": 1.0,  "LABEL": "Log Frequency" },
+    { "NAME": "Exposure",    "TYPE": "float", "DEFAULT": 1.0, "MIN": 0.1, "MAX": 4.0,  "STEP": 0.05, "LABEL": "Exposure" },
+    { "NAME": "GlowAmt",     "TYPE": "float", "DEFAULT": 0.5, "MIN": 0.0, "MAX": 2.0,  "STEP": 0.01, "LABEL": "Glow" },
+    { "NAME": "CapWidth",    "TYPE": "float", "DEFAULT": 2.0, "MIN": 0.0, "MAX": 8.0,  "STEP": 0.1,  "LABEL": "Peak Cap (px)" }
   ]
 }*/
 
@@ -27,6 +30,10 @@
 // BgOpacity  offset 13 → custom[3].y
 // BarOpacity offset 14 → custom[3].z
 // LogScale   offset 15 → (custom[3].w > 0.5)
+// Exposure   offset 16 → custom[4].x
+// GlowAmt    offset 17 → custom[4].y
+// CapWidth   offset 18 → custom[4].z
+// 19/32 floats used.
 
 // Opacity < 1 requires a Video Blend mode other than Off to show anything behind it —
 // the compositor multiplies the blend by this shader's alpha.
@@ -59,6 +66,20 @@ float freqCoord(float t, bool useLog) {
     return useLog ? (pow(512.0, saturate(t)) - 1.0) / 511.0 : saturate(t);
 }
 
+// Max spectrum magnitude over a frequency span, sampled at `taps` points.
+// Multiple taps rather than one point sample: this matches the analyser's own
+// max-pooling, keeps transients from dropping out between segments, and stops the
+// bar tops shimmering.
+float spanPeak(float fLo, float fHi, int taps) {
+    float mag = 0.0;
+    [loop] for (int i = 0; i < taps; ++i) {
+        float t = (i + 0.5) / float(taps);
+        mag = max(mag, spectrumTexture.SampleLevel(videoSampler,
+                                                   float2(lerp(fLo, fHi, t), 0.5), 0).r);
+    }
+    return mag;
+}
+
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
     float  xCoord = Mirror ? abs(uv.x * 2.0 - 1.0) : uv.x;
@@ -69,18 +90,19 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float barIdx   = floor(barPos);
     float barLocal = barPos - barIdx;
 
-    // Peak over the segment's frequency span. Multiple taps rather than one point
-    // sample: this matches the analyser's own max-pooling, keeps transients from
-    // dropping out between segments, and stops the bar tops shimmering.
     float fLo = freqCoord( barIdx        / bars, LogScale);
     float fHi = freqCoord((barIdx + 1.0) / bars, LogScale);
-    float mag = 0.0;
-    [unroll] for (int i = 0; i < 6; ++i) {
-        float t = (i + 0.5) / 6.0;
-        mag = max(mag, spectrumTexture.SampleLevel(videoSampler,
-                                                   float2(lerp(fLo, fHi, t), 0.5), 0).r);
-    }
-    mag *= BarScale;
+    float mag = spanPeak(fLo, fHi, 6) * BarScale;
+
+    // Peak cap. There is no previous-frame texture, so a true temporal peak-hold with
+    // decay is not available; the cap instead tracks the peak of the surrounding
+    // spectral neighbourhood (this segment widened by 1.5 segments each way). That is
+    // always >= the bar itself, moves more slowly than the bar top, and falls away as
+    // the local peak migrates — the same read as a decaying hold, from data rather than
+    // from state.
+    float capLo = freqCoord((barIdx - 1.5) / bars, LogScale);
+    float capHi = freqCoord((barIdx + 2.5) / bars, LogScale);
+    float capMag = spanPeak(capLo, capHi, 8) * BarScale;
 
     // Antialiased segment gap. Width is clamped to the pixel footprint so segments
     // stay clean rather than dropping out once they are narrower than a pixel.
@@ -98,26 +120,55 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     float inBar = inBarX * inBarY;
 
+    // Cap bar: a thin band sitting on the neighbourhood peak, thickness in pixels so it
+    // stays one consistent line at any output resolution.
+    float capTop  = anchor - capMag;
+    float capHalf = CapWidth * 0.5 / max(resolution.y, 1.0);
+    float capMask = (1.0 - smoothstep(capHalf - aaY, capHalf + aaY, abs(uv.y - capTop)))
+                  * inBarX * step(0.0005, CapWidth) * step(capTop, anchor);
+
     // Gradient: dim at bottom, bright at top of bar.
     float t = (mag > 0.001) ? saturate((uv.y - barTop) / max(mag, 0.001)) : 0.0;
 
+    // Everything below is linear light. Lerping sRGB values dips in luminance at the
+    // midpoint of any ramp and reads as a muddy band.
+    float3 barLin = spSrgbToLinear(BarColor.rgb);
+    float3 bgLin  = spSrgbToLinear(BgColor.rgb);
+
     // Beat flash and colour.
-    float3 barRgb = lerp(BarColor.rgb * 0.4, BarColor.rgb, t);
-    barRgb = lerp(barRgb, float3(1, 1, 1), BarBeat * 0.55);
+    float3 barRgb = lerp(barLin * 0.35, barLin, t);
+    barRgb = lerp(barRgb, 1.0.xxx, BarBeat * 0.55);
 
-    // Glow above each bar, and a bass wash on the background.
-    float glowDist = max(0.0, barTop - uv.y);
-    float glowAmt  = exp(-glowDist * 30.0) * mag * 0.5 * inBarX;
+    // HDR glow above each bar. Inverse distance in pixels rather than an exponential:
+    // the 1/d tail keeps a wide, soft halo that the tonemap rolls off, where exp()
+    // collapsed to nothing within a few pixels and the "glow" was really just a rim.
+    // The gap is halved for the glow only, so the bloom bleeds across segments the way
+    // a real one would instead of being cut into strips.
+    float glowBarX = smoothstep(-aaX, aaX,
+                                min(barLocal - halfGap * 0.5, (1.0 - halfGap * 0.5) - barLocal));
+    float glowPx   = max(barTop - uv.y, 0.0) * max(resolution.y, 1.0);
+    float glow     = GlowAmt * mag * 2.0 / (1.0 + glowPx * 0.30) * max(glowBarX, 0.25);
 
-    float3 bgRgb = BgColor.rgb + BarColor.rgb * (BarBass * 0.25 + glowAmt);
+    float3 bgRgb = bgLin + barLin * (BarBass * 0.25 + glow);
 
-    float3 col   = lerp(bgRgb, barRgb, inBar);
+    float3 col = lerp(bgRgb, barRgb, inBar);
+    col = lerp(col, lerp(barLin, 1.0.xxx, 0.6) * 1.6, capMask);
+    col *= Exposure;
 
-    // Alpha. Glow keeps its own contribution so it stays visible over a transparent
-    // background instead of being clipped away with it.
+    // tanh rather than ACES: the glow term is unbounded inverse-distance, and tanh's
+    // gentler shoulder keeps the bloom reading as brightness instead of flattening to
+    // white the moment it crosses 1.
+    col = spLinearToSrgb(spTonemapTanh(col));
+
+    // The background wash and the glow tail are both wide smooth gradients — the worst
+    // case for 8-bit banding.
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
+
+    // Alpha. Glow and cap keep their own contribution so they stay visible over a
+    // transparent background instead of being clipped away with it.
     float bgA  = BgColor.a  * BgOpacity;
     float barA = BarColor.a * BarOpacity;
-    float alpha = lerp(max(bgA, glowAmt * barA), barA, inBar);
+    float alpha = lerp(max(bgA, saturate(glow) * barA), barA, max(inBar, capMask));
 
-    return float4(col, saturate(alpha));
+    return float4(saturate(col), saturate(alpha));
 }

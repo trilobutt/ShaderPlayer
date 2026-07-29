@@ -1,12 +1,17 @@
 /*{
     "SHADER_TYPE": "generative",
     "INPUTS": [
-        {"NAME": "cellSz",         "LABEL": "Cell Size (px)", "TYPE": "float", "MIN": 2.0,  "MAX": 24.0, "DEFAULT": 6.0},
+        {"NAME": "cellSz",         "LABEL": "Cell Size (px)", "TYPE": "float", "MIN": 2.0,  "MAX": 24.0, "DEFAULT": 8.0},
         {"NAME": "updateHz",       "LABEL": "Update Rate Hz", "TYPE": "float", "MIN": 0.1,  "MAX": 8.0,  "DEFAULT": 2.0},
         {"NAME": "initialDensity", "LABEL": "Density",        "TYPE": "float", "MIN": 0.1,  "MAX": 0.9,  "DEFAULT": 0.45},
         {"NAME": "ageSaturation",  "LABEL": "Age Colour",     "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.8},
         {"NAME": "wrapEdges",      "LABEL": "Wrap Edges",     "TYPE": "bool",  "DEFAULT": true},
+        {"NAME": "cellGap",        "LABEL": "Cell Gap",       "TYPE": "float", "MIN": 0.0,  "MAX": 0.6,  "DEFAULT": 0.2},
+        {"NAME": "cellGlow",       "LABEL": "Cell Glow",      "TYPE": "float", "MIN": 0.0,  "MAX": 3.0,  "DEFAULT": 0.7},
+        {"NAME": "paletteShift",   "LABEL": "Palette Shift",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.0},
         {"NAME": "CellTint",       "LABEL": "Cell Tint",      "TYPE": "color", "DEFAULT": [1.0,1.0,1.0,1.0]},
+        {"NAME": "exposure",       "LABEL": "Exposure",       "TYPE": "float", "MIN": 0.1,  "MAX": 4.0,  "DEFAULT": 1.0},
+        {"NAME": "vignetteAmt",    "LABEL": "Vignette",       "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25},
         {"NAME": "rmsIn",          "LABEL": "Level",          "TYPE": "audio", "BAND": "rms"},
         {"NAME": "bassIn",         "LABEL": "Bass",           "TYPE": "audio", "BAND": "bass"},
         {"NAME": "beatIn",         "LABEL": "Beat",           "TYPE": "audio", "BAND": "beat"},
@@ -21,7 +26,14 @@
 // initial configuration.  Each generation uses floor(time*updateHz) as a seed,
 // so the initial grid changes every 1/updateHz seconds and the 3-step evolved
 // result is displayed.  Age = cells alive at each of the 4 sampled stages
-// (initial + 3 steps), encoded in hue: red → yellow → green → cyan → blue.
+// (initial + 3 steps), driving position along a cosine palette.
+//
+// Cells are drawn as rounded tiles with an anti-aliased edge rather than as
+// whole grid squares: at a cell size of a few pixels, hard square cells alias
+// into a crawling checkerboard whenever the grid is not an exact pixel multiple.
+// Each cell of the *previous* generation (the 3x3 s2 neighbourhood, which is the
+// last state known for anything other than the centre cell) also emits an
+// inverse-square glow, so the field carries a one-generation afterimage.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -42,12 +54,6 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 hsv2rgb(float3 c) {
-    float4 K = float4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
-    float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return c.z * lerp(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-}
-
 // Hash-based initial cell state for infinite grid
 bool initCell(int cx, int cy, float seed, float dens) {
     float2 p = float2(float(cx), float(cy));
@@ -59,6 +65,12 @@ bool initCell(int cx, int cy, float seed, float dens) {
 // B3/S23 rule
 bool golRule(bool alive, int nb) {
     return alive ? (nb == 2 || nb == 3) : (nb == 3);
+}
+
+// Signed distance to a rounded box, in cell units.
+float sdRoundBox(float2 p, float2 b, float r) {
+    float2 d = abs(p) - b + r;
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - r;
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
@@ -79,6 +91,12 @@ float4 main(PS_INPUT input) : SV_TARGET {
     int    cy       = cell.y;
     float  seed     = floor(time * updateHz * (1.0 + aRms * 3.0));
     float  density  = saturate(initialDensity + aBass * 0.25);
+
+    // Position within the cell, and the size of one screen pixel in cell units.
+    // Derived from cellPix directly: frac() makes the cell coordinate jump at
+    // every boundary, so fwidth() on it reports a whole cell, not a pixel.
+    float2 q      = frac(uv * cellPx) - 0.5;
+    float  pxCell = 1.0 / cellPix;
 
     // --- Fill 7×7 initial state centred on (cx, cy) ---
     bool initG[49];
@@ -134,19 +152,50 @@ float4 main(PS_INPUT input) : SV_TARGET {
     }
     bool alive = golRule(al3, nb3);
 
-    if (!alive) return float4(0.0, 0.0, 0.0, 1.0);
+    float3 tint = spSrgbToLinear(CellTint.rgb);
 
-    // Age: stages at which this cell was alive (0–4)
-    int age = (initG[3 * 7 + 3] ? 1 : 0)
-            + (s1[2 * 5 + 2]     ? 1 : 0)
-            + (s2[4]              ? 1 : 0)
-            + 1; // alive at final step (always true here)
+    // Afterglow from the previous generation, inverse-square in cell units.
+    float3 col = float3(0.0, 0.0, 0.0);
+    float  kr2 = 0.13;
+    [unroll] for (int gy = -1; gy <= 1; gy++) {
+        [unroll] for (int gx = -1; gx <= 1; gx++) {
+            if (s2[(gy + 1) * 3 + (gx + 1)]) {
+                float2 dv = q - float2(float(gx), float(gy));
+                col += tint * cellGlow * 0.22 * kr2 / (dot(dv, dv) + kr2);
+            }
+        }
+    }
 
-    // Hue: red (new) → yellow → green → cyan → blue (long-lived)
-    float hue = float(age - 1) / 4.0 * 0.65;  // 0=red, 0.65=blue
-    float sat = ageSaturation;
-    float3 col = hsv2rgb(float3(hue, sat, saturate(0.95 + aBeat * 0.6))) * CellTint.rgb;
-    col += CellTint.rgb * aBeat * 0.35;
+    if (alive) {
+        // Age: stages at which this cell was alive (0–4)
+        int age = (initG[3 * 7 + 3] ? 1 : 0)
+                + (s1[2 * 5 + 2]     ? 1 : 0)
+                + (s2[4]             ? 1 : 0)
+                + 1; // alive at final step (always true here)
+
+        // Palette position by age. The old raw-hue ramp put the youngest cells on
+        // pure red and the oldest on pure blue, two colours of very different
+        // luminance, so age read as brightness rather than as colour.
+        float  t   = float(age - 1) / 3.0 * 0.6 + paletteShift;
+        float3 pal = max(spPalette(t, float3(0.5, 0.45, 0.5),
+                                      float3(0.5, 0.45, 0.45),
+                                      float3(1.0, 1.0, 1.0),
+                                      float3(0.15, 0.35, 0.6)), 0.0);
+        float3 cellCol = lerp(spLuma(pal).xxx, pal, ageSaturation) * tint;
+
+        // Rounded tile with a one-pixel filtered edge.
+        float2 half2 = (0.5 - cellGap * 0.5).xx;
+        float  d     = sdRoundBox(q, half2, min(half2.x, 0.5) * 0.35);
+        float  body  = 1.0 - smoothstep(-pxCell, pxCell, d);
+
+        col += cellCol * body * (1.4 + aBeat * 1.6);
+    }
+
+    col *= exposure;
+    col *= spVignette(uv, vignetteAmt, 0.85);
+
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);
 }

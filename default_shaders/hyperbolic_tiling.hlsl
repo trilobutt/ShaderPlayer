@@ -9,6 +9,9 @@
     { "NAME": "TileColourB", "TYPE": "color",                           "DEFAULT": [0.75,0.18,0.18,1], "LABEL": "Tile Colour B" },
     { "NAME": "FillFrame",   "TYPE": "bool",  "DEFAULT": 1.0, "LABEL": "Fill Frame" },
     { "NAME": "DiscScale",   "TYPE": "float", "MIN": 0.25, "MAX": 3.0, "DEFAULT": 1.0, "LABEL": "Disc Scale" },
+    { "NAME": "EdgeGlow",    "TYPE": "float", "MIN": 0.0,  "MAX": 3.0, "DEFAULT": 0.4, "LABEL": "Edge Glow" },
+    { "NAME": "Exposure",    "TYPE": "float", "MIN": 0.1,  "MAX": 4.0, "DEFAULT": 1.0, "LABEL": "Exposure" },
+    { "NAME": "VignetteAmt", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.25,"LABEL": "Vignette" },
     { "NAME": "AudioAmount", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.6, "LABEL": "Audio Amount" },
     { "NAME": "BassIn",      "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
     { "NAME": "HighIn",      "TYPE": "audio", "BAND": "high", "LABEL": "Treble" },
@@ -20,6 +23,17 @@
 // Tiles any valid {p, q} Schläfli symbol with (p-2)(q-2) > 4.
 // Animated Möbius transformations drift the tiling through H².
 // Cells are two-coloured by parity; edges drawn as geodesics.
+//
+// Filtering note. Toward the ideal boundary the tiles shrink without limit, so
+// there is always a radius past which a pixel covers many of them. fwidth() is
+// useless here: the fold loop is data-dependent, and at a fold boundary the
+// derivative of anything derived from z is a discontinuity, not a footprint. The
+// footprint is instead carried analytically. A pixel has a fixed Euclidean size
+// in the disc before folding; converting it once to the hyperbolic metric
+// (ds = 2|dz|/(1-|z|^2)) gives a quantity that every subsequent Möbius map,
+// rotation and reflection preserves exactly, because they are all isometries of
+// H^2. Converting back at the folded point gives the true local footprint, which
+// then band-limits both the edge lines and the two-colour parity.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -69,9 +83,6 @@ float2 rot2(float2 z, float a) {
                   z.x * sin(a) + z.y * cos(a));
 }
 
-// tanh is not a ps_5_0 intrinsic — manual implementation
-float myTanh(float x) { float e2 = exp(2.0 * x); return (e2 - 1.0) / (e2 + 1.0); }
-
 // Centre of the fundamental {p,q} polygon in the Poincaré disc.
 // r = tanh(acosh( cos(PI/q) / sin(PI/p) ) / 2)
 float fundamentalR(int p, int q) {
@@ -81,7 +92,7 @@ float fundamentalR(int p, int q) {
     float cosA = cq / sp;
     if (cosA <= 1.0) cosA = 1.001;
     float acoshVal = log(cosA + sqrt(cosA * cosA - 1.0));
-    return myTanh(acoshVal * 0.5);
+    return spTanh1(acoshVal * 0.5);
 }
 
 float4 main(PS_INPUT input) : SV_TARGET {
@@ -100,6 +111,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
     z.x *= aspect;
     z /= max(DiscScale, 0.01);
 
+    // Euclidean size of one pixel in disc coordinates. Both axes scale by
+    // 2/(resolution.y * DiscScale) after the aspect correction, so it is a scalar.
+    float pixEuclid = 2.0 / (resolution.y * max(DiscScale, 0.01));
+
     float rSq = dot(z, z);
     if (FillFrame) {
         // Inversion in the unit circle, z -> z/|z|^2, maps the exterior of the Poincare
@@ -107,18 +122,24 @@ float4 main(PS_INPUT input) : SV_TARGET {
         // disc boundary as a mirrored copy and fills the frame, instead of leaving the
         // flat surround that made the effect read as a circle on a background.
         if (rSq > 1.0) {
-            z   /= rSq;
-            rSq  = dot(z, z);
+            z         /= rSq;
+            pixEuclid /= rSq;   // |d(z/|z|^2)/dz| = 1/|z|^2
+            rSq        = dot(z, z);
         }
         // Keep strictly inside the disc: the folding loop below is only defined there.
         if (rSq >= 0.9975) {
-            z   *= sqrt(0.9975 / rSq);
-            rSq  = 0.9975;
+            float k    = sqrt(0.9975 / rSq);
+            z         *= k;
+            pixEuclid *= k;
+            rSq        = 0.9975;
         }
     } else if (rSq >= 0.998) {
         // Points outside the disc are outside hyperbolic space.
         return float4(0.02, 0.02, 0.02, 1.0);
     }
+
+    // Hyperbolic footprint. Invariant under everything that follows.
+    float hypFoot = 2.0 * pixEuclid / max(1.0 - rSq, 1e-6);
 
     // Animated Möbius drift: a point orbiting near the disc centre.
     float driftAngle = time * MobiusSpeed;
@@ -166,16 +187,41 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 centre2 = float2(polyR, 0.0);
     float2 zLocal  = mobius(z, centre2);
     float  edgeDist = abs(zLocal.y);               // distance to real axis (one edge)
-    float  edgeMask = smoothstep(0.0, EdgeWidth * (1.0 + aHigh * 3.0), edgeDist);
+
+    // Convert the invariant hyperbolic footprint back to a Euclidean one here.
+    float  foot = max(hypFoot * (1.0 - dot(zLocal, zLocal)) * 0.5, 1e-7);
+
+    float  ew       = EdgeWidth * (1.0 + aHigh * 3.0);
+    float  edgeMask = smoothstep(ew - foot, ew + foot, edgeDist);
 
     // Edge colour is black; tiles alternate between TileColourA and TileColourB.
-    float3 tileCol = (parity == 0) ? TileColourA.rgb : TileColourB.rgb;
+    float3 tcA = spSrgbToLinear(TileColourA.rgb);
+    float3 tcB = spSrgbToLinear(TileColourB.rgb);
+    float3 tileCol = (parity == 0) ? tcA : tcB;
+
+    // Where a pixel spans several tiles the parity is effectively random, which
+    // shows up as boiling colour noise in the crowded region near the boundary.
+    // Fading to the mean of the two tile colours is the correct filtered result.
+    float parityFade = saturate(foot / max(polyR * 0.5, 1e-5));
+    tileCol = lerp(tileCol, (tcA + tcB) * 0.5, parityFade);
 
     // Subtle depth shading by distance from disc centre.
     float disc_r = length(z);
     tileCol *= (0.6 + 0.4 * (1.0 - disc_r)) * (1.0 + aBeat * 0.8);
 
-    float3 col = lerp(float3(0.0, 0.0, 0.0), tileCol, edgeMask);
+    float3 col = tileCol * edgeMask;
 
-    return float4(col, 1.0);
+    // Inverse-distance glow along the geodesics. The edges are the structure of
+    // the image; lighting them from within stops the tiling reading as flat
+    // vector art. Bounded at the line width so it cannot divide by zero.
+    float glowW = max(ew, foot);
+    col += tileCol * EdgeGlow * glowW / (edgeDist + glowW);
+
+    col *= Exposure;
+    col *= spVignette(uv, VignetteAmt, 0.85);
+
+    col = spLinearToSrgb(spTonemapTanh(col));
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
+
+    return float4(saturate(col), 1.0);
 }

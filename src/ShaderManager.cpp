@@ -1,4 +1,6 @@
 #include "ShaderManager.h"
+#include "ShaderCommonEmbedded.h"  // generated from src/ShaderCommon.hlsli by CMake
+#include <algorithm>
 #include <array>
 #include <fstream>
 #include <sstream>
@@ -73,7 +75,7 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
             std::copy(it->second.begin(), it->second.end(), p.values);
     }
 
-    std::string preamble = BuildDefinesPreamble(preset.params);
+    std::string preamble = BuildDefinesPreamble(preset.params, preset.name);
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
 
@@ -113,7 +115,7 @@ bool ShaderManager::RecompilePreset(int index) {
             std::copy(it->second.begin(), it->second.end(), p.values);
     }
 
-    std::string preamble = BuildDefinesPreamble(m_presets[index].params);
+    std::string preamble = BuildDefinesPreamble(m_presets[index].params, m_presets[index].name);
     ComPtr<ID3D11PixelShader> shader;
     std::string error;
 
@@ -151,7 +153,7 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
                                                       &m_presets.back().isGenerative,
                                                       &m_presets.back().isAudio);
         }
-        std::string preamble = BuildDefinesPreamble(m_presets.back().params);
+        std::string preamble = BuildDefinesPreamble(m_presets.back().params, m_presets.back().name);
         if (m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error)) {
             m_presets.back().isValid = true;
             m_presets.back().compileError.clear();
@@ -203,7 +205,7 @@ void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
     m_presets[index].params = ParseISFParams(preset.source,
                                               &m_presets[index].isGenerative,
                                               &m_presets[index].isAudio);
-    std::string preamble = BuildDefinesPreamble(m_presets[index].params);
+    std::string preamble = BuildDefinesPreamble(m_presets[index].params, m_presets[index].name);
 
     if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
         m_presets[index].isValid = true;
@@ -482,9 +484,15 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
     return params;
 }
 
-std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& params) {
+std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& params,
+                                                const std::string& sourceName) {
     static constexpr char comp[] = "xyzw";
     std::string preamble;
+
+    // Shared helper library first — the shader body may use it, and so may nothing
+    // in the preamble itself, so its position only has to precede the source.
+    preamble += kShaderCommonHLSL;
+    preamble += "\n";
 
     // If any AudioBand param is present, prepend the AudioConstants cbuffer declaration
     // and the spectrum texture so the shader doesn't have to declare them manually.
@@ -547,6 +555,15 @@ std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& 
             break;  // Already handled above.
         }
     }
+
+    // Reset the line counter so fxc's error line numbers refer to the file on
+    // disk rather than to preamble-inflated positions. Quotes and backslashes
+    // would terminate or escape the HLSL string literal, so drop them.
+    std::string name = sourceName.empty() ? std::string("shader") : sourceName;
+    name.erase(std::remove_if(name.begin(), name.end(),
+                              [](char ch) { return ch == '"' || ch == '\\'; }),
+               name.end());
+    preamble += "#line 1 \"" + name + "\"\n";
 
     return preamble;
 }
