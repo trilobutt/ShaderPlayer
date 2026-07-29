@@ -100,9 +100,10 @@ src/
 └── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
                               exe for `.ini` files (custom [WorkspacePreset] header +
                               verbatim ImGui ini blob). Index 0 = built-in Default
-                              (kDefaultLayoutIni constant — the shipped all-panels
-                              layout; its PanelVisibility is set in the ctor and
-                              must match the panels in the ini blob).
+                              (kDefaultLayoutIni constant — Parameters left, Library/
+                              Editor right, Video centre over Transport + Recording;
+                              its PanelVisibility is set in the ctor and must match
+                              the panels in the ini blob).
                               SavePreset calls ImGui::SaveIniSettingsToMemory; LoadPreset
                               calls ImGui::LoadIniSettingsFromMemory and so must only be
                               reached via Application's deferred queue (see ImGui Notes).
@@ -197,23 +198,17 @@ If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>`
 
 ### Building
 
-CMake generator is Visual Studio 17 2022 (`build/ShaderPlayer.sln`). Command-line builds work, but only from a shell where the MSVC environment has been initialised — otherwise the link fails with `memcpy` unresolved:
+`build/` is configured with the Ninja generator (single-config — no `--config` flag, output at `build/ShaderPlayer.exe`). Command-line builds work only from a shell where the MSVC environment has been initialised — otherwise the link fails with `memcpy` unresolved:
 
 ```
-cmd /c "call \"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat\" >nul && cmake --build build --config Release"
+cmd /c "call \"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat\" >nul && cmake --build build"
 ```
 
-Building from the Visual Studio IDE works without the extra step.
+Building from the Visual Studio IDE works without the extra step. Adjust the vcvars path to the installed edition — `vswhere.exe -latest -property installationPath` locates it.
 
-```bash
-cmake -B build
-cmake --build build --config Release   # → build/Release/ShaderPlayer.exe
-cmake --build build --config Debug     # → build/Debug/ShaderPlayer.exe
-```
+FFmpeg DLLs are copied next to the executable automatically at post-build.
 
-The executable and required DLLs will be in `build/Release/` (or `build/Debug/`). FFmpeg DLLs are copied there automatically at post-build.
-
-**Run from the project root** (not from `build/Release/`) so the relative `shaders/` path resolves correctly, or use the Shader Library → "Scan Folder" button to point at the shaders directory manually. A fallback also looks for `shaders/` next to the executable at startup.
+**Run from the project root** (not from `build/`) so the relative `shaders/` path resolves correctly, or use the Shader Library → "Scan Folder" button to point at the shaders directory manually. A fallback also looks for `shaders/` next to the executable at startup.
 
 ## Configuration
 
@@ -315,7 +310,7 @@ Use the `/new-shader <name>` skill — it scaffolds the file with correct cbuffe
 - `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
 - `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame. `LoadIniSettingsFromMemory` sets ImGui's internal `SettingsLoaded` flag, so calling it before the first `NewFrame` suppresses the automatic `imgui.ini` load
 - `LoadIniSettingsFromMemory` must **never** be called between `NewFrame()` and `Render()`. Its pre-read handler (`DockSettingsHandler_ClearAll`) destroys every dock node and clears every window's `DockId`, so an in-flight frame is left holding freed nodes: the dock tree collapses to a bare `CentralNode`, every panel drops out to a floating window at a stale position, and the wreckage is then serialised to `imgui.ini`. ImGui's own assert against this is commented out, so it fails silently rather than aborting. Workspace preset loads are requested via `Application::LoadWorkspacePreset` (which only queues an index) and applied by `ApplyPendingWorkspacePreset()` in `Run()` between frames. Any new caller must go through that queue, never `WorkspaceManager::LoadPreset` directly. `SaveIniSettingsToMemory` has no such restriction (ImGui itself calls it from inside `NewFrame`)
-- Dock splitter minimums come from the single global `style.WindowMinSize`; there is no per-node minimum, and `SetNextWindowSizeConstraints` is explicitly discarded for docked windows. Keep it below the smallest node dimension in the shipped layout (299px side columns, 72px transport bar) or existing layouts fight the floor
+- Dock splitter minimums come from the single global `style.WindowMinSize`; there is no per-node minimum, and `SetNextWindowSizeConstraints` is explicitly discarded for docked windows. Keep it below the smallest node dimension in the shipped layout, and note that `kDefaultLayoutIni` is authored at 3840x2126 — ImGui rescales `SizeRef` proportionally, so the 73px transport node lands at ~36px on a 1080p desktop and fights the 64px floor
 - `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
 - Toggle buttons using `PushStyleColor`/`PopStyleColor`: snapshot the bool BEFORE the button call (`bool wasActive = m_flag; if (wasActive) Push...; if (Button(...)) m_flag=!m_flag; if (wasActive) Pop...`). Checking `m_flag` after the button call breaks push/pop symmetry on the click frame.
 - `DrawKeyframeDetail` receives `anyChanged` by reference — set it on ALL mutation paths including early returns, or `OnParamChanged()` won't fire for that edit.

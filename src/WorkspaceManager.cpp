@@ -8,92 +8,67 @@
 
 namespace SP {
 
-// Hardcoded factory layout: every panel docked and visible. To update, arrange
-// the windows as desired, save a workspace preset, then paste that .ini file's
-// ImGui section here (drop the [WorkspacePreset] header and the LastUsed lines)
-// and mirror its visibility flags in the WorkspaceManager constructor below.
+// Hardcoded factory layout. To update, arrange the windows as desired, save a
+// workspace preset, then paste that .ini file's ImGui section here (drop the
+// [WorkspacePreset] header and the LastUsed lines) and mirror its visibility
+// flags in the WorkspaceManager constructor below.
 static const char* const kDefaultLayoutIni = R"INI(
 [Window][DockSpace]
 Pos=0,0
-Size=1920,1171
+Size=3840,2126
 Collapsed=0
 
 [Window][Video]
-Pos=301,25
-Size=1178,871
+Pos=603,29
+Size=2224,1798
 Collapsed=0
-DockId=0x00000009,0
+DockId=0x00000003,0
+
+[Window][Shader Library]
+Pos=2829,29
+Size=1011,2097
+Collapsed=0
+DockId=0x00000002,0
 
 [Window][Shader Parameters]
-Pos=0,25
-Size=299,793
-Collapsed=0
-DockId=0x00000007,0
-
-[Window][Noise Generator]
-Pos=0,820
-Size=299,191
-Collapsed=0
-DockId=0x0000000B,0
-
-[Window][Audio Monitor]
-Pos=0,1013
-Size=299,158
-Collapsed=0
-DockId=0x0000000C,0
-
-[Window][Transport]
-Pos=301,898
-Size=1178,72
+Pos=0,29
+Size=601,2097
 Collapsed=0
 DockId=0x00000005,0
 
-[Window][Recording Settings]
-Pos=301,972
-Size=1178,199
+[Window][Transport]
+Pos=603,1829
+Size=2224,73
 Collapsed=0
-DockId=0x0000000D,0
-
-[Window][Spout Output]
-Pos=301,1059
-Size=1178,112
-Collapsed=0
-DockId=0x0000000E,0
-
-[Window][Shader Library]
-Pos=1481,25
-Size=439,1146
-Collapsed=0
-DockId=0x00000004,0
+DockId=0x00000007,0
 
 [Window][Shader Editor]
-Pos=1481,25
-Size=439,1146
+Pos=2829,29
+Size=1011,2097
 Collapsed=0
-DockId=0x00000004,1
+DockId=0x00000002,1
 
-[Window][Keybindings]
-Pos=1481,25
-Size=439,1146
+[Window][Recording Settings]
+Pos=603,1904
+Size=2224,222
 Collapsed=0
-DockId=0x00000004,2
+DockId=0x00000008,0
+
+[Window][Noise Generator]
+Pos=60,60
+Size=505,327
+Collapsed=0
 
 [Docking][Data]
-DockSpace           ID=0xD71539A0 Window=0x3DA2F1DE Pos=0,25 Size=1920,1146 Split=X
-  DockNode          ID=0x00000003 Parent=0xD71539A0 SizeRef=1479,1146 Split=X
-    DockNode        ID=0x00000001 Parent=0x00000003 SizeRef=299,1146 Split=Y Selected=0xAF40F580
-      DockNode      ID=0x00000007 Parent=0x00000001 SizeRef=299,793 Selected=0xAF40F580
-      DockNode      ID=0x00000008 Parent=0x00000001 SizeRef=299,351 Split=Y Selected=0xE1E349A6
-        DockNode    ID=0x0000000B Parent=0x00000008 SizeRef=299,191 Selected=0xE1E349A6
-        DockNode    ID=0x0000000C Parent=0x00000008 SizeRef=299,158 Selected=0x2BE082FB
-    DockNode        ID=0x00000002 Parent=0x00000003 SizeRef=1178,1146 Split=Y
-      DockNode      ID=0x00000009 Parent=0x00000002 SizeRef=1317,871 CentralNode=1 Selected=0x954F7004
-      DockNode      ID=0x0000000A Parent=0x00000002 SizeRef=1317,273 Split=Y Selected=0x00A96232
-        DockNode    ID=0x00000005 Parent=0x0000000A SizeRef=1317,72 Selected=0x04C1370C
-        DockNode    ID=0x00000006 Parent=0x0000000A SizeRef=1317,199 Split=Y Selected=0x00A96232
-          DockNode  ID=0x0000000D Parent=0x00000006 SizeRef=1178,211 Selected=0x00A96232
-          DockNode  ID=0x0000000E Parent=0x00000006 SizeRef=1178,112 Selected=0x8D9B226A
-  DockNode          ID=0x00000004 Parent=0xD71539A0 SizeRef=439,1146 Selected=0x5DAA59D9
+DockSpace         ID=0xD71539A0 Window=0x3DA2F1DE Pos=0,29 Size=3840,2097 Split=X
+  DockNode        ID=0x00000005 Parent=0xD71539A0 SizeRef=601,2097 Selected=0xAF40F580
+  DockNode        ID=0x00000006 Parent=0xD71539A0 SizeRef=3237,2097 Split=X
+    DockNode      ID=0x00000001 Parent=0x00000006 SizeRef=2224,2097 Split=Y Selected=0x954F7004
+      DockNode    ID=0x00000003 Parent=0x00000001 SizeRef=3037,1798 CentralNode=1 Selected=0x954F7004
+      DockNode    ID=0x00000004 Parent=0x00000001 SizeRef=3037,297 Split=Y Selected=0x04C1370C
+        DockNode  ID=0x00000007 Parent=0x00000004 SizeRef=2224,73 Selected=0x04C1370C
+        DockNode  ID=0x00000008 Parent=0x00000004 SizeRef=2224,222 Selected=0x00A96232
+    DockNode      ID=0x00000002 Parent=0x00000006 SizeRef=1011,2097 Selected=0x5DAA59D9
 )INI";
 
 WorkspaceManager::WorkspaceManager() {
@@ -107,10 +82,10 @@ WorkspaceManager::WorkspaceManager() {
     defaultPreset.panels.library     = true;
     defaultPreset.panels.transport   = true;
     defaultPreset.panels.recording   = true;
-    defaultPreset.panels.keybindings = true;
-    defaultPreset.panels.noise       = true;
-    defaultPreset.panels.spout       = true;
-    defaultPreset.panels.audio       = true;
+    defaultPreset.panels.keybindings = false;
+    defaultPreset.panels.noise       = false;
+    defaultPreset.panels.spout       = false;
+    defaultPreset.panels.audio       = false;
     m_presets.push_back(std::move(defaultPreset));
 }
 
