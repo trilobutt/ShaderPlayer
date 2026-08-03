@@ -47,8 +47,9 @@ struct PS_INPUT {
 };
 
 // Sample Perlin channel of the noise texture with domain warp.
-// SampleLevel(0): the fine passes run at 10x the coarse frequency and an
-// implicit-derivative fetch would mip them away exactly where the detail lives.
+// SampleLevel(0): the callers run this inside loops, where an implicit-LOD fetch
+// asks for a derivative that is not defined. No texture in the pipeline carries
+// mips, so level 0 is also what an implicit fetch would have resolved to.
 float sampleNoise(float2 uv, float scl, float2 offset) {
     return noiseTexture.SampleLevel(noiseSampler, uv * scl + offset, 0).r;
 }

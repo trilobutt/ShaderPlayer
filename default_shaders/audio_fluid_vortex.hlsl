@@ -70,9 +70,10 @@ float2 curlNoise(float2 uv, float freq, float timeOff) {
 // The body dye carries flow structure into regions the spectrum leaves quiet; it
 // takes two octaves so the field still has something to show under a zoom, where a
 // single 2.5x octave went flat.
-// Every fetch is SampleLevel: q is loop-carried and wrapped through frac(), so its
-// screen-space derivatives are meaningless and an implicit-LOD Sample picks a garbage
-// mip along every wrap seam.
+// Every fetch is SampleLevel: q is loop-carried and wrapped through frac(), so an
+// implicit-LOD Sample would ask the hardware for a derivative that is undefined
+// there. No texture in the pipeline is mip-mapped, so level 0 is also exactly what
+// such a fetch would have resolved to.
 float dyeAt(float2 q) {
     float specX = pow(saturate(q.x * 0.72 + q.y * 0.28), spectrumSpread);
     float specE = spectrumTexture.SampleLevel(videoSampler, float2(specX, 0.5), 0).r;

@@ -94,8 +94,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Stratum grain at three scales. Two octaves left the rock flat under a zoom —
     // the coarse bands carried the image and everything between them was featureless.
-    // faultedDepth is a smooth function of uv, so implicit-LOD Sample is valid here and
-    // the hardware mip chain does the band-limiting on the fine octaves for free.
+    // faultedDepth is a smooth function of uv, so implicit-LOD Sample is valid here.
+    // It buys no filtering, though: the noise texture is created with a single mip
+    // level, so the micro octave is point-sampled at 44x and will sparkle under
+    // motion. Band-limiting it needs an explicit fade on its own footprint.
     float2 strataUV   = float2(uv.x * 1.8, faultedDepth * 3.5);
     float2 fineUV     = float2(uv.x * 5.0, faultedDepth * 12.0);
     float2 microUV    = float2(uv.x * 19.0, faultedDepth * 44.0);

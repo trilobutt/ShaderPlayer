@@ -8,14 +8,23 @@
         {"NAME": "temporalSpread",     "LABEL": "Temporal Spread","TYPE": "float", "MIN": 0.0,  "MAX": 2.0,  "DEFAULT": 0.8},
         {"NAME": "blendWeight",        "LABEL": "Blend",          "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 1.0},
         {"NAME": "colourPalette",      "LABEL": "Colour Map",     "TYPE": "long",
-         "VALUES": [0, 1, 2], "LABELS": ["Original", "Heat", "Monochrome"], "DEFAULT": 0}
+         "VALUES": [0, 1, 2], "LABELS": ["Original", "Heat", "Monochrome"], "DEFAULT": 0},
+        {"NAME": "PaletteShift",       "LABEL": "Palette Shift",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.0}
     ]
 }*/
 
 // Slit-scan temporal splice approximation.
 // Without frame history, each column/row encodes a different time phase via UV
-// displacement — replicating the streak-photo effect spatially.  The axis
+// displacement, replicating the streak-photo effect spatially. The axis
 // perpendicular to the scan direction represents time; the scan axis is spatial.
+//
+// The phase ramp is a sinusoid, not frac(). A sawtooth wraps, and the wrap put a
+// hard tear straight across the frame that moved with the clock: the one feature
+// in the image that was unmistakably a bug rather than an artefact.
+//
+// Slice Width now sets the width of the clean band. It was parsed, assigned to an
+// unused local and ignored, so the only thing controlling the falloff was a fixed
+// exponential.
 
 Texture2D videoTexture : register(t0);
 SamplerState videoSampler : register(s0);
@@ -36,56 +45,56 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 heatmap(float t) {
-    t = saturate(t);
-    return float3(
-        smoothstep(0.0, 0.5, t),
-        smoothstep(0.25, 0.75, t) * (1.0 - smoothstep(0.75, 1.0, t)),
-        1.0 - smoothstep(0.5, 1.0, t)
-    );
-}
-
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
     // Phase encodes temporal offset: pixels far from the scan position have
-    // accumulated more "time" — sample the video at a shifted UV to fake history.
-    float axis   = (scrollAxis == 0) ? uv.x : uv.y;    // spatial axis
-    float perp   = (scrollAxis == 0) ? uv.y : uv.x;    // temporal axis
+    // accumulated more "time", so sample the video at a shifted UV to fake history.
+    float perp = (scrollAxis == 0) ? uv.y : uv.x;    // temporal axis
+    float dist = perp - slicePos;
 
-    // Distance from the slice centre gives the time offset magnitude
-    float dist   = perp - slicePos;
-    float phase  = dist * temporalSpread;
+    float scanOff = sin(SP_TAU * (dist * temporalSpread + time * 0.05)) * 0.5;
 
-    // UV displacement: shift scan axis by phase * time, creating streak
     float2 scanUV = uv;
-    float  scanOff = frac(phase + time * 0.05) - 0.5;
     if (scrollAxis == 0)
         scanUV.y = uv.y + scanOff * 0.5;
     else
         scanUV.x = uv.x + scanOff * 0.5;
 
-    // Active slice: show clean video where the slice currently is
-    bool inSlice = abs(dist) < sliceWidth * 0.5;
-    float4 sliceCol = videoTexture.Sample(videoSampler, uv);
-    float4 scanCol  = videoTexture.Sample(videoSampler, clamp(scanUV, 0.0, 1.0));
+    float3 clean = videoTexture.Sample(videoSampler, uv).rgb;
+    float3 scan  = videoTexture.Sample(videoSampler, clamp(scanUV, 0.0, 1.0)).rgb;
 
-    // Blend scan vs clean based on distance from slice
-    float fadeW = exp(-abs(dist) * 6.0);
-    float4 col  = lerp(scanCol, sliceCol, fadeW);
+    // Clean band of half-width sliceWidth, fading into the streak over a quarter
+    // of the frame.
+    float fadeW = 1.0 - smoothstep(sliceWidth * 0.5, sliceWidth * 0.5 + 0.25, abs(dist));
 
-    // Colour mapping
+    // Crossfade in linear light. Two images dissolved on encoded values lose
+    // brightness through the middle of the transition, which here is most of the
+    // frame.
+    float3 lin = lerp(spSrgbToLinear(scan), spSrgbToLinear(clean), fadeW);
+
     if (colourPalette == 1) {
-        float lum = dot(col.rgb, float3(0.299, 0.587, 0.114));
-        col.rgb = heatmap(lum);
+        // Inigo Quilez cosine palette (his published warm set), phase-shiftable.
+        // The piecewise smoothstep ramp this replaces had a flat green plateau
+        // through the mid-tones and two visible kinks either side of it.
+        float t = saturate(spLuma(lin));
+        lin = spSrgbToLinear(saturate(spPalette(t,
+                        float3(0.5, 0.5, 0.5),
+                        float3(0.5, 0.5, 0.5),
+                        float3(1.0, 1.0, 1.0),
+                        float3(0.0, 0.10, 0.20) + PaletteShift)));
     } else if (colourPalette == 2) {
-        float lum = dot(col.rgb, float3(0.299, 0.587, 0.114));
-        col.rgb = float3(lum, lum, lum);
+        lin = spLuma(lin).xxx;
     }
 
-    // Blend with original
-    float4 orig = videoTexture.Sample(videoSampler, uv);
-    col = lerp(orig, col, blendWeight);
-    col.a = 1.0;
-    return col;
+    float3 orig = spSrgbToLinear(clean);
+    lin = lerp(orig, lin, blendWeight);
+
+    float3 col = spLinearToSrgb(lin);
+
+    // The streak is a low-gradient smear over most of the frame, and the palette
+    // mode turns luminance into a full-range gradient: both band on 8 bits.
+    col = spDither(col, input.pos.xy, 1.0 / 255.0);
+
+    return float4(saturate(col), 1.0);
 }

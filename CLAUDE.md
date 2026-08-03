@@ -173,6 +173,14 @@ SamplerState noiseSampler : register(s1);   // WRAP addressing
 - Config: `AppConfig::noise` (`NoiseSettings { float scale; int textureSize; }`), persisted as `noiseScale`/`noiseTextureSize` in `config.json`.
 - Noise UV pattern for per-cell variation: `cellCoord / 64.0 + cellUv * (freq / 64.0)` — unique slice per cell, `freq` scales zoom.
 
+### Sampling and Screen-Space Derivatives
+
+Every texture the pipeline creates (video, noise, spectrum, display, compositor source, render target) is `MipLevels = 1`, and both samplers are `D3D11_FILTER_MIN_MAG_MIP_LINEAR` with no anisotropy. Consequences worth knowing before writing a comment about filtering:
+
+- `Sample`, `SampleLevel(..., 0)` and `SampleGrad` return **identical values**. Nothing consumes a derivative, so no fetch can "pick the wrong mip" and no fetch gets minification filtering for free. A shader that magnifies its source aliases unless it band-limits explicitly.
+- Use `SampleLevel(..., 0)` for any fetch on a coordinate that is loop-carried, `frac()`-wrapped, folded, or downstream of a varying branch. The reason is that an implicit-LOD fetch in varying flow control is undefined and fxc rejects some forms of it (X3595), not mip selection.
+- `fwidth`/`ddx` must be taken on the **continuous** coordinate, before any `frac()`, fold or wrap, and outside divergent flow. Past a discontinuity it reports an infinitely wide pixel and smears a grey seam along the boundary. Where no continuous coordinate exists, supply the footprint analytically (see `pxCell` in `game_of_life.hlsl`, `maskW` in `crt_simulation.hlsl`, the angular footprint in `kaleidoscope.hlsl`).
+
 ## Build Instructions
 
 ### Prerequisites
@@ -426,6 +434,8 @@ Parameters packed into `custom` (`float4 custom[8]` = 32 floats, `kCustomFloats`
 Parameters exceeding 32 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
 
 **Diagnosing missing shaders**: if a shader doesn't appear after Scan Folder, it has a compile error. Check `ShaderPreset::compileError` in the debugger — no UI currently surfaces this field.
+
+**Dead parameters**: a parameter declared in the ISF block but never read by the shader body still parses, still packs a `custom[]` slot and still renders a working widget that does nothing. Neither the compiler nor `validate_shaders.py` can see it, because the `#define` alias is simply unused. When editing a shader, check every declared name appears in the body.
 
 ### Value Storage and GPU Upload
 

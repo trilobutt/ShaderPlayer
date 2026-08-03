@@ -38,9 +38,10 @@ struct PS_INPUT {
 
 // 2D vector-valued fbm built from the noise texture R channel.
 // Uses two offset samples to approximate a 2D gradient noise output.
-// SampleLevel(0) rather than Sample: inside the loop the implicit derivative is
-// of a coordinate that has already been scaled by freq, so a mip-mapped fetch
-// would silently drop the high octaves exactly where they matter.
+// SampleLevel(0) rather than Sample: the fetch sits inside a loop whose trip
+// count is a parameter, and an implicit-LOD fetch there asks the hardware for a
+// derivative it cannot define. Nothing in the pipeline is mip-mapped, so the
+// explicit level is also what the fetch would have resolved to anyway.
 float2 fbm2D(float2 p, float tOffset, int octaves, float fineGain) {
     float2 result = float2(0.0, 0.0);
     float amp  = 0.5;
