@@ -1,5 +1,6 @@
 #include "ShaderManager.h"
 #include "ShaderCommonEmbedded.h"  // generated from src/ShaderCommon.hlsli by CMake
+#include "FrameProfiler.h"
 #include <algorithm>
 #include <array>
 #include <fstream>
@@ -273,6 +274,14 @@ void ShaderManager::EnableFileWatching(bool enable) {
 
 void ShaderManager::CheckForChanges() {
     if (!m_fileWatchingEnabled) return;
+    SP_PROFILE(kCheckForChanges);
+
+    // Two filesystem calls per preset, and the preset list runs to 45. Polling that at
+    // frame rate costs ~1.7 ms of every frame to answer a question no editor can change
+    // the answer to more than twice a second.
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_lastWatchCheck < std::chrono::milliseconds(500)) return;
+    m_lastWatchCheck = now;
 
     for (int i = 0; i < static_cast<int>(m_presets.size()); ++i) {
         const std::string& filepath = m_presets[i].filepath;

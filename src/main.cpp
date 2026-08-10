@@ -1,13 +1,20 @@
 #include "Application.h"
+#include "FrameProfiler.h"
+#include "ui/MainWindow.h"
 #include "ui/Theme.h"
+#include "ui/ViewportWidget.h"
 
 #include <objbase.h>
 #include <dbghelp.h>
 
 #include <cstdio>
+#include <memory>
 
 #include <QApplication>
+#include <QEvent>
+#include <QMouseEvent>
 #include <QTimer>
+#include <QWinEventNotifier>
 
 // Global pointer used by the crash handler. Set just before the event loop and
 // cleared immediately after — narrow window where a crash actually needs this.
@@ -104,6 +111,32 @@ static LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* ep) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
+// Input delivery latency: the gap between the OS stamping an input event and Qt handing
+// it to a widget. No Q_OBJECT — eventFilter is a plain virtual, and the macro would need
+// MOC for nothing here.
+class InputLatencyFilter : public QObject {
+public:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseMove:
+        case QEvent::KeyPress:
+        case QEvent::Wheel: {
+            // event->type() already narrows this to a QInputEvent subtype.
+            auto* ie = static_cast<QInputEvent*>(event);
+            const double lag = static_cast<double>(
+                GetTickCount64() - static_cast<ULONGLONG>(ie->timestamp()));
+            // Discard samples outside [0, 2000) ms as clock noise.
+            if (lag >= 0.0 && lag < 2000.0) SP::Profile::NoteInput(lag);
+            break;
+        }
+        default:
+            break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
     _In_opt_ HINSTANCE hPrevInstance,
@@ -145,22 +178,55 @@ int WINAPI WinMain(
             // the Spout cleanup, which needs a live Application to act on.
             g_appForCrashCleanup = &app;
 
-            // Interval 0 means "as soon as the event queue is empty": while the viewport
-            // is presenting, TickOnce()'s vsync Present is what actually paces the loop,
-            // so a nonzero interval here would only add latency on top of it. But the
-            // viewport presents only while its page is showing (a video or a generative
-            // shader) — with neither, TickOnce returns without blocking on anything, and
-            // interval 0 would spin a core retriggering itself with no picture to show
-            // for it. So the interval tracks what the last tick actually did: 0 while
-            // something presented (vsync paces the next call), kIdlePollMs while nothing
-            // did (nothing else paces the loop, so this timer must).
+            // The viewport's swap chain signals a waitable handle when DXGI can accept the
+            // next frame, and the Qt event loop waits on it alongside the window's own
+            // messages. Nothing blocks the GUI thread, so a click is dispatched when it
+            // arrives instead of behind the frame.
+            //
+            // The handle is the pacer only while something is actually being presented.
+            // With no video and no active shader nothing presents, no frame retires, and
+            // the handle would either stall the loop or, still signalled, spin it — so the
+            // timer takes over for exactly that case and hands back on the first frame
+            // that presents.
             constexpr int kIdlePollMs = 16;   // ~60 Hz poll for the empty-state window
-            QTimer frameTimer;
-            QObject::connect(&frameTimer, &QTimer::timeout, [&app, &frameTimer] {
+            QTimer idleTimer;
+            idleTimer.setInterval(kIdlePollMs);
+
+            HANDLE waitable = nullptr;
+            if (SP::MainWindow* window = app.GetMainWindow()) {
+                if (SP::ViewportWidget* viewport = window->Viewport())
+                    waitable = viewport->FrameLatencyWaitable();
+            }
+            std::unique_ptr<QWinEventNotifier> vsyncNotifier;
+
+            double lastTickEnd = 0.0;
+            auto tick = [&app, &idleTimer, &vsyncNotifier, &lastTickEnd] {
+                const double t0 = SP::Profile::Now();
+                if (lastTickEnd > 0.0)
+                    SP::Profile::Add(SP::Profile::kEventLoopGap, t0 - lastTickEnd);
                 const bool presented = app.TickOnce();
-                frameTimer.setInterval(presented ? 0 : kIdlePollMs);
-            });
-            frameTimer.start(0);
+                lastTickEnd = SP::Profile::Now();
+                SP::Profile::EndFrame();
+
+                if (vsyncNotifier) {
+                    vsyncNotifier->setEnabled(presented);
+                    if (presented) idleTimer.stop(); else idleTimer.start();
+                }
+            };
+
+            if (waitable) {
+                vsyncNotifier = std::make_unique<QWinEventNotifier>(waitable);
+                QObject::connect(vsyncNotifier.get(), &QWinEventNotifier::activated,
+                                 &qtApp, tick);
+            }
+            QObject::connect(&idleTimer, &QTimer::timeout, &qtApp, tick);
+            idleTimer.start();
+
+            // Input delivery latency: the gap between the OS stamping an input event and
+            // Qt handing it to a widget. It is the number the user actually feels, and the
+            // only one that says whether the frame loop is standing on the event loop.
+            InputLatencyFilter latencyFilter;
+            qtApp.installEventFilter(&latencyFilter);
 
             result = qApp->exec();
 

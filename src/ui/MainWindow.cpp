@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 
 #include "Application.h"
+#include "FrameProfiler.h"
 #include "ShaderManager.h"
 #include "VideoDecoder.h"
 #include "VideoEncoder.h"
@@ -25,17 +26,13 @@
 
 #include <algorithm>
 
-#include <QAbstractAnimation>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QFont>
 #include <QDragEnterEvent>
 #include <QDropEvent>
-#include <QEnterEvent>
 #include <QFileInfo>
 #include <QFrame>
-#include <QGraphicsDropShadowEffect>
-#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
@@ -53,19 +50,18 @@
 #include <QStyle>
 #include <QToolButton>
 #include <QUrl>
-#include <QVariantAnimation>
 #include <QVBoxLayout>
 
 namespace SP {
 
 namespace {
 
-// Dormant alpha of a region hairline: present enough to read as that region's colour at
-// rest (the multi-channel floor forbids hover being the only channel), quiet enough that a
-// window of eight docks does not shout.
-constexpr int   kHairlineDormant = 76;
-constexpr qreal kGlowRadius      = 26.0;
-constexpr int   kGlowAlpha       = 150;
+// Alpha of a region hairline. It is now the whole of that channel rather than the bottom
+// of a hover ramp, so it has to carry the hue on its own: below about 120 the accents
+// desaturate against the canvas and the greens, blues and ambers all read as one muddy
+// brown-grey. High enough to be unmistakably its colour, short of the full-strength line
+// that eight docks at once would turn into noise.
+constexpr int kHairlineAlpha = 168;
 
 // Passed to QMainWindow::saveState()/restoreState() so a layout saved under a stale dock
 // set (a panel added, removed or renamed) is refused rather than half-applied. Bump this
@@ -207,40 +203,22 @@ RegionDock::RegionDock(const QString& title,
     m_hairline->setObjectName(QStringLiteral("PanelHairline"));
     m_frameLayout->addWidget(m_hairline);
 
+    // Set once. The region's hue reads here and on the tinted glyph in the title bar,
+    // and neither moves again: a hover channel that re-parses a stylesheet sixty times a
+    // second is not worth what it shows.
+    QColor line = m_hue;
+    line.setAlpha(kHairlineAlpha);
+    m_hairline->setStyleSheet(
+        QStringLiteral("QFrame#PanelHairline { background: %1; border: none;"
+                       " border-radius: 1px; min-height: 2px; max-height: 2px; }")
+            .arg(Rgba(line)));
+
     // Placeholder until A6-A12 hand over the real panel.
     m_body = new QWidget(m_frame);
     m_body->setMinimumHeight(Theme::kSpaceUnit * 6);
     m_frameLayout->addWidget(m_body, 1);
 
     QDockWidget::setWidget(m_frame);
-
-    // Glow lives on the island rather than the dock so it blooms around the rounded
-    // panel, not around the rectangle of the dock area.
-    m_glow = new QGraphicsDropShadowEffect(m_frame);
-    QColor glowColour = hue;
-    glowColour.setAlpha(kGlowAlpha);
-    m_glow->setColor(glowColour);
-    m_glow->setOffset(0.0, 0.0);
-    m_glow->setBlurRadius(0.0);
-    m_glow->setEnabled(false);
-    m_frame->setGraphicsEffect(m_glow);
-
-    m_bloomAnim = new QVariantAnimation(this);
-    m_bloomAnim->setEasingCurve(Theme::kEaseStandard);
-    connect(m_bloomAnim, &QVariantAnimation::valueChanged, this,
-            [this](const QVariant& value) { ApplyBloom(value.toReal()); });
-
-    // Focus is the channel that works without a pointer, and it is why the identity is
-    // readable on a keyboard-driven pass through the window.
-    connect(qGuiApp, &QGuiApplication::focusObjectChanged, this, [this](QObject* obj) {
-        auto* widget = qobject_cast<QWidget*>(obj);
-        const bool active = widget && (widget == this || isAncestorOf(widget));
-        if (active == m_active) return;
-        m_active = active;
-        UpdateBloom();
-    });
-
-    ApplyBloom(0.0);
 }
 
 void RegionDock::SetBody(QWidget* body)
@@ -250,69 +228,6 @@ void RegionDock::SetBody(QWidget* body)
     delete m_body;
     m_body = body;
     m_frameLayout->setStretchFactor(m_body, 1);
-}
-
-void RegionDock::enterEvent(QEnterEvent* event)
-{
-    QDockWidget::enterEvent(event);
-    m_hovered = true;
-    UpdateBloom();
-}
-
-void RegionDock::leaveEvent(QEvent* event)
-{
-    QDockWidget::leaveEvent(event);
-    m_hovered = false;
-    UpdateBloom();
-}
-
-void RegionDock::UpdateBloom()
-{
-    const bool live = m_hovered || m_active;
-    const qreal target = live ? 1.0 : 0.0;
-
-    if (live != m_bloomed) {
-        m_bloomed = live;
-        // Stepped rather than tweened: two stylesheet swaps per hover instead of sixty,
-        // and at title size the colour change reads as instant either way.
-        m_title->setStyleSheet(QStringLiteral("QLabel#PanelTitle { color: %1; }")
-                                   .arg((live ? m_hue : Theme::kTextPrimary).name()));
-    }
-
-    if (m_bloomAnim->state() == QAbstractAnimation::Running
-        && m_bloomAnim->endValue().toReal() == target) {
-        return;
-    }
-    m_bloomAnim->stop();
-
-    const int duration = Theme::Motion(Theme::kMotionHover);
-    if (duration <= 0 || qFuzzyCompare(m_bloom + 1.0, target + 1.0)) {
-        ApplyBloom(target);   // reduced motion, or already there and only the glow flips
-        return;
-    }
-    m_bloomAnim->setDuration(duration);
-    m_bloomAnim->setStartValue(m_bloom);
-    m_bloomAnim->setEndValue(target);
-    m_bloomAnim->start();
-}
-
-void RegionDock::ApplyBloom(qreal t)
-{
-    m_bloom = t;
-
-    QColor line = m_hue;
-    line.setAlpha(kHairlineDormant
-                  + static_cast<int>((255 - kHairlineDormant) * t));
-    m_hairline->setStyleSheet(
-        QStringLiteral("QFrame#PanelHairline { background: %1; border: none;"
-                       " border-radius: 1px; min-height: 2px; max-height: 2px; }")
-            .arg(Rgba(line)));
-
-    // The glow is the one expensive channel (an effect renders the whole panel through a
-    // pixmap), so it is spent on hover only. Focus gets the hairline and the title, which
-    // cost nothing and matter more while a text field inside the panel is being typed in.
-    m_glow->setEnabled(m_hovered && t > 0.001);
-    m_glow->setBlurRadius(kGlowRadius * t);
 }
 
 // =======================================================================================
@@ -334,10 +249,8 @@ MainWindow::MainWindow(Application& app)
 
     QMainWindow::DockOptions options = QMainWindow::AllowNestedDocks
                                      | QMainWindow::AllowTabbedDocks
-                                     | QMainWindow::GroupedDragging;
-    // Qt's dock animation has no duration to route through Theme::Motion, so the reduced
-    // motion switch removes it outright rather than shortening it.
-    options.setFlag(QMainWindow::AnimatedDocks, !m_app.GetConfig().reducedMotion);
+                                     | QMainWindow::GroupedDragging
+                                     | QMainWindow::AnimatedDocks;
     setDockOptions(options);
 
     BuildCentral();
@@ -609,13 +522,6 @@ void MainWindow::BuildMenus()
     m_workspaceMenu = viewMenu->addMenu(tr("&Workspace Presets"));
     connect(m_workspaceMenu, &QMenu::aboutToShow, this, &MainWindow::RebuildWorkspaceMenu);
 
-    viewMenu->addSeparator();
-
-    m_actReduceMotion = viewMenu->addAction(tr("Reduce &Motion"));
-    m_actReduceMotion->setCheckable(true);
-    m_actReduceMotion->setChecked(m_app.GetConfig().reducedMotion);
-    connect(m_actReduceMotion, &QAction::toggled, this, &MainWindow::SetReducedMotion);
-
     connect(viewMenu, &QMenu::aboutToShow, this, [this] {
         m_actVideoOutputWindow->setChecked(m_app.IsVideoOutputWindowOpen());
     });
@@ -723,11 +629,14 @@ void MainWindow::ArrangeDefaultLayout()
 
 bool MainWindow::Tick()
 {
-    // Which page: a video, or a generative shader with something to show, otherwise the
-    // empty state. Same split as the outgoing viewport draw. Live state, not a rebuild.
+    SP_PROFILE(kMainWindowTick);
+    // Which page: anything at all to draw, or the empty state. Any active shader has a
+    // picture, not only a generative one — an audio visualiser has its idle form and a
+    // video effect has whatever it makes of an unbound t0 (black, until footage opens).
+    // The empty state is for passthrough with no video, which is the only case where the
+    // viewport genuinely has nothing in it.
     const ShaderPreset* active = m_app.GetShaderManager().GetActivePreset();
-    const bool havePicture = m_app.GetDecoder().IsOpen()
-                          || (active != nullptr && active->isGenerative);
+    const bool havePicture = m_app.GetDecoder().IsOpen() || active != nullptr;
     const int page = havePicture ? 0 : 1;
     if (m_stack->currentIndex() != page) m_stack->setCurrentIndex(page);
 
@@ -977,18 +886,6 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 // ---------------------------------------------------------------------------------------
 // Menu handlers
 // ---------------------------------------------------------------------------------------
-
-void MainWindow::SetReducedMotion(bool on)
-{
-    m_app.GetConfig().reducedMotion = on;
-    Theme::SetReducedMotion(on);
-
-    QMainWindow::DockOptions options = dockOptions();
-    options.setFlag(QMainWindow::AnimatedDocks, !on);
-    setDockOptions(options);
-
-    m_app.SaveConfig();
-}
 
 void MainWindow::OnToggleRecording()
 {

@@ -155,7 +155,6 @@ void to_json(nlohmann::json& j, const AppConfig& c) {
         {"showLibrary", c.showLibrary},
         {"showTransport", c.showTransport},
         {"timeDisplayFrames", c.timeDisplayFrames},
-        {"reducedMotion", c.reducedMotion},
         {"windowGeometry", c.windowGeometry},
         {"windowState", c.windowState},
         {"noiseScale", c.noise.scale},
@@ -188,7 +187,6 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
     if (j.contains("showLibrary")) j.at("showLibrary").get_to(c.showLibrary);
     if (j.contains("showTransport")) j.at("showTransport").get_to(c.showTransport);
     if (j.contains("timeDisplayFrames")) j.at("timeDisplayFrames").get_to(c.timeDisplayFrames);
-    if (j.contains("reducedMotion")) j.at("reducedMotion").get_to(c.reducedMotion);
     if (j.contains("windowGeometry")) j.at("windowGeometry").get_to(c.windowGeometry);
     if (j.contains("windowState")) j.at("windowState").get_to(c.windowState);
     if (j.contains("noiseScale"))       j.at("noiseScale").get_to(c.noise.scale);

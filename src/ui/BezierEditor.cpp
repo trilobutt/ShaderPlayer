@@ -112,17 +112,9 @@ void BezierEditor::SetHovered(int handle)
     if (m_hovered == handle) return;
     m_hovered = handle;
 
-    // A drag tracks the cursor and must not be animated; only the arrival and departure of
-    // the hover state is, and Theme::Motion collapses that to nothing under reduced motion.
-    const int duration = Theme::Motion(Theme::kMotionHover);
     const qreal target = (handle >= 0) ? 1.0 : 0.0;
     m_hoverAnim->stop();
-    if (duration <= 0) {
-        m_hoverT = target;
-        update();
-        return;
-    }
-    m_hoverAnim->setDuration(duration);
+    m_hoverAnim->setDuration(Theme::kMotionHover);
     m_hoverAnim->setStartValue(m_hoverT);
     m_hoverAnim->setEndValue(target);
     m_hoverAnim->start();

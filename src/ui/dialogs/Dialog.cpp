@@ -154,11 +154,7 @@ void Dialog::showEvent(QShowEvent* event)
     if (m_entered) return;
     m_entered = true;
 
-    const int duration = Theme::Motion(Theme::kMotionBase);
-    if (duration <= 0) {
-        setWindowOpacity(1.0);   // reduced motion: the dialog is simply there
-        return;
-    }
+    const int duration = Theme::kMotionBase;
 
     const QPoint resting = pos();
     setWindowOpacity(0.0);

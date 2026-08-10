@@ -13,6 +13,33 @@ find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets Gui Core)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# A cache whose CMAKE_CXX_FLAGS* entries have been blanked (an IDE, a bad edit, a
+# half-written configure) is unrecoverable by re-running the preset: CMake initialises
+# those entries once and never again. The build then succeeds, links, and runs, while
+# silently dropping /O2, /EHsc, /Zi and /DNDEBUG. That produced an unoptimised binary with
+# no debug symbols, live asserts, and no unwind semantics, and nothing said so beyond a
+# C4530 from <chrono>. Fail loudly instead; the fix is to delete CMakeCache.txt and
+# CMakeFiles/ and reconfigure.
+if(MSVC)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _sp_build_type)
+    if(NOT CMAKE_CXX_FLAGS MATCHES "/EHsc")
+        message(FATAL_ERROR
+            "CMAKE_CXX_FLAGS is missing /EHsc (value: '${CMAKE_CXX_FLAGS}'). This cache has "
+            "lost its compiler defaults. Delete build/CMakeCache.txt and build/CMakeFiles/, "
+            "then re-run: cmake --preset windows-msvc")
+    endif()
+    if(_sp_build_type STREQUAL "RELWITHDEBINFO" OR _sp_build_type STREQUAL "RELEASE")
+        if(NOT CMAKE_CXX_FLAGS_${_sp_build_type} MATCHES "/O2")
+            message(FATAL_ERROR
+                "CMAKE_CXX_FLAGS_${_sp_build_type} is missing /O2 (value: "
+                "'${CMAKE_CXX_FLAGS_${_sp_build_type}}'). This cache has lost its compiler "
+                "defaults and would produce an unoptimised build under a release name. "
+                "Delete build/CMakeCache.txt and build/CMakeFiles/, then re-run: "
+                "cmake --preset windows-msvc")
+        endif()
+    endif()
+endif()
+
 # Windows-specific settings
 if(WIN32)
     add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX -DWIN32_LEAN_AND_MEAN)
@@ -203,6 +230,7 @@ add_executable(ShaderPlayer WIN32
     ${SHADER_COMMON_HEADER}
     src/main.cpp
     src/Application.cpp
+    src/FrameProfiler.cpp
     src/AudioAnalyzer.cpp
     src/VideoDecoder.cpp
     src/D3D11Renderer.cpp

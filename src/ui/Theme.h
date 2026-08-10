@@ -87,15 +87,6 @@ inline constexpr QEasingCurve::Type kEaseEntrance = QEasingCurve::OutBack;
 
 // ---------------------------------------------------------------------------------------
 
-// Every animation duration passes through here. Qt has no prefers-reduced-motion, so the
-// reduced-motion floor is unmet unless the application owns the switch: a caller writes
-// `anim->setDuration(Theme::Motion(Theme::kMotionBase))` and gets 0 (an instant state
-// change) when reduced motion is on.
-int Motion(int ms);
-
-// Set once at startup from the persisted preference, and again whenever the user changes it.
-void SetReducedMotion(bool on);
-
 // A procedurally painted region glyph tinted with `tint` (pass the matching kRegion* token).
 // `name` is one of "library", "editor", "params", "transport", "recording", "audio",
 // "noise", "spout"; an unrecognised name paints a plain chip so the miss is visible.

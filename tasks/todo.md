@@ -1,7 +1,7 @@
 # ShaderPlayer: active plans
 
-Two projects remain. Project A (the Qt Widgets port) and Project D (the CRT filter)
-are complete, reviewed and folded into `CLAUDE.md`.
+Two projects remain, and B runs first: C's marketing plan is written against the site
+B builds, and its launch date is the moment B's `--noindex` default is turned off.
 
 ---
 

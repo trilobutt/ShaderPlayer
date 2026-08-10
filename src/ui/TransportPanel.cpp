@@ -223,18 +223,9 @@ void Scrubber::SetKnobHovered(bool on)
     if (m_hoverKnob == on) return;
     m_hoverKnob = on;
 
-    // The drag itself tracks the cursor and is never animated; only the arrival and
-    // departure of the hover state is, and Theme::Motion collapses that to nothing under
-    // reduced motion.
-    const int duration = Theme::Motion(Theme::kMotionHover);
     const qreal target = on ? 1.0 : 0.0;
     m_knobAnim->stop();
-    if (duration <= 0) {
-        m_knobT = target;
-        update();
-        return;
-    }
-    m_knobAnim->setDuration(duration);
+    m_knobAnim->setDuration(Theme::kMotionHover);
     m_knobAnim->setStartValue(m_knobT);
     m_knobAnim->setEndValue(target);
     m_knobAnim->start();
@@ -665,7 +656,8 @@ void TransportPanel::BuildGenerativePage(QWidget* page)
     for (const ResPreset& preset : kResPresets) {
         m_genPreset->addItem(QString::fromLatin1(preset.label));
     }
-    m_genPreset->setToolTip(tr("Generative output resolution."));
+    m_genPreset->setToolTip(tr("Output resolution the shader renders at while no video "
+                               "is open."));
     connect(m_genPreset, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index < 0) return;
         if (index == kResCustom) {
@@ -723,7 +715,7 @@ void TransportPanel::BuildGenerativePage(QWidget* page)
 
     m_genClock = new QLabel(page);
     m_genClock->setObjectName(QStringLiteral("TransportClock"));
-    m_genClock->setToolTip(tr("Time the generative shader has been running (wall clock)."));
+    m_genClock->setToolTip(tr("Time the shader has been running (wall clock)."));
     row->addWidget(m_genClock);
 }
 
@@ -741,8 +733,8 @@ void TransportPanel::BuildIdlePage(QWidget* page)
     heading->setFont(headingFont);
     column->addWidget(heading);
 
-    auto* hint = new QLabel(tr("Open a video or a live capture, or activate a generative "
-                               "shader — the timeline appears here."), page);
+    auto* hint = new QLabel(tr("Open a video or a live capture, or activate a shader, and "
+                               "the timeline appears here."), page);
     hint->setObjectName(QStringLiteral("Caption"));
     hint->setWordWrap(true);
     column->addWidget(hint);
@@ -899,10 +891,15 @@ void TransportPanel::SyncPage()
     VideoDecoder& decoder = m_app.GetDecoder();
     const ShaderPreset* active = m_app.GetShaderManager().GetActivePreset();
 
+    // The same split MainWindow::Tick makes for the viewport, and it has to be the same or
+    // the dock contradicts the picture: any active shader draws with no video open and its
+    // wall clock runs, so any active shader gets the clock and the pause verb. Gating this
+    // on isGenerative left an audio visualiser rendering and animating above a panel saying
+    // there was nothing to play, with Play and Stop greyed out.
     int page = kPageIdle;
     if (decoder.IsOpen() && decoder.IsLiveCapture())      page = kPageLive;
     else if (decoder.IsOpen())                            page = kPageScrub;
-    else if (active != nullptr && active->isGenerative)   page = kPageGenerative;
+    else if (active != nullptr)                           page = kPageGenerative;
 
     if (page == m_page) return;
     m_page = page;

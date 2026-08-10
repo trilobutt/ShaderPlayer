@@ -3,6 +3,8 @@
 #include "Common.h"
 #include "D3D11Renderer.h"
 
+#include <chrono>
+
 namespace SP {
 
 class ShaderManager {
@@ -60,6 +62,7 @@ private:
     // File watching
     bool m_fileWatchingEnabled = false;
     std::unordered_map<std::string, std::filesystem::file_time_type> m_fileTimestamps;
+    std::chrono::steady_clock::time_point m_lastWatchCheck{};
 
     static std::vector<ShaderParam> ParseISFParams(const std::string& source,
                                                     bool* outIsGenerative = nullptr,

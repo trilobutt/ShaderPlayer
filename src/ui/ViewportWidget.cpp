@@ -2,6 +2,7 @@
 
 #include "Application.h"
 #include "D3D11Renderer.h"
+#include "FrameProfiler.h"
 #include "VideoDecoder.h"
 #include "ui/Theme.h"
 
@@ -18,6 +19,10 @@ ViewportWidget::ViewportWidget(Application& app, QWidget* parent)
     setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_NoSystemBackground);
     setAttribute(Qt::WA_OpaquePaintEvent);
+}
+
+ViewportWidget::~ViewportWidget() {
+    if (m_frameLatencyWaitable) CloseHandle(m_frameLatencyWaitable);
 }
 
 bool ViewportWidget::CreateSwapChain() {
@@ -46,6 +51,7 @@ bool ViewportWidget::CreateSwapChain() {
     desc.BufferUsage      = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     desc.BufferCount      = 2;
     desc.SwapEffect       = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    desc.Flags            = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
     HWND hwnd = reinterpret_cast<HWND>(winId());
     if (FAILED(factory->CreateSwapChainForHwnd(
@@ -55,6 +61,16 @@ bool ViewportWidget::CreateSwapChain() {
 
     // Prevent DXGI from hijacking Alt+Enter on this window.
     factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+
+    // A frame-latency waitable swap chain hands out a handle that signals when DXGI can
+    // take the next frame. That is what lets the wait live in the Qt event loop instead
+    // of inside Present on the GUI thread: MsgWaitForMultipleObjectsEx waits on this
+    // handle and the window's messages together, so input is dispatched the moment it
+    // arrives rather than after a blocking Present returns.
+    if (SUCCEEDED(m_swapChain.As(&m_swapChain2))) {
+        m_swapChain2->SetMaximumFrameLatency(1);
+        m_frameLatencyWaitable = m_swapChain2->GetFrameLatencyWaitableObject();
+    }
 
     m_width  = w;
     m_height = h;
@@ -86,7 +102,8 @@ void ViewportWidget::resizeEvent(QResizeEvent* event) {
 
     m_rtv.Reset();
     m_swapChain->ResizeBuffers(0, static_cast<UINT>(w), static_cast<UINT>(h),
-                                DXGI_FORMAT_UNKNOWN, 0);
+                                DXGI_FORMAT_UNKNOWN,
+                                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
     m_width  = w;
     m_height = h;
     RebuildRTV();
@@ -124,7 +141,10 @@ bool ViewportWidget::RenderAndPresent() {
         1.0f
     };
     renderer.BlitDisplayToRect(m_rtv.Get(), drawX, drawY, drawW, drawH, clearColor);
-    m_swapChain->Present(1, 0);
+    {
+        SP_PROFILE(kViewportPresent);
+        m_swapChain->Present(1, 0);
+    }
     return true;
 }
 

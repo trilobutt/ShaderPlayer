@@ -13,8 +13,7 @@
 // drag still snaps and still respects the desktop's edges).
 //
 // The entrance is the one animation this surface earns: a short rise with an overshoot
-// settle and a fade, both through Theme::Motion so reduced motion collapses them to an
-// instant show rather than to no dialog at all.
+// settle and a fade.
 
 #include <QColor>
 #include <QDialog>

@@ -28,11 +28,9 @@ class QDragEnterEvent;
 class QDropEvent;
 class QKeyEvent;
 class QFrame;
-class QGraphicsDropShadowEffect;
 class QLabel;
 class QMenu;
 class QStackedWidget;
-class QVariantAnimation;
 class QVBoxLayout;
 QT_END_NAMESPACE
 
@@ -50,11 +48,9 @@ class ToastStack;
 class TransportPanel;
 class ViewportWidget;
 
-// A dock that carries one region's identity. The hue reaches the user through four channels
-// so none of them has to be the only one: the title-bar glyph is tinted at all times, the
-// top hairline sits dormant and blooms, the title text takes the hue while the region is
-// live, and the panel gains a soft glow of it. "Live" is hover OR keyboard focus anywhere
-// inside the dock, so the identity is readable without a pointer.
+// A dock that carries one region's identity. One hue, on two channels that are always
+// there and never move: the tinted glyph in the title bar and the hairline above the
+// panel's body. Both are readable without a pointer and both cost nothing per frame.
 class RegionDock : public QDockWidget {
     Q_OBJECT
 public:
@@ -70,26 +66,13 @@ public:
 
     QColor Hue() const { return m_hue; }
 
-protected:
-    void enterEvent(QEnterEvent* event) override;
-    void leaveEvent(QEvent* event) override;
-
 private:
-    void UpdateBloom();
-    void ApplyBloom(qreal t);   // t = 0 dormant, 1 fully bloomed
-
     QColor m_hue;
     QFrame* m_frame = nullptr;              // QFrame#PanelFrame, the floating island
     QFrame* m_hairline = nullptr;           // QFrame#PanelHairline, in the region hue
     QLabel* m_title = nullptr;              // QLabel#PanelTitle, in the title bar
     QVBoxLayout* m_frameLayout = nullptr;
     QWidget* m_body = nullptr;
-    QGraphicsDropShadowEffect* m_glow = nullptr;
-    QVariantAnimation* m_bloomAnim = nullptr;
-    qreal m_bloom = 0.0;                    // last applied t
-    bool m_hovered = false;
-    bool m_active = false;                  // keyboard focus anywhere inside
-    bool m_bloomed = false;
 };
 
 class MainWindow : public QMainWindow {
@@ -159,8 +142,6 @@ private:
                          const QString& iconName,
                          const QColor& hue);
 
-    void SetReducedMotion(bool on);
-
     void OnNewShader();
     void OnManageWorkspaces();
     void OnOpenCapture();
@@ -225,7 +206,6 @@ private:
     QAction* m_actSaveShaderAs = nullptr;
     QAction* m_actCompile = nullptr;
     QAction* m_actVideoOutputWindow = nullptr;
-    QAction* m_actReduceMotion = nullptr;
     QAction* m_actRecordToggle = nullptr;
     QAction* m_actRecordingSettings = nullptr;
     QMenu* m_workspaceMenu = nullptr;

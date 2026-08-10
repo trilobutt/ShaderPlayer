@@ -14,8 +14,7 @@
 //   The knob is a physical object. It grows and glows as the pointer arrives, gives under
 //   the press, and then tracks the cursor with no animation at all, because an eased
 //   playhead during a scrub is lag with a nice name. Only the arrival and departure of the
-//   hover state is animated, and Theme::Motion collapses that to nothing under reduced
-//   motion.
+//   hover state is animated.
 //
 // Keyframe follow mode lives here too, both halves of it: the toggle, and the behaviour it
 // drives (scrubbing carries the selected keyframe with the playhead, also reachable by

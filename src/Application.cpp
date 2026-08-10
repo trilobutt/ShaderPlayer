@@ -1,4 +1,5 @@
 #include "Application.h"
+#include "FrameProfiler.h"
 #include "ui/MainWindow.h"
 #include "ui/ViewportWidget.h"
 #include <shellapi.h>
@@ -321,6 +322,7 @@ void Application::RequestExit() {
 // swap chain state.
 bool Application::TickOnce() {
     if (m_exitRequested) return false;
+    SP_PROFILE(kTick);
     ProcessFrame();
     return RenderFrame();
 }
@@ -330,6 +332,7 @@ MainWindow* Application::GetMainWindow() const {
 }
 
 void Application::ProcessFrame() {
+    SP_PROFILE(kProcessFrame);
     auto now = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(now - m_lastFrameTime).count();
 
@@ -338,8 +341,8 @@ void Application::ProcessFrame() {
     // Check for shader file changes
     m_shaderManager->CheckForChanges();
 
-    if (m_playbackState == PlaybackState::Playing) {
-        if (m_decoder.IsOpen()) {
+    if (m_decoder.IsOpen()) {
+        if (m_playbackState == PlaybackState::Playing) {
             if (m_decoder.IsLiveCapture()) {
                 // Live capture: non-blocking decode on every tick; advance wall-clock time.
                 // DecodeNextFrame returns false immediately (EAGAIN) when the device has no
@@ -349,13 +352,16 @@ void Application::ProcessFrame() {
                 m_playbackTime = m_generativeTime;
                 m_lastFrameTime = now;
 
-                if (m_decoder.DecodeNextFrame(m_currentFrame))
+                if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                     m_newVideoFrame = true;
+                    m_videoUploadPending = true;
+                }
             } else {
                 // Video file mode: advance playback time from decoded frame timestamps
                 if (elapsed >= m_frameDuration) {
                     if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                         m_newVideoFrame = true;
+                        m_videoUploadPending = true;
                         m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
                     } else {
                         // End of video, loop
@@ -427,15 +433,19 @@ void Application::ProcessFrame() {
                     }
                 }
             }
-        } else {
-            // Generative mode: advance time by wall-clock delta; cap to avoid jumps after
-            // long pauses or window moves that stall the loop.
-            const float dt = static_cast<float>(std::min(elapsed, 0.1));
-            m_generativeTime += dt;
-            m_playbackTime = m_generativeTime;
-            m_newVideoFrame = true;
-            m_lastFrameTime = now;
         }
+    } else if (m_playbackState != PlaybackState::Paused) {
+        // No video: shader time is wall-clock and runs unless the user paused it. The
+        // transport state describes a video that is not open, so requiring Playing here
+        // froze every shader activated with nothing loaded — Stopped is where the app
+        // starts and where CloseVideo leaves it, so the picture drew and never moved.
+        // Pause still stops it, which is the only transport verb that means anything
+        // with no footage.
+        const float dt = static_cast<float>(std::min(elapsed, 0.1));
+        m_generativeTime += dt;
+        m_playbackTime = m_generativeTime;
+        m_newVideoFrame = true;
+        m_lastFrameTime = now;
     }
 }
 
@@ -519,9 +529,15 @@ void Application::EvaluateKeyframes() {
 }
 
 bool Application::RenderFrame() {
-    // Upload current video frame
-    if (!m_currentFrame.data[0].empty()) {
-        m_renderer.UploadVideoFrame(m_currentFrame);
+    // Only when the pixels actually changed. The texture keeps its contents between
+    // frames, so re-mapping and row-copying 8 MB of identical 1080p every display frame
+    // bought nothing but 0.64 ms and half a gigabyte a second of PCIe traffic.
+    {
+        SP_PROFILE(kVideoUpload);
+        if (m_videoUploadPending && !m_currentFrame.data[0].empty()) {
+            m_renderer.UploadVideoFrame(m_currentFrame);
+            m_videoUploadPending = false;
+        }
     }
 
     // Set shader uniforms
@@ -550,10 +566,13 @@ bool Application::RenderFrame() {
         m_renderer.SetAudioData(nullptr);
     }
 
-    // Set up the D3D11 pixel-shader pipeline state everything below depends on
-    m_renderer.BeginFrame();
-    // Render video+shader to the display texture; every consumer blits from there
-    m_renderer.RenderToDisplay();
+    // Set up the D3D11 pixel-shader pipeline state everything below depends on, and
+    // render video+shader to the display texture; every consumer blits from there
+    {
+        SP_PROFILE(kRender);
+        m_renderer.BeginFrame();
+        m_renderer.RenderToDisplay();
+    }
 
     // Blit processed output to the detached video window (if open)
     if (m_videoOutputWindow.IsOpen())
@@ -619,7 +638,7 @@ bool Application::OpenVideo(const std::string& filepath) {
     m_configManager.GetConfig().lastOpenedVideo = filepath;
 
     // Decode first frame
-    m_decoder.DecodeNextFrame(m_currentFrame);
+    if (m_decoder.DecodeNextFrame(m_currentFrame)) m_videoUploadPending = true;
     m_playbackState = PlaybackState::Paused;
 
     Toast(m_mainWindow.get(),
@@ -681,7 +700,7 @@ void Application::Stop() {
     m_audioPlayer.Flush();
     if (m_decoder.IsOpen()) {
         m_decoder.SeekToTime(0.0);
-        m_decoder.DecodeNextFrame(m_currentFrame);
+        if (m_decoder.DecodeNextFrame(m_currentFrame)) m_videoUploadPending = true;
     }
     m_playbackTime = 0.0f;
     m_generativeTime = 0.0f;
@@ -699,7 +718,7 @@ void Application::SeekTo(double seconds) {
     if (m_decoder.IsOpen()) {
         m_audioPlayer.Flush();
         m_decoder.SeekToTime(seconds);
-        m_decoder.DecodeNextFrame(m_currentFrame);
+        if (m_decoder.DecodeNextFrame(m_currentFrame)) m_videoUploadPending = true;
         m_playbackTime = static_cast<float>(seconds);
         m_audioAnalyzer.Reset();
     }
@@ -836,7 +855,7 @@ void Application::ScanFolderDialog() {
     m_shaderManager->ScanDirectory(path);
     // Persisted now rather than left to Shutdown()'s save. Choosing a shader folder is an
     // explicit preference, and every other one in the product (noise settings, audio
-    // settings, reduced motion, blend mode) writes immediately; leaving this one to a clean
+    // settings, blend mode) writes immediately; leaving this one to a clean
     // exit means an abnormal termination silently reverts it to the previous folder.
     SaveConfig();
     // The scan is the only thing that adds presets in bulk, and the library

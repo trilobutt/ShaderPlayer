@@ -8,8 +8,6 @@
 //   The armed state is unmissable. While the encoder runs, the panel's own border pulses
 //   in state-error, the elapsed clock is the largest thing in the dock, and the output
 //   path sits right under it, so a glance answers both "am I recording" and "into what".
-//   Under reduced motion the border stays steadily lit instead of pulsing: the signal
-//   survives, only the movement goes (Theme::Motion is what makes that automatic).
 //
 //   Stopping is the easiest thing to do. The toggle spans the panel and grows when armed,
 //   so the largest target on the surface while recording is the one that ends it.

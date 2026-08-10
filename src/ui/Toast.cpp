@@ -170,12 +170,8 @@ void Toast::PlaceAt(const QPoint& resting)
 
     // A restack: the islands below step toward the corner (or away from it, to make room for
     // an arrival) instead of snapping to their new slots.
-    const int duration = Theme::Motion(Theme::kMotionBase);
+    const int duration = Theme::kMotionBase;
     m_move->stop();
-    if (duration <= 0) {
-        move(m_resting);
-        return;
-    }
     m_move->setDuration(duration);
     m_move->setEasingCurve(Theme::kEaseStandard);
     m_move->setStartValue(pos());
@@ -187,15 +183,7 @@ void Toast::Enter()
 {
     m_shown = true;
 
-    const int duration = Theme::Motion(Theme::kMotionBase);
-    if (duration <= 0) {
-        // Reduced motion: the notice is simply there. The hold is untouched — it stays on
-        // screen for its full duration, it just does not travel to get there or to leave.
-        move(m_resting);
-        setWindowOpacity(1.0);
-        show();
-        return;
-    }
+    const int duration = Theme::kMotionBase;
 
     const QPoint from = m_resting + QPoint(kEntranceSlide, 0);
     move(from);
@@ -227,11 +215,7 @@ void Toast::Leave()
     // Before the fade, so the gap closes underneath this one rather than after it.
     emit Dismissed(this);
 
-    const int duration = Theme::Motion(Theme::kMotionBase);
-    if (duration <= 0) {
-        close();
-        return;
-    }
+    const int duration = Theme::kMotionBase;
     m_fade->stop();
     m_fade->setDuration(duration);
     m_fade->setEasingCurve(Theme::kEaseStandard);
@@ -267,13 +251,8 @@ void Toast::AnimateLift(bool up)
                               ? m_liftAnim->currentValue().toReal()
                               : (up ? 0.0 : 1.0);
 
-    const int duration = Theme::Motion(Theme::kMotionHover);
     m_liftAnim->stop();
-    if (duration <= 0) {
-        ApplyLift(target);
-        return;
-    }
-    m_liftAnim->setDuration(duration);
+    m_liftAnim->setDuration(Theme::kMotionHover);
     m_liftAnim->setStartValue(current);
     m_liftAnim->setEndValue(target);
     m_liftAnim->start();

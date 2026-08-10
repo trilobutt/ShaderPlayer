@@ -173,6 +173,10 @@ private:
     float m_generativeTime = 0.0f;  // Accumulated wall-clock time for generative shaders
     bool m_eventResetPending = false;
     bool m_newVideoFrame = false;
+    // Set wherever m_currentFrame is written, cleared by the upload itself. Distinct from
+    // m_newVideoFrame, which ProcessFrame resets every tick: a frame decoded by OpenVideo,
+    // Stop or SeekTo arrives between ticks and would otherwise never reach the GPU.
+    bool m_videoUploadPending = false;
 };
 
 } // namespace SP

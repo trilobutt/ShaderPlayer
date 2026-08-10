@@ -2,6 +2,8 @@
 
 #include "Common.h"
 
+#include <dxgi1_3.h>
+
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -22,6 +24,7 @@ class ViewportWidget : public QWidget {
     Q_OBJECT
 public:
     explicit ViewportWidget(Application& app, QWidget* parent = nullptr);
+    ~ViewportWidget();
 
     // Creates the swap chain from winId(). Call once after the widget (and its
     // top-level window) have been shown, so the native handle is valid and sized.
@@ -36,6 +39,12 @@ public:
 
     QPaintEngine* paintEngine() const override { return nullptr; }
 
+    // The handle DXGI signals when it can accept the next Present, used by main.cpp to
+    // pace the event loop off the swap chain instead of blocking inside Present(). Null
+    // when the frame-latency-waitable swap chain could not be created (falls back to a
+    // polling timer, today's behaviour).
+    HANDLE FrameLatencyWaitable() const { return m_frameLatencyWaitable; }
+
 protected:
     void resizeEvent(QResizeEvent* event) override;   // ResizeBuffers, guard on 0x0
     void paintEvent(QPaintEvent*) override {}          // D3D owns these pixels
@@ -45,6 +54,8 @@ private:
 
     Application& m_app;
     ComPtr<IDXGISwapChain1>        m_swapChain;
+    ComPtr<IDXGISwapChain2>        m_swapChain2;   // the same object; DXGI 1.3 face of it
+    HANDLE                         m_frameLatencyWaitable = nullptr;
     ComPtr<ID3D11RenderTargetView> m_rtv;
     int m_width  = 0;
     int m_height = 0;

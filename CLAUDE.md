@@ -26,11 +26,16 @@ src/
 ├── main.cpp              - WinMain: DPI awareness, CoInitializeEx (COM is still required
 │                           for the DirectShow device enumeration), the crash filter
 │                           (WriteCrashLog → crash.log via DbgHelp), then QApplication,
-│                           Theme::Apply, Application::InitializeQt, and a QTimer driving
-│                           TickOnce. Timer interval follows what the last tick did: 0
-│                           while the viewport presented (its vsync Present paces the
-│                           loop), 16 ms when it did not (the empty state, where nothing
-│                           else would pace it and 0 would spin a core).
+│                           Theme::Apply, Application::InitializeQt, then the frame pacer
+│                           (see "Frame Pacing" below) and the InputLatencyFilter that
+│                           feeds FrameProfiler's InputLatency row.
+├── FrameProfiler.{cpp,h} - Permanent, off unless SHADERPLAYER_PROFILE=1 is in the
+│                           environment at startup (read once). SP_PROFILE(kSection) times
+│                           a scope; EndFrame() appends one block to profile.log in the
+│                           working directory every 5 s. GUI-thread only, no locking, no
+│                           allocation, fixed-size accumulators. Its output format is
+│                           parsed by tools/measure_responsiveness.ps1, so changing a
+│                           section name or a column width breaks the harness.
 ├── Common.h              - Shared types: VideoFrame, ShaderPreset, RecordingSettings,
 │                           AppConfig (shaderDirectory default = "shaders"), PlaybackState,
 │                           Keyframe, KeyframeTimeline, BezierHandles, InterpolationMode
@@ -128,17 +133,20 @@ src/ui/
 ├── Theme.{h,cpp}         - The single owner of colour, type and motion for the C++ side,
 │                           mirroring resources/shaderplayer.qss. Apply() sets Fusion, the
 │                           QPalette, the application font, and the stylesheet, in that
-│                           order. Motion(ms) returns 0 under AppConfig::reducedMotion.
+│                           order. kMotionBase/kMotionHover and the easing curves are
+│                           plain constants; there is no runtime motion switch.
 ├── MainWindow.{h,cpp}    - QMainWindow shell: menu bar, eight RegionDocks, and a
 │                           QStackedWidget central area (index 0 ViewportWidget, index 1
 │                           the empty state). Owns the refresh contract (below) and routes
 │                           keyPressEvent into Application::HandleKeyboardShortcuts.
-│                           RegionDock carries one region's hue on four channels: a tinted
-│                           icon, the top hairline, the title colour, and a hover glow.
+│                           RegionDock carries one region's hue on two always-on channels:
+│                           a tinted title-bar glyph and the hairline above the panel body.
+│                           Nothing responds to hover or focus, deliberately.
 ├── ViewportWidget.{h,cpp}- The one surface Qt must not paint: WA_PaintOnScreen +
 │                           WA_NativeWindow, paintEngine() returns nullptr, and its own
 │                           IDXGISwapChain1 from winId(). RenderAndPresent() letterboxes
-│                           via BlitDisplayToRect and returns whether it presented.
+│                           via BlitDisplayToRect and returns whether it presented. The
+│                           swap chain is frame-latency waitable; see "Frame Pacing".
 ├── EditorPanel, LibraryPanel, ParamsPanel, KeyframeDetail, BezierEditor,
 │   TransportPanel, RecordingPanel, NoisePanel, SpoutPanel, AudioPanel
 │                         - One class per dock, each taking SP::Application& and calling
@@ -167,6 +175,19 @@ src/ui/
 
 Every `SetActivePreset` call site owes `RefreshParameters()` and `Application::OnParamChanged()`
 (see "ShaderManager API"); a site that also adds or renames a preset owes `RefreshLibrary()`.
+
+**"Is there a picture" is `decoder.IsOpen() || active != nullptr`, and two places decide it
+independently.** Any active shader draws with no video open: a generative one makes its
+own image, an audio visualiser has its idle form, a video effect renders whatever it makes
+of an unbound `t0` (black, until footage opens). `t0` is deliberately left unbound and no
+test pattern is generated. The two sites are `MainWindow::Tick()` (which page of the
+central stack) and `TransportPanel::SyncPage()` (idle page versus the shader page carrying
+the output-resolution combo, the elapsed clock, and enabled Play/Stop). **They must stay in
+step**: gating one on `isGenerative` while the other is not leaves an audio visualiser
+rendering and animating above a dock that says there is nothing to play, with the pause
+verb greyed out. `Application::ProcessFrame` is the third half of it: with no decoder open
+it advances `m_generativeTime` unless the state is explicitly `Paused`, since `Stopped` is
+where the app starts and where `CloseVideo` leaves it.
 
 ### Shader System
 
@@ -285,6 +306,35 @@ friends, which `windeployqt` does not deploy and which exist only on machines wi
 Windows SDK installed. `windows-msvc-debug` therefore targets a separate `build-debug/` so
 the two cannot clobber each other; use it to step through code, not to give to anyone.
 
+### When the cache goes wrong
+
+`build/CMakeCache.txt` is the single thing that decides what the build actually is, and two
+failure modes leave it lying. Both produce an exe that links and runs.
+
+**Wrong build type.** VS Code's CMake Tools configures the folder it is pointed at, which
+writes `CMAKE_BUILD_TYPE=Debug` into `build/CMakeCache.txt` and leaves it there. The
+symptom is the post-build deploy failing with `windeployqt failed (Exit code 0xc0000409):
+Broken filename passed to function` after a link that succeeded. Check with
+`grep CMAKE_BUILD_TYPE build/CMakeCache.txt` and re-run `cmake --preset windows-msvc`.
+
+**Blanked compiler flags.** `CMAKE_CXX_FLAGS` and `CMAKE_CXX_FLAGS_<CONFIG>` are
+initialised by CMake exactly once, when the cache entry is first created, and never again.
+A cache whose entries have been emptied therefore **cannot be repaired by re-running the
+preset** — the empty value is a valid cached value and CMake honours it. The build then
+drops `/O2`, `/EHsc`, `/Zi` and `/DNDEBUG` all at once, giving an unoptimised binary with
+no debug symbols, live `assert()`s and no unwind semantics, under a `RelWithDebInfo` name.
+The only outward sign is `warning C4530: C++ exception handler used, but unwind semantics
+are not enabled` from `<chrono>` in every translation unit. A configure-time guard in
+`CMakeLists.txt` now fails with `FATAL_ERROR` on this rather than letting it build.
+
+The correct values on this toolchain are `/DWIN32 /D_WINDOWS /EHsc` and
+`/Zi /O2 /Ob1 /DNDEBUG`. **The fix is to delete `build/CMakeCache.txt` and
+`build/CMakeFiles/` and reconfigure** — not to re-run the preset over the top. Keep
+`build/_deps/` and nothing re-downloads; keep `build/config.json`, which is the user's
+presets, keybindings and layout.
+
+Any performance number taken from `build/` is worthless until both checks pass.
+
 Configure, then build:
 
 ```
@@ -372,12 +422,49 @@ already records each dock's visibility.
 
 ## Development Notes
 
+### Frame Pacing
+
+The loop is paced off the viewport's swap chain, not off a blocking `Present`.
+`ViewportWidget::CreateSwapChain` asks for `DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT`,
+sets `SetMaximumFrameLatency(1)`, and exposes the handle via `FrameLatencyWaitable()`.
+`WinMain` wraps that handle in a `QWinEventNotifier`, so the wait happens inside the Qt
+event loop's own `MsgWaitForMultipleObjectsEx` alongside the window's messages and input
+is dispatched the moment it arrives. This is the whole difference between a sluggish
+window and a responsive one: the GUI thread used to sit inside `Present(1, 0)` for ~14 ms
+of every 16.7 ms frame, and input waited behind it.
+
+Three things are load-bearing:
+
+- **`ResizeBuffers` must pass the same flag.** Passing 0 silently drops the waitable
+  object on the first resize and the loop falls back to the idle timer for the rest of
+  the session.
+- **The idle timer still exists** (`kIdlePollMs`, 16 ms) and takes over whenever a tick
+  did not present. With no video and no active shader nothing presents, no frame retires,
+  and the handle would either stall the loop or spin it. The tick hands pacing back to
+  the notifier on the first frame that presents again.
+- **A failure to obtain the handle is not fatal.** `m_frameLatencyWaitable` stays null and
+  the timer alone drives the loop.
+
+`Present(1, 0)` keeps its sync interval: the waitable object has already absorbed the
+latency by the time the tick runs, so the call returns without blocking, and the interval
+is what keeps the picture tear-free.
+
+Profile it with `pwsh -File tools/measure_responsiveness.ps1` (see `FrameProfiler` in the
+component list). `tools/build.ps1` wraps the documented MSVC + Qt + CMake build line.
+
 ### Render Loop (RenderFrame)
 
 `RenderFrame()` returns whether the viewport presented; `TickOnce()` passes that up to
-WinMain's timer, which is where the loop's pacing comes from. Each frame:
+`WinMain`'s pacer. Each frame:
 
-1. `UploadVideoFrame()` — maps video texture and DMA-copies current VideoFrame (RGBA8)
+1. `UploadVideoFrame()`, but **only when `m_videoUploadPending` is set**. The texture keeps
+   its contents between frames, so re-uploading identical pixels every display frame costs
+   ~8 MB of PCIe traffic per frame at 1080p and buys nothing. The flag is set at every site
+   that writes `m_currentFrame` (both `ProcessFrame` decode branches, `OpenVideo`, `Stop`,
+   `SeekTo`) and cleared by the upload. **Adding a sixth decode site without setting it
+   leaves a stale frame on screen.** It is deliberately separate from `m_newVideoFrame`,
+   which `ProcessFrame` resets every tick: three of the five sites are UI handlers that run
+   between ticks.
 2. `BeginFrame()` — updates cbuffer, sets the **entire** PS pipeline state including
    `m_activePS`. Binds no render target: every draw path below binds its own.
 3. `RenderToDisplay()` — binds `m_displayRTV`, calls `Draw(3,0)`, and leaves it bound
@@ -385,8 +472,8 @@ WinMain's timer, which is where the loop's pacing comes from. Each frame:
    second swap chain
 5. `SpoutOutput::SendFrame(GetDisplayTexture())`
 6. Recording capture, gated on `m_newVideoFrame`, then a restoring `BeginFrame()`
-7. `MainWindow::Tick()` — the viewport blits and presents on its own swap chain (the vsync
-   block that paces the loop), and the live meters move
+7. `MainWindow::Tick()` — the viewport blits and presents on its own swap chain, and the
+   live meters move
 
 `BlitDisplayTo(rtv, w, h)` — draws `m_displaySRV` via passthrough PS into the given RTV,
 then restores the main viewport, `m_activePS`, and `m_videoSRV` as t0. **The caller's RTV
@@ -554,6 +641,10 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
 - `SetActivePreset` is called from `Application.cpp`, `ui/LibraryPanel.cpp`, `ui/MainWindow.cpp` and `ui/dialogs/NewShaderDialog.cpp` — every new call site owes `OnParamChanged()` and `MainWindow::RefreshParameters()`, plus `RefreshLibrary()` if it also added or renamed a preset (see "The refresh contract")
 - `GetActivePresetIndex()` returns `int` (−1 = passthrough); `GetActivePreset()` returns `ShaderPreset*` (null when passthrough). Never guess `GetActiveIndex` — it doesn't exist.
+- `CheckForChanges()` is called every frame but does real work at most every 500 ms
+  (`m_lastWatchCheck`). Without the throttle it runs `exists` + `last_write_time` on all 45
+  presets per frame, which measured 1.7 ms of every frame. Do not remove it to make hot
+  reload feel snappier; nobody saves a file faster than twice a second.
 
 ## Application API
 

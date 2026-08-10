@@ -197,7 +197,6 @@ struct AppConfig {
     std::string shaderDirectory = "shaders";
     std::string layoutsDirectory = "layouts";
     bool timeDisplayFrames = false;  // true = show frame numbers; false = show seconds
-    bool reducedMotion = false;  // suppresses all UI animation; Qt has no system equivalent
     std::string windowGeometry;  // base64 QMainWindow::saveGeometry(); empty on first run
     std::string windowState;     // base64 QMainWindow::saveState();    empty on first run
 

@@ -437,16 +437,8 @@ void RecordingPanel::SyncArmed(bool recording)
     m_toggle->style()->polish(m_toggle);
 
     if (recording) {
-        // Theme::Motion is the reduced-motion switch: it returns 0, and the border is then
-        // simply held at full brightness rather than losing the signal along with the
-        // movement.
-        const int half = Theme::Motion(Theme::kMotionBase);
-        if (half > 0) {
-            m_pulse->setDuration(half * 2);
-            m_pulse->start();
-        } else {
-            m_pulseT = 1.0;
-        }
+        m_pulse->setDuration(Theme::kMotionBase * 2);
+        m_pulse->start();
         SyncStatus();
     } else {
         m_pulse->stop();

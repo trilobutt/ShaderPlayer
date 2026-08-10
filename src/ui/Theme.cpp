@@ -15,9 +15,6 @@ namespace SP::Theme {
 
 namespace {
 
-// GUI thread only; nothing else touches it.
-bool g_reducedMotion = false;
-
 // Region glyphs are painted at twice the 16px toolbar size and scaled down by QIcon.
 constexpr int kIconPx = 32;
 
@@ -109,16 +106,6 @@ QPainterPath GlyphPath(const QString& name)
 }
 
 }  // namespace
-
-int Motion(int ms)
-{
-    return g_reducedMotion ? 0 : ms;
-}
-
-void SetReducedMotion(bool on)
-{
-    g_reducedMotion = on;
-}
 
 QIcon RegionIcon(const QString& name, const QColor& tint)
 {
