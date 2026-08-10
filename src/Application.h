@@ -7,13 +7,14 @@
 #include "D3D11Renderer.h"
 #include "ShaderManager.h"
 #include "VideoEncoder.h"
-#include "UIManager.h"
 #include "ConfigManager.h"
 #include "WorkspaceManager.h"
 #include "VideoOutputWindow.h"
 #include "SpoutOutput.h"
 
 namespace SP {
+
+class MainWindow;
 
 class Application {
 public:
@@ -24,22 +25,29 @@ public:
     Application(const Application&) = delete;
     Application& operator=(const Application&) = delete;
 
-    // Initialization
-    bool Initialize(HINSTANCE hInstance, int nCmdShow);
+    // Initialization and per-frame entry points. WinMain constructs the QApplication,
+    // calls InitializeQt() (which builds MainWindow — a QWidget, so the QApplication
+    // must already exist), and drives TickOnce() from a zero-interval QTimer.
+    bool InitializeQt();
     void Shutdown();
+    // ProcessFrame(); RenderFrame(); returns whether the viewport actually presented a
+    // frame this tick — WinMain's QTimer uses it to decide its own next interval, since
+    // a vsync Present already paces the common case and a zero interval must not be
+    // added on top of it.
+    bool TickOnce();
+    MainWindow* GetMainWindow() const;
 
-    // Main loop
-    int Run();
-    void RequestExit() { m_exitRequested = true; }
+    // Ends the event loop. Reached from File > Exit and from MainWindow::closeEvent.
+    void RequestExit();
 
     // Video operations
     bool OpenVideo(const std::string& filepath);
     void CloseVideo();
     void OpenVideoDialog();
 
-    // Live capture (webcam / RTSP stream)
+    // Live capture (webcam / RTSP stream). The dialog that chooses the device belongs
+    // to the window (MainWindow::OnOpenCapture); this is only the open itself.
     bool OpenCapture(const std::string& deviceOrUrl, bool isDshow = true);
-    void OpenCaptureDialog();
 
     // Playback control
     void Play();
@@ -59,7 +67,8 @@ public:
     // Recording
     bool StartRecording(const RecordingSettings& settings);
     void StopRecording();
-    void OpenRecordingOutputDialog(char* pathBuf, size_t bufSize);
+    // Returns the chosen path, or an empty string if the user cancelled.
+    std::string OpenRecordingOutputDialog(const std::string& currentPath);
 
     // Configuration
     void SaveConfig();
@@ -96,7 +105,6 @@ public:
     D3D11Renderer& GetRenderer() { return m_renderer; }
     ShaderManager& GetShaderManager() { return *m_shaderManager; }
     VideoEncoder& GetEncoder() { return m_encoder; }
-    UIManager& GetUI() { return *m_uiManager; }
     WorkspaceManager& GetWorkspaceManager() { return *m_workspaceManager; }
 
     // Key name helper
@@ -114,42 +122,26 @@ public:
                                      int excludeWorkspaceIdx,
                                      bool excludePassthrough = false) const;
 
-    // Queues a workspace preset to be applied before the next ImGui frame. Safe to
-    // call from anywhere, including from inside UIManager's draw code.
+    // Restores a workspace preset's dock layout and panel visibility immediately.
+    // QMainWindow::restoreState() is atomic and safe to call from anywhere, so unlike
+    // the shell it replaces this needs no deferral to a between-frames queue.
     void LoadWorkspacePreset(int index);
 
-    // Called by UIManager after any shader parameter widget changes value.
+    // Called after any shader parameter widget changes value.
     void OnParamChanged();
 
-private:
-    // Window handling
-    static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    bool CreateMainWindow(HINSTANCE hInstance, int nCmdShow);
-    void HandleDroppedFiles(HDROP hDrop);
+    // The single dispatch for every keyboard shortcut in the product, expressed in
+    // Win32 VK codes because that is what every stored binding is. Invoked from
+    // MainWindow::keyPressEvent, which maps the Qt key first (see ui/KeyMap.h).
     void HandleKeyboardShortcuts(UINT vkCode);
+
+private:
     static void PackParamValues(const ShaderPreset& preset, float out[32]);
     void EvaluateKeyframes();
 
     // Frame processing
     void ProcessFrame();
-    void RenderFrame();
-
-    // Performs the workspace preset load queued by LoadWorkspacePreset(). MUST be
-    // called outside NewFrame()..Render() (see the comment on m_pendingWorkspace).
-    void ApplyPendingWorkspacePreset();
-
-    // Window
-    HWND m_hwnd = nullptr;
-    int m_windowWidth = 1280;
-    int m_windowHeight = 720;
-
-    // Workspace preset index queued for loading, -1 when none is pending.
-    // ImGui::LoadIniSettingsFromMemory() destroys every dock node and clears every
-    // window's DockId, so calling it between NewFrame() and Render() leaves the
-    // in-flight frame holding freed nodes and drops the panels out of the layout.
-    // The request is therefore always deferred to ApplyPendingWorkspacePreset().
-    int m_pendingWorkspace = -1;
+    bool RenderFrame();      // returns whether the viewport presented (see TickOnce)
 
     // Components
     AudioAnalyzer m_audioAnalyzer;
@@ -159,7 +151,11 @@ private:
     D3D11Renderer m_renderer;
     std::unique_ptr<ShaderManager> m_shaderManager;
     VideoEncoder m_encoder;
-    std::unique_ptr<UIManager> m_uiManager;
+    // The Qt shell window. Forward-declared above so Application.h doesn't pull in Qt
+    // headers. Shutdown() resets it explicitly, and does so before m_renderer.Shutdown():
+    // the viewport inside it owns a swap chain on the renderer's device, and that swap
+    // chain has to go before the device it was created from.
+    std::unique_ptr<MainWindow> m_mainWindow;
     ConfigManager m_configManager;
     std::unique_ptr<WorkspaceManager> m_workspaceManager;
     VideoOutputWindow m_videoOutputWindow;

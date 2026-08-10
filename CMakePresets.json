@@ -1,0 +1,30 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC (Ninja, RelWithDebInfo)",
+      "description": "The only supported configuration. Ninja single-config, so there is no --config flag and the exe lands at build/ShaderPlayer.exe.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_PREFIX_PATH": "C:/Qt/6.9.1/msvc2022_64",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-debug",
+      "inherits": "windows-msvc",
+      "displayName": "Windows MSVC (Ninja, Debug)",
+      "description": "Debug links the debug CRT (ucrtbased.dll, msvcp140d.dll), which windeployqt does not deploy and which only exists on machines with the Windows SDK installed. The resulting build/ directory is not distributable. Use it to step through code, not to hand to anyone.",
+      "binaryDir": "${sourceDir}/build-debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-msvc", "configurePreset": "windows-msvc" },
+    { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug" }
+  ]
+}

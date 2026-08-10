@@ -1,10 +1,25 @@
 #include "Application.h"
-#include <commdlg.h>
+#include "ui/MainWindow.h"
+#include "ui/ViewportWidget.h"
 #include <shellapi.h>
-#include <shobjidl.h>
 #include <fstream>
 
+#include <QCoreApplication>
+#include <QFileDialog>
+#include <QString>
+
 namespace SP {
+
+namespace {
+
+// Every notice Application raises goes to the window's toast stack. Null-tolerant
+// because OpenVideo and friends are reachable from InitializeQt, and because the
+// crash handler's Shutdown path runs with the window already gone.
+void Toast(MainWindow* window, const std::string& message) {
+    if (window) window->ShowToast(QString::fromStdString(message));
+}
+
+}  // namespace
 
 Application::Application() = default;
 
@@ -12,17 +27,26 @@ Application::~Application() {
     Shutdown();
 }
 
-bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
+// Precondition: a QApplication must already exist before this is called — a QWidget
+// (MainWindow, and everything MainWindow builds) cannot be constructed without one.
+// WinMain constructs it first and calls this.
+bool Application::InitializeQt() {
     // Load configuration
     m_configManager.Load(ConfigManager::GetDefaultConfigPath());
 
-    // Create window
-    if (!CreateMainWindow(hInstance, nCmdShow)) {
-        return false;
-    }
-
-    // Initialize D3D11 renderer
-    if (!m_renderer.Initialize(m_hwnd, m_windowWidth, m_windowHeight)) {
+    // Initialize D3D11 — device only; every swap chain in the process belongs to the
+    // window that presents it (ViewportWidget, VideoOutputWindow).
+    //
+    // No window is needed here, and that is what lets MainWindow be constructed *after*
+    // the subsystems its panels read. Building the window first is an access violation:
+    // LibraryPanel's constructor calls Refresh(), which dereferences GetShaderManager(),
+    // and that unique_ptr is not filled until further down.
+    //
+    // The size is provisional. ViewportWidget::resizeEvent calls D3D11Renderer::Resize
+    // with the real viewport size as soon as the window lays out, and the display texture
+    // is sized per frame from the content resolution regardless.
+    if (!m_renderer.Initialize(m_configManager.GetConfig().generativeWidth,
+                               m_configManager.GetConfig().generativeHeight)) {
         MessageBoxA(nullptr, "Failed to initialize D3D11", "Error", MB_OK | MB_ICONERROR);
         return false;
     }
@@ -45,12 +69,22 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     m_shaderManager = std::make_unique<ShaderManager>(m_renderer);
     m_shaderManager->EnableFileWatching(true);
 
-    // Create UI manager
-    m_uiManager = std::make_unique<UIManager>(*this);
-    if (!m_uiManager->Initialize(m_hwnd, m_renderer.GetDevice(), m_renderer.GetContext())) {
-        MessageBoxA(nullptr, "Failed to initialize UI", "Error", MB_OK | MB_ICONERROR);
-        return false;
-    }
+    // Workspace manager before the window, for the same reason the shader manager is:
+    // GetWorkspaceManager() dereferences this pointer and the menu reads it.
+    // Initialize handles relative-path resolution internally.
+    m_workspaceManager = std::make_unique<WorkspaceManager>();
+    m_workspaceManager->Initialize(m_configManager.GetConfig().layoutsDirectory);
+
+    // Create the window. Everything its panels read on construction — the renderer,
+    // the shader manager, the workspace manager, Spout — now exists. The preset list is
+    // still empty at this point; the RefreshAll() at the end of this function is what
+    // populates the panels once the presets are loaded.
+    m_mainWindow = std::make_unique<MainWindow>(*this);
+    m_mainWindow->show();
+
+    // Viewport's own swap chain, from the renderer's device. Must run after show():
+    // it needs a realised native handle from winId().
+    m_mainWindow->Viewport()->CreateSwapChain();
 
     // Load shader presets from config.
     // LoadShaderMetadataFromFile reads+parses ISF without compiling; AddPreset compiles
@@ -100,20 +134,6 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
     // Create shaders directory if it doesn't exist
     std::filesystem::create_directories(m_configManager.GetConfig().shaderDirectory);
 
-    // Initialise workspace manager — Initialize handles relative-path resolution internally
-    m_workspaceManager = std::make_unique<WorkspaceManager>();
-    m_workspaceManager->Initialize(m_configManager.GetConfig().layoutsDirectory);
-
-    // Fresh install (no imgui.ini yet): apply the built-in Default workspace so
-    // every release starts on the shipped layout instead of floating windows.
-    // LoadIniSettingsFromMemory sets ImGui's SettingsLoaded flag, so the first
-    // NewFrame will not overwrite this with disk contents.
-    if (!m_uiManager->HadSavedLayout()) {
-        PanelVisibility panels;
-        if (m_workspaceManager->LoadPreset(0, panels))
-            m_uiManager->ApplyVisibility(panels);
-    }
-
     // Open last video if available
     if (!m_configManager.GetConfig().lastOpenedVideo.empty()) {
         OpenVideo(m_configManager.GetConfig().lastOpenedVideo);
@@ -131,6 +151,12 @@ bool Application::Initialize(HINSTANCE hInstance, int nCmdShow) {
 
     m_lastFrameTime = std::chrono::steady_clock::now();
 
+    // Populate the editor, library and parameters panels from the state just restored
+    // above; without this the editor opens empty and the parameters panel unpopulated
+    // even when an active preset carried over. Placed last, alongside OnParamChanged()
+    // below, since both need the fully-restored ShaderManager/workspace state above.
+    m_mainWindow->RefreshAll();
+
     // Upload initial param values to GPU if a preset is already active
     OnParamChanged();
 
@@ -143,166 +169,16 @@ void Application::Shutdown() {
 
     m_audioPlayer.Shutdown();
     m_spoutOutput.Shutdown();
-    m_uiManager.reset();
+
+    // Before m_renderer.Shutdown(): the window owns the viewport, the viewport owns a
+    // swap chain created from the renderer's device, and a swap chain must not outlive
+    // the device it came from. Destroying the window here also takes every panel with
+    // it, so nothing is left holding a reference into the components released below.
+    m_mainWindow.reset();
+
     m_shaderManager.reset();
     m_renderer.Shutdown();
     m_decoder.Close();
-
-    if (m_hwnd) {
-        DestroyWindow(m_hwnd);
-        m_hwnd = nullptr;
-    }
-}
-
-bool Application::CreateMainWindow(HINSTANCE hInstance, int nCmdShow) {
-    // Load the application icon from embedded resources (IDI_APPICON = 101)
-    HICON hIcon   = static_cast<HICON>(LoadImageW(hInstance, MAKEINTRESOURCEW(101),
-                        IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED));
-    HICON hIconSm = static_cast<HICON>(LoadImageW(hInstance, MAKEINTRESOURCEW(101),
-                        IMAGE_ICON, GetSystemMetrics(SM_CXSMICON),
-                        GetSystemMetrics(SM_CYSMICON), LR_SHARED));
-
-    // Register window class
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = hInstance;
-    wc.hIcon   = hIcon;
-    wc.hIconSm = hIconSm;
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.lpszClassName = L"ShaderPlayerWindow";
-    RegisterClassExW(&wc);
-
-    // Calculate window size for desired client area
-    RECT rc = { 0, 0, m_windowWidth, m_windowHeight };
-    AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-
-    // Create window
-    m_hwnd = CreateWindowExW(
-        WS_EX_ACCEPTFILES,
-        L"ShaderPlayerWindow",
-        L"Shader Player",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT,
-        rc.right - rc.left, rc.bottom - rc.top,
-        nullptr, nullptr, hInstance, this
-    );
-
-    if (!m_hwnd) {
-        return false;
-    }
-
-    // Explicitly push the icons to the window handle — needed for the taskbar
-    // on some Windows 11 configurations even when set on the window class.
-    if (hIcon)
-        SendMessageW(m_hwnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(hIcon));
-    if (hIconSm)
-        SendMessageW(m_hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hIconSm));
-
-    ShowWindow(m_hwnd, nCmdShow);
-    UpdateWindow(m_hwnd);
-
-    return true;
-}
-
-LRESULT CALLBACK Application::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    Application* app = nullptr;
-
-    if (msg == WM_NCCREATE) {
-        auto* cs = reinterpret_cast<CREATESTRUCT*>(lParam);
-        app = static_cast<Application*>(cs->lpCreateParams);
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
-    } else {
-        app = reinterpret_cast<Application*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-    }
-
-    if (app) {
-        return app->HandleMessage(hwnd, msg, wParam, lParam);
-    }
-
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-LRESULT Application::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    // Let ImGui handle messages first
-    if (m_uiManager && m_uiManager->HandleMessage(hwnd, msg, wParam, lParam)) {
-        return 0;
-    }
-
-    switch (msg) {
-    case WM_SIZE:
-        if (wParam != SIZE_MINIMIZED && m_renderer.IsInitialized()) {
-            m_windowWidth = LOWORD(lParam);
-            m_windowHeight = HIWORD(lParam);
-            m_renderer.Resize(m_windowWidth, m_windowHeight);
-        }
-        return 0;
-
-    case WM_DROPFILES:
-        HandleDroppedFiles(reinterpret_cast<HDROP>(wParam));
-        return 0;
-
-    case WM_KEYDOWN: {
-        // Bit 30 of lParam = previous key state: 1 means auto-repeat, ignore it.
-        // Without this, holding Space fires TogglePlayback multiple times, leaving
-        // the player in the wrong state (e.g. intended pause → ends up playing).
-        if (lParam & (1 << 30)) return 0;
-
-        UINT vk = static_cast<UINT>(wParam);
-        // F-keys and modifier-key combos always fire so panel toggles and user
-        // shader keybinds work even when the editor has focus.
-        bool hasModifier = (GetKeyState(VK_CONTROL) & 0x8000) != 0
-                        || (GetKeyState(VK_SHIFT)   & 0x8000) != 0
-                        || (GetKeyState(VK_MENU)    & 0x8000) != 0;
-        bool alwaysHandle = (vk >= VK_F1 && vk <= VK_F12) || hasModifier;
-        if (alwaysHandle || !m_uiManager || !m_uiManager->WantsCaptureKeyboard()) {
-            HandleKeyboardShortcuts(vk);
-        }
-        return 0;
-    }
-
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-    }
-
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-void Application::HandleDroppedFiles(HDROP hDrop) {
-    UINT fileCount = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
-    if (fileCount > 0) {
-        wchar_t filepath[MAX_PATH];
-        DragQueryFileW(hDrop, 0, filepath, MAX_PATH);
-        
-        // Convert to UTF-8
-        int len = WideCharToMultiByte(CP_UTF8, 0, filepath, -1, nullptr, 0, nullptr, nullptr);
-        std::string utf8Path(len, 0);
-        WideCharToMultiByte(CP_UTF8, 0, filepath, -1, utf8Path.data(), len, nullptr, nullptr);
-        utf8Path.resize(len - 1);  // Remove null terminator
-
-        // Check if it's a shader file
-        std::string ext = std::filesystem::path(utf8Path).extension().string();
-        for (char& c : ext) c = static_cast<char>(std::tolower(c));
-
-        if (ext == ".hlsl" || ext == ".fx" || ext == ".ps") {
-            // Load as shader
-            ShaderPreset preset;
-            if (m_shaderManager->LoadShaderFromFile(utf8Path, preset)) {
-                int idx = m_shaderManager->AddPreset(preset);
-                m_shaderManager->SetActivePreset(idx);
-                m_uiManager->ResetKeyframeSelection();
-                OnParamChanged();
-                m_uiManager->SetEditorContent(preset.source);
-                m_uiManager->ShowNotification("Loaded shader: " + preset.name);
-            }
-        } else {
-            // Try to open as video
-            OpenVideo(utf8Path);
-        }
-    }
-    DragFinish(hDrop);
 }
 
 void Application::HandleKeyboardShortcuts(UINT vkCode) {
@@ -317,32 +193,39 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         return;
     case VK_ESCAPE:
         m_shaderManager->SetPassthrough();
-        return;
-    case VK_F1:
-        if (m_uiManager) m_uiManager->ToggleEditor();
-        return;
-    case VK_F2:
-        if (m_uiManager) m_uiManager->ToggleLibrary();
-        return;
-    case VK_F3:
-        if (m_uiManager) m_uiManager->ToggleTransport();
-        return;
-    case VK_F4:
-        if (m_uiManager) m_uiManager->ToggleRecording();
-        return;
-    case VK_F5:
-        if (m_uiManager) {
-            CompileCurrentShader(m_uiManager->GetEditorContent());
+        // The library and parameters panels are retained widgets, so a preset change
+        // made from outside them has to be pushed; the Shader menu's Reset to
+        // Passthrough item does exactly this.
+        if (m_mainWindow) {
+            m_mainWindow->RefreshLibrary();
+            m_mainWindow->RefreshParameters();
         }
         return;
+    case VK_F1:
+        if (m_mainWindow) m_mainWindow->ToggleEditorDock();
+        return;
+    case VK_F2:
+        if (m_mainWindow) m_mainWindow->ToggleLibraryDock();
+        return;
+    case VK_F3:
+        if (m_mainWindow) m_mainWindow->ToggleTransportDock();
+        return;
+    case VK_F4:
+        if (m_mainWindow) m_mainWindow->ToggleRecordingDock();
+        return;
+    case VK_F5:
+        // Through the window, not straight into CompileCurrentShader: the editor owns
+        // the document being compiled and shows the result in its own status line.
+        if (m_mainWindow) m_mainWindow->CompileShader();
+        return;
     case VK_F6:
-        m_uiManager->ToggleKeybindingsPanel();
+        if (m_mainWindow) m_mainWindow->ShowKeybindingsReference();
         return;
     case VK_F7:
         ToggleVideoOutputWindow();
         return;
     case VK_F8:
-        if (m_uiManager) m_uiManager->ToggleSpoutPanel();
+        if (m_mainWindow) m_mainWindow->ToggleSpoutDock();
         return;
     case VK_F9:
         if (m_encoder.IsRecording()) {
@@ -359,8 +242,8 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         }
         return;
     case 'S':
-        if (ctrl && m_uiManager) {
-            SaveCurrentShader(m_uiManager->GetEditorContent());
+        if (ctrl && m_mainWindow) {
+            SaveCurrentShader(m_mainWindow->EditorSource().toStdString());
         }
         return;
     }
@@ -375,6 +258,10 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
             if ((cfg.passthroughModifiers & MOD_ALT)     && !alt)   modifiersMatch = false;
             if (modifiersMatch && vkCode == static_cast<UINT>(cfg.passthroughKey)) {
                 m_shaderManager->SetPassthrough();
+                if (m_mainWindow) {
+                    m_mainWindow->RefreshLibrary();
+                    m_mainWindow->RefreshParameters();
+                }
                 return;
             }
         }
@@ -392,10 +279,15 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
 
         if (modifiersMatch && vkCode == static_cast<UINT>(preset->shortcutKey)) {
             m_shaderManager->SetActivePreset(i);
-            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
-            m_uiManager->SetEditorContent(preset->source);
-            m_uiManager->ShowNotification("Switched to: " + preset->name);
+            if (m_mainWindow) {
+                // RefreshAll covers all three the old path did by hand: it rebuilds the
+                // parameters panel (which clears the keyframe selection), reloads the
+                // editor document, and re-marks the library's active row.
+                m_mainWindow->RefreshAll();
+                m_mainWindow->ShowToast(
+                    QString::fromStdString("Switched to: " + preset->name));
+            }
             return;
         }
     }
@@ -417,30 +309,24 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
     }
 }
 
-int Application::Run() {
-    MSG msg = {};
+void Application::RequestExit() {
+    if (m_exitRequested) return;
+    m_exitRequested = true;
+    QCoreApplication::quit();
+}
 
-    while (!m_exitRequested) {
-        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (msg.message == WM_QUIT) {
-                m_exitRequested = true;
-                break;
-            }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
+// One frame, driven by WinMain's zero-interval QTimer. quit() only takes effect when
+// the event loop next unwinds, so the timer can still fire after the exit request —
+// and a frame rendered into a window that is on its way out is a frame into freed
+// swap chain state.
+bool Application::TickOnce() {
+    if (m_exitRequested) return false;
+    ProcessFrame();
+    return RenderFrame();
+}
 
-        if (m_exitRequested) break;
-
-        // Between frames: the only point at which ImGui's settings/dock state can
-        // be replaced wholesale without corrupting an in-flight frame.
-        ApplyPendingWorkspacePreset();
-
-        ProcessFrame();
-        RenderFrame();
-    }
-
-    return static_cast<int>(msg.wParam);
+MainWindow* Application::GetMainWindow() const {
+    return m_mainWindow.get();
 }
 
 void Application::ProcessFrame() {
@@ -632,7 +518,7 @@ void Application::EvaluateKeyframes() {
     if (anyChanged) OnParamChanged();
 }
 
-void Application::RenderFrame() {
+bool Application::RenderFrame() {
     // Upload current video frame
     if (!m_currentFrame.data[0].empty()) {
         m_renderer.UploadVideoFrame(m_currentFrame);
@@ -664,9 +550,9 @@ void Application::RenderFrame() {
         m_renderer.SetAudioData(nullptr);
     }
 
-    // Set up D3D11 pipeline and clear backbuffer to black
+    // Set up the D3D11 pixel-shader pipeline state everything below depends on
     m_renderer.BeginFrame();
-    // Render video+shader to the display texture; ImGui::Image picks it up from there
+    // Render video+shader to the display texture; every consumer blits from there
     m_renderer.RenderToDisplay();
 
     // Blit processed output to the detached video window (if open)
@@ -676,10 +562,10 @@ void Application::RenderFrame() {
     // Share processed frame via Spout (GPU texture copy; does not block the pipeline)
     m_spoutOutput.SendFrame(m_renderer.GetDisplayTexture());
 
-    // Capture recording frame here, BEFORE ImGui renders. ImGui overwrites all D3D11
-    // pipeline state (VS, PS, CBs, SRVs), so RenderToTexture must run while the video
-    // pipeline state set by BeginFrame() is still active. Only capture on new video
-    // frames to match the encoder's configured framerate.
+    // Capture the recording frame here: after RenderToDisplay, so the display texture
+    // holds this frame's processed picture, and before any later BeginFrame that would
+    // move the pipeline on. Only capture on new video frames, to match the encoder's
+    // configured framerate.
     if (m_encoder.IsRecording() && m_newVideoFrame) {
         if (m_renderer.RenderToTexture()) {
             std::vector<uint8_t> frameData;
@@ -688,14 +574,9 @@ void Application::RenderFrame() {
                 m_encoder.SubmitFrame(frameData, width, height);
             }
         }
-        // RenderToTexture changes the active RT and viewport; restore before ImGui
+        // RenderToTexture changes the active RT and viewport; put the pipeline back
         m_renderer.BeginFrame();
     }
-
-    // Render UI
-    m_uiManager->BeginFrame();
-    m_uiManager->Render();
-    m_uiManager->EndFrame();
 
     // Reset event params after they have been visible for one frame
     if (m_eventResetPending) {
@@ -712,8 +593,10 @@ void Application::RenderFrame() {
         }
     }
 
-    // Present
-    m_renderer.Present(true);
+    // The window's frame: the viewport presents the display texture on its own swap
+    // chain (which is where this loop's vsync pacing comes from), and the live meters
+    // move. Last, so everything above has already produced this frame's picture.
+    return m_mainWindow ? m_mainWindow->Tick() : false;
 }
 
 bool Application::OpenVideo(const std::string& filepath) {
@@ -728,7 +611,7 @@ bool Application::OpenVideo(const std::string& filepath) {
     m_renderer.ReleaseVideoTexture();
 
     if (!m_decoder.Open(filepath)) {
-        m_uiManager->ShowNotification("Failed to open video: " + filepath);
+        Toast(m_mainWindow.get(), "Failed to open video: " + filepath);
         return false;
     }
 
@@ -739,7 +622,8 @@ bool Application::OpenVideo(const std::string& filepath) {
     m_decoder.DecodeNextFrame(m_currentFrame);
     m_playbackState = PlaybackState::Paused;
 
-    m_uiManager->ShowNotification("Opened: " + std::filesystem::path(filepath).filename().string());
+    Toast(m_mainWindow.get(),
+          "Opened: " + std::filesystem::path(filepath).filename().string());
     return true;
 }
 
@@ -757,19 +641,12 @@ void Application::CloseVideo() {
 }
 
 void Application::OpenVideoDialog() {
-    char filepath[MAX_PATH] = {};
+    const QString filepath = QFileDialog::getOpenFileName(
+        m_mainWindow.get(), QObject::tr("Open Video"), QString(),
+        QStringLiteral("Video Files (*.mp4 *.mov *.avi *.mkv *.webm *.mxf);;All Files (*)"));
+    if (filepath.isEmpty()) return;  // cancelled
 
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = m_hwnd;
-    ofn.lpstrFilter = "Video Files\0*.mp4;*.mov;*.avi;*.mkv;*.webm;*.mxf\0All Files\0*.*\0";
-    ofn.lpstrFile = filepath;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-
-    if (GetOpenFileNameA(&ofn)) {
-        OpenVideo(filepath);
-    }
+    OpenVideo(filepath.toStdString());
 }
 
 bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
@@ -777,7 +654,7 @@ bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     m_generativeTime = 0.0f;
 
     if (!m_decoder.OpenCapture(deviceOrUrl, isDshow)) {
-        m_uiManager->ShowNotification("Failed to open capture: " + deviceOrUrl);
+        Toast(m_mainWindow.get(), "Failed to open capture: " + deviceOrUrl);
         return false;
     }
 
@@ -785,12 +662,8 @@ bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     m_playbackState = PlaybackState::Playing;
     m_lastFrameTime = std::chrono::steady_clock::now();
 
-    m_uiManager->ShowNotification("Live: " + deviceOrUrl);
+    Toast(m_mainWindow.get(), "Live: " + deviceOrUrl);
     return true;
-}
-
-void Application::OpenCaptureDialog() {
-    m_uiManager->ShowCaptureDialog();
 }
 
 void Application::Play() {
@@ -851,12 +724,15 @@ bool Application::CompileCurrentShader(const std::string& source) {
         preset->source = source;
         if (m_shaderManager->RecompilePreset(activeIndex)) {
             m_shaderManager->SetActivePreset(activeIndex);
-            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
-            m_uiManager->ShowNotification("Shader compiled successfully");
+            // A recompile can add, remove or retype parameters, so the panel is rebuilt
+            // rather than merely having its keyframe selection cleared. The editor
+            // document is deliberately left alone: it is the source just compiled.
+            if (m_mainWindow) m_mainWindow->RefreshParameters();
+            Toast(m_mainWindow.get(), "Shader compiled successfully");
             return true;
         } else {
-            m_uiManager->ShowNotification("Shader compilation failed: " +
+            Toast(m_mainWindow.get(), "Shader compilation failed: " +
                 (preset->compileError.empty() ? "unknown error" : preset->compileError.substr(0, 80)));
             return false;
         }
@@ -870,13 +746,18 @@ bool Application::CompileCurrentShader(const std::string& source) {
         auto* added = m_shaderManager->GetPreset(idx);
         if (added && added->isValid) {
             m_shaderManager->SetActivePreset(idx);
-            m_uiManager->ResetKeyframeSelection();
             OnParamChanged();
-            m_uiManager->ShowNotification("Shader compiled successfully");
+            // A preset was added as well as activated, so the library needs rebuilding
+            // too. The editor already holds this source; nothing reloads it.
+            if (m_mainWindow) {
+                m_mainWindow->RefreshLibrary();
+                m_mainWindow->RefreshParameters();
+            }
+            Toast(m_mainWindow.get(), "Shader compiled successfully");
             return true;
         } else {
             m_shaderManager->RemovePreset(idx);
-            m_uiManager->ShowNotification("Shader compilation failed");
+            Toast(m_mainWindow.get(), "Shader compilation failed");
             return false;
         }
     }
@@ -895,7 +776,7 @@ bool Application::SaveCurrentShader(const std::string& source) {
         std::ofstream file(preset->filepath);
         if (file.is_open()) {
             file << source;
-            m_uiManager->ShowNotification("Shader saved: " + preset->name);
+            Toast(m_mainWindow.get(), "Shader saved: " + preset->name);
             return true;
         }
     }
@@ -905,87 +786,80 @@ bool Application::SaveCurrentShader(const std::string& source) {
 }
 
 void Application::SaveShaderAsDialog(const std::string& source) {
-    char filepath[MAX_PATH] = {};
-    
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = m_hwnd;
-    ofn.lpstrFilter = "HLSL Shader\0*.hlsl\0All Files\0*.*\0";
-    ofn.lpstrFile = filepath;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrDefExt = "hlsl";
-    ofn.Flags = OFN_OVERWRITEPROMPT;
+    const QString chosen = QFileDialog::getSaveFileName(
+        m_mainWindow.get(), QObject::tr("Save Shader"), QString(),
+        QStringLiteral("HLSL Shader (*.hlsl);;All Files (*)"));
+    if (chosen.isEmpty()) return;  // cancelled
 
-    if (GetSaveFileNameA(&ofn)) {
-        std::ofstream file(filepath);
-        if (file.is_open()) {
-            file << source;
-            
-            // Update or create preset
-            auto* preset = m_shaderManager->GetActivePreset();
-            if (preset) {
-                preset->filepath = filepath;
-                preset->name = std::filesystem::path(filepath).stem().string();
-            } else {
-                ShaderPreset newPreset;
-                newPreset.filepath = filepath;
-                newPreset.name = std::filesystem::path(filepath).stem().string();
-                newPreset.source = source;
-                m_shaderManager->CompilePreset(newPreset);
-                int idx = m_shaderManager->AddPreset(newPreset);
-                m_shaderManager->SetActivePreset(idx);
-                m_uiManager->ResetKeyframeSelection();
-                OnParamChanged();
-            }
+    std::string filepath = chosen.toStdString();
+    // Win32's OFN_lpstrDefExt auto-appended ".hlsl" when the user typed no extension;
+    // QFileDialog::getSaveFileName has no equivalent, so replicate it here.
+    if (std::filesystem::path(filepath).extension().empty()) {
+        filepath += ".hlsl";
+    }
 
-            m_uiManager->ShowNotification("Shader saved: " + std::string(filepath));
+    std::ofstream file(filepath);
+    if (file.is_open()) {
+        file << source;
+
+        // Update or create preset
+        auto* preset = m_shaderManager->GetActivePreset();
+        if (preset) {
+            preset->filepath = filepath;
+            preset->name = std::filesystem::path(filepath).stem().string();
+        } else {
+            ShaderPreset newPreset;
+            newPreset.filepath = filepath;
+            newPreset.name = std::filesystem::path(filepath).stem().string();
+            newPreset.source = source;
+            m_shaderManager->CompilePreset(newPreset);
+            int idx = m_shaderManager->AddPreset(newPreset);
+            m_shaderManager->SetActivePreset(idx);
+            OnParamChanged();
+            if (m_mainWindow) m_mainWindow->RefreshParameters();
         }
+
+        // Either branch renamed or added a preset, so the library's rows are stale.
+        if (m_mainWindow) m_mainWindow->RefreshLibrary();
+        Toast(m_mainWindow.get(), "Shader saved: " + filepath);
     }
 }
 
 void Application::ScanFolderDialog() {
-    IFileOpenDialog* pDialog = nullptr;
-    HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&pDialog));
-    if (FAILED(hr)) return;
+    const QString dir = QFileDialog::getExistingDirectory(
+        m_mainWindow.get(), QObject::tr("Select Shader Folder"), QString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (dir.isEmpty()) return;  // cancelled
 
-    DWORD opts = 0;
-    pDialog->GetOptions(&opts);
-    pDialog->SetOptions(opts | FOS_PICKFOLDERS | FOS_PATHMUSTEXIST);
-    pDialog->SetTitle(L"Select Shader Folder");
-
-    hr = pDialog->Show(m_hwnd);
-    if (SUCCEEDED(hr)) {
-        IShellItem* pItem = nullptr;
-        hr = pDialog->GetResult(&pItem);
-        if (SUCCEEDED(hr)) {
-            PWSTR pszPath = nullptr;
-            if (SUCCEEDED(pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszPath))) {
-                int len = WideCharToMultiByte(CP_UTF8, 0, pszPath, -1, nullptr, 0, nullptr, nullptr);
-                std::string path(len - 1, '\0');
-                WideCharToMultiByte(CP_UTF8, 0, pszPath, -1, path.data(), len, nullptr, nullptr);
-
-                m_configManager.GetConfig().shaderDirectory = path;
-                m_shaderManager->ScanDirectory(path);
-                m_uiManager->ShowNotification("Scanned: " + std::filesystem::path(path).filename().string());
-                CoTaskMemFree(pszPath);
-            }
-            pItem->Release();
-        }
-    }
-    pDialog->Release();
+    const std::string path = dir.toStdString();
+    m_configManager.GetConfig().shaderDirectory = path;
+    m_shaderManager->ScanDirectory(path);
+    // Persisted now rather than left to Shutdown()'s save. Choosing a shader folder is an
+    // explicit preference, and every other one in the product (noise settings, audio
+    // settings, reduced motion, blend mode) writes immediately; leaving this one to a clean
+    // exit means an abnormal termination silently reverts it to the previous folder.
+    SaveConfig();
+    // The scan is the only thing that adds presets in bulk, and the library
+    // is a retained list: without this the new shaders are loaded but unlisted.
+    if (m_mainWindow) m_mainWindow->RefreshLibrary();
+    Toast(m_mainWindow.get(),
+          "Scanned: " + std::filesystem::path(path).filename().string());
 }
 
-void Application::OpenRecordingOutputDialog(char* pathBuf, size_t bufSize) {
-    OPENFILENAMEA ofn = {};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = m_hwnd;
-    ofn.lpstrFilter = "MP4 Video\0*.mp4\0MOV Video\0*.mov\0All Files\0*.*\0";
-    ofn.lpstrFile = pathBuf;
-    ofn.nMaxFile = static_cast<DWORD>(bufSize);
-    ofn.lpstrDefExt = "mp4";
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-    GetSaveFileNameA(&ofn);
+std::string Application::OpenRecordingOutputDialog(const std::string& currentPath) {
+    const QString chosen = QFileDialog::getSaveFileName(
+        m_mainWindow.get(), QObject::tr("Choose Recording Output"),
+        QString::fromStdString(currentPath),
+        QStringLiteral("MP4 Video (*.mp4);;MOV Video (*.mov);;All Files (*)"));
+    if (chosen.isEmpty()) return {};  // cancelled
+
+    std::string path = chosen.toStdString();
+    // Win32's OFN_lpstrDefExt auto-appended ".mp4" when the user typed no extension;
+    // QFileDialog::getSaveFileName has no equivalent, so replicate it here.
+    if (std::filesystem::path(path).extension().empty()) {
+        path += ".mp4";
+    }
+    return path;
 }
 
 bool Application::StartRecording(const RecordingSettings& settings) {
@@ -1009,10 +883,10 @@ bool Application::StartRecording(const RecordingSettings& settings) {
     }
 
     if (m_encoder.StartRecording(settings, recW, recH, recFPS)) {
-        m_uiManager->ShowNotification("Recording started: " + settings.outputPath);
+        Toast(m_mainWindow.get(), "Recording started: " + settings.outputPath);
         return true;
     } else {
-        m_uiManager->ShowNotification("Failed to start recording");
+        Toast(m_mainWindow.get(), "Failed to start recording");
         return false;
     }
 }
@@ -1022,7 +896,7 @@ void Application::StopRecording() {
         // Non-blocking: signals the encoder thread to drain its queue and exit.
         // Flush, file close, and resource free all happen on that thread.
         m_encoder.StopRecording();
-        m_uiManager->ShowNotification("Recording stopped");
+        Toast(m_mainWindow.get(), "Recording stopped");
     }
 }
 
@@ -1101,23 +975,9 @@ std::string Application::GetComboName(int vkCode, int modifiers) const {
 }
 
 void Application::LoadWorkspacePreset(int index) {
-    // Queue only. The View menu calls this from inside the ImGui frame, and the
-    // actual load tears down the whole dock tree (see m_pendingWorkspace).
-    m_pendingWorkspace = index;
-}
-
-void Application::ApplyPendingWorkspacePreset() {
-    if (m_pendingWorkspace < 0) return;
-
-    const int index = m_pendingWorkspace;
-    m_pendingWorkspace = -1;
-
-    PanelVisibility panels;
-    if (m_workspaceManager->LoadPreset(index, panels)) {
-        m_uiManager->ApplyVisibility(panels);
-        const std::string& name = m_workspaceManager->GetPresets()[index].name;
-        m_uiManager->ShowNotification("Workspace: " + name);
-    }
+    // Applied here and now. The window restores the dock state, applies the panel
+    // visibility and raises the toast; this is the same call the View menu makes.
+    if (m_mainWindow) m_mainWindow->LoadWorkspacePreset(index);
 }
 
 std::string Application::FindBindingConflict(int vkCode, int modifiers,

@@ -184,9 +184,12 @@ void ShaderManager::RemovePreset(int index) {
     m_presets.erase(m_presets.begin() + index);
     m_compiledShaders.erase(m_compiledShaders.begin() + index);
 
-    // Adjust active index
+    // Adjust active index. Removing the active preset must go through SetPassthrough:
+    // the renderer holds a *raw* ID3D11PixelShader* handed to it by SetActivePreset, and
+    // the erase above released the only ComPtr keeping it alive. Clearing m_activeIndex
+    // alone leaves the renderer drawing with a freed shader until the next activation.
     if (m_activeIndex == index) {
-        m_activeIndex = -1;
+        SetPassthrough();
     } else if (m_activeIndex > index) {
         --m_activeIndex;
     }

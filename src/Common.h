@@ -35,7 +35,6 @@ class VideoDecoder;
 class D3D11Renderer;
 class ShaderManager;
 class VideoEncoder;
-class UIManager;
 class ConfigManager;
 
 // Keyframe interpolation
@@ -77,7 +76,7 @@ enum class ShaderParamType { Float, Bool, Long, Color, Point2D, Event, AudioBand
 
 struct ShaderParam {
     std::string name;               // HLSL identifier; used for #define alias
-    std::string label;              // ImGui display label (defaults to name)
+    std::string label;              // display label (defaults to name)
     ShaderParamType type = ShaderParamType::Float;
     float values[4]        = {};    // Current values: float/bool/long/event→[0],
                                     //   color→RGBA, point2d→XY
@@ -125,20 +124,18 @@ struct ShaderPreset {
     std::unordered_map<std::string, KeyframeTimeline> savedKeyframes;
 };
 
-// Visibility of every closable dockable panel. A workspace preset must carry ALL
-// of them: a panel left hidden while the loaded ImGui layout still holds a dock
-// node for it leaves that node empty, and ImGui deletes empty leaf nodes and
-// merges their siblings — the saved split is destroyed and the panel re-docks
-// somewhere arbitrary when it is next opened. Adding a closable panel to
-// UIManager means adding a field here and a key in WorkspaceManager's
-// read/write pair. Video and Shader Parameters are always submitted, so they
-// are deliberately absent.
+// Visibility of every closable dock. A workspace preset must carry ALL of them:
+// QMainWindow::restoreState() restores a dock's geometry but not the decision to
+// have it hidden, so a preset that omits one reopens that panel wherever the saved
+// blob last placed it. Adding a closable dock to MainWindow means adding a field
+// here, a key in WorkspaceManager's read/write pair, and a line in
+// MainWindow::GetVisibility/ApplyVisibility. Video and Shader Parameters are always
+// submitted, so they are deliberately absent.
 struct PanelVisibility {
     bool editor      = true;
     bool library     = true;
     bool transport   = true;
     bool recording   = false;
-    bool keybindings = false;
     bool noise       = false;
     bool spout       = false;
     bool audio       = false;
@@ -200,6 +197,9 @@ struct AppConfig {
     std::string shaderDirectory = "shaders";
     std::string layoutsDirectory = "layouts";
     bool timeDisplayFrames = false;  // true = show frame numbers; false = show seconds
+    bool reducedMotion = false;  // suppresses all UI animation; Qt has no system equivalent
+    std::string windowGeometry;  // base64 QMainWindow::saveGeometry(); empty on first run
+    std::string windowState;     // base64 QMainWindow::saveState();    empty on first run
 
     // Noise generator
     NoiseSettings noise;

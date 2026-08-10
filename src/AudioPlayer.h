@@ -14,7 +14,7 @@ namespace SP {
 
 // Mono float audio player backed by miniaudio (WASAPI on Windows).
 // Submit() feeds decoded samples from the main thread; miniaudio's callback thread
-// drains them independently, so main-thread stalls (GPU, ImGui, file I/O) never
+// drains them independently, so main-thread stalls (GPU, UI, file I/O) never
 // cause audio underruns as long as the ring buffer holds enough cushion.
 class AudioPlayer {
 public:

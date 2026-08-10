@@ -1,0 +1,20 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <!-- Paths are relative to this file; the prefix puts the sheet at
+         :/shaderplayer.qss, which is what SP::Theme::Apply opens. -->
+    <qresource prefix="/">
+        <file>shaderplayer.qss</file>
+    </qresource>
+
+    <!-- KSyntaxHighlighting's Repository::addCustomSearchPath(p) does not scan p: it
+         scans p/syntax for definitions and p/themes for themes, and the docs are explicit
+         that the caller must not append either itself. HlslHighlighter passes ":/syntax",
+         so the two files below are aliased one level deeper than they sit on disk. Both
+         still live in resources/syntax/, which is the only place to edit them. -->
+    <qresource prefix="/syntax/syntax">
+        <file alias="hlsl.xml">syntax/hlsl.xml</file>
+    </qresource>
+    <qresource prefix="/syntax/themes">
+        <file alias="shaderplayer-dark.theme">syntax/shaderplayer-dark.theme</file>
+    </qresource>
+</RCC>

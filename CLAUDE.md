@@ -9,20 +9,28 @@ Real-time HLSL shader video player for Windows 11: D3D11 pixel shader pipeline a
 ### Technology Stack
 
 - **Language**: C++20
-- **Build System**: CMake 3.20+
+- **Build System**: CMake 3.21+ (driven by `CMakePresets.json`)
 - **Graphics API**: Direct3D 11 (HLSL shader model 5.0)
 - **Video Decoding**: FFmpeg (libavcodec, libavformat, libavutil, libswscale)
 - **Video Encoding**: FFmpeg (H.264/H.265 output)
-- **UI Framework**: ImGui with Win32 backend (docking branch)
-- **Code Editor**: ImGuiColorTextEdit (TextEditor)
+- **UI Framework**: Qt 6 Widgets (6.9.1 msvc2022_64, LGPL, dynamically linked, deployed
+  with `windeployqt`)
+- **Code Editor**: `QPlainTextEdit` driven by KSyntaxHighlighting (KDE Frameworks Tier 1,
+  LGPLv2+), with an HLSL definition authored in `resources/syntax/hlsl.xml`
 - **JSON**: nlohmann/json
 
 ### Component Structure
 
 ```
 src/
-├── main.cpp              - WinMain: CoInitializeEx (COM required for IFileOpenDialog),
-│                           DPI awareness, Application lifetime
+├── main.cpp              - WinMain: DPI awareness, CoInitializeEx (COM is still required
+│                           for the DirectShow device enumeration), the crash filter
+│                           (WriteCrashLog → crash.log via DbgHelp), then QApplication,
+│                           Theme::Apply, Application::InitializeQt, and a QTimer driving
+│                           TickOnce. Timer interval follows what the last tick did: 0
+│                           while the viewport presented (its vsync Present paces the
+│                           loop), 16 ms when it did not (the empty state, where nothing
+│                           else would pace it and 0 would spin a core).
 ├── Common.h              - Shared types: VideoFrame, ShaderPreset, RecordingSettings,
 │                           AppConfig (shaderDirectory default = "shaders"), PlaybackState,
 │                           Keyframe, KeyframeTimeline, BezierHandles, InterpolationMode
@@ -30,11 +38,13 @@ src/
 │                           bezier, smoothstep, linear interpolation with binary search),
 │                           AddKeyframe() (sorted insert, overwrites duplicates),
 │                           RemoveKeyframe() (bounds-checked erase).
-├── Application.{cpp,h}   - Central coordinator. Owns all other components. Drives
-│                           ProcessFrame() (video decode) + RenderFrame() (D3D + ImGui)
-│                           each tick. Handles WndProc, drag-drop (.hlsl → shader,
-│                           other → video), keyboard shortcuts, file dialogs including
-│                           ScanFolderDialog() (IFileOpenDialog + FOS_PICKFOLDERS).
+├── Application.{cpp,h}   - Central coordinator. Owns all other components including
+│                           MainWindow. InitializeQt() builds everything (a QApplication
+│                           must already exist); TickOnce() runs ProcessFrame() (video
+│                           decode) + RenderFrame() (D3D + window) and returns whether
+│                           the viewport presented. Owns HandleKeyboardShortcuts (in VK
+│                           codes) and the QFileDialog wrappers. No HWND, no WndProc:
+│                           windowing belongs to Qt.
 ├── AudioAnalyzer.{cpp,h} - Pure DSP class. Owns KissFFT plan, ring buffer (2048
 │                           samples), Hann window, and beat history. Fed by
 │                           VideoDecoder::DrainAudioSamples() in Application::
@@ -54,15 +64,24 @@ src/
 │                           that queue before calling av_read_frame.
 ├── VideoEncoder.{cpp,h}  - FFmpeg recording: StartRecording/StopRecording, SubmitFrame()
 │                           from RenderFrame() after CopyRenderTargetToStaging().
-├── D3D11Renderer.{cpp,h} - D3D11 device, swap chain, and fullscreen-triangle pipeline.
-│                           Key methods: BeginFrame() sets entire pipeline state
+├── D3D11Renderer.{cpp,h} - D3D11 device and fullscreen-triangle pipeline. Owns no window
+│                           and no swap chain: every surface it draws to is either an
+│                           offscreen texture or an RTV handed in by a caller that owns
+│                           its own swap chain (ViewportWidget, VideoOutputWindow).
+│                           Initialize(width, height) creates the device only.
+│                           BeginFrame() sets the entire pixel-shader pipeline state
 │                           (PSSetShader with m_activePS, PSSetShaderResources,
-│                           PSSetSamplers, PSSetConstantBuffers) — MUST be called before
-│                           RenderToDisplay(). RenderToDisplay() draws to m_displayTexture
-│                           (read back by ImGui::Image via GetDisplaySRV()). EndFrame()
-│                           draws to backbuffer but is NOT called in RenderFrame (display
-│                           goes via ImGui::Image only). SetActivePixelShader() stores the
-│                           pointer in m_activePS; GPU state is updated on next BeginFrame.
+│                           PSSetSamplers, PSSetConstantBuffers) and binds no RTV — MUST
+│                           be called before RenderToDisplay(). RenderToDisplay() draws to
+│                           m_displayTexture and leaves m_displayRTV bound; every consumer
+│                           binds its own RTV before binding m_displaySRV, so the
+│                           read-while-bound hazard cannot arise.
+│                           Resize(w, h) tracks the viewport's client size for the
+│                           `resolution` cbuffer field and the post-blit viewport restore;
+│                           it deliberately does NOT recreate m_displayTexture, which is
+│                           sized per frame from content resolution instead.
+│                           SetActivePixelShader() stores the pointer in m_activePS; GPU
+│                           state is updated on next BeginFrame.
 ├── ShaderManager.{cpp,h} - Owns two parallel vectors that MUST stay in sync:
 │                           m_presets (ShaderPreset metadata) and m_compiledShaders
 │                           (ComPtr<ID3D11PixelShader>). m_activeIndex = -1 means
@@ -80,12 +99,7 @@ src/
 │                           • SetActivePreset(index) — calls
 │                             D3D11Renderer::SetActivePixelShader with
 │                             m_compiledShaders[index].Get(); null → passthrough.
-├── UIManager.{cpp,h}     - ImGui panels: Video viewport (ImGui::Image of GetDisplaySRV),
-│                           Shader Library (preset list, "Scan Folder" → ScanFolderDialog,
-│                           "+ New" modal), Shader Editor (TextEditor + Compile button,
-│                           auto-compile on change after 500 ms delay), Transport controls,
-│                           Recording settings, Notifications overlay.
-│                           Compile button calls Application::CompileCurrentShader().
+├── ui/                   - The Qt shell. See "Qt UI Structure" below.
 ├── ConfigManager.{cpp,h} - Load/Save config.json next to the executable
 │                           (GetDefaultConfigPath uses GetModuleFileNameA). Serialises
 │                           AppConfig including shaderPresets (filepath + shortcutKey)
@@ -98,20 +112,61 @@ src/
 │                               cross-adapter copy. WndProc handles WM_SIZE (ResizeBuffers)
 │                               and WM_CLOSE (sets m_hwnd = nullptr, no PostQuitMessage).
 └── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
-                              exe for `.ini` files (custom [WorkspacePreset] header +
-                              verbatim ImGui ini blob). Index 0 = built-in Default
-                              (kDefaultLayoutIni constant — Parameters left, Library/
-                              Editor right, Video centre over Transport + Recording;
-                              its PanelVisibility is set in the ctor and must match
-                              the panels in the ini blob).
-                              SavePreset calls ImGui::SaveIniSettingsToMemory; LoadPreset
-                              calls ImGui::LoadIniSettingsFromMemory and so must only be
-                              reached via Application's deferred queue (see ImGui Notes).
-                              Owned by Application.
-                              Application::Initialize applies preset 0 when
-                              UIManager::HadSavedLayout() is false, so a fresh install
-                              starts docked rather than with floating windows.
+                              exe for `.ini` files (a [WorkspacePreset] header whose
+                              `state=` key holds a base64 QMainWindow::saveState() blob).
+                              Index 0 = built-in Default (kDefaultLayoutState constant —
+                              Parameters left, Library over Editor right, Viewport centre,
+                              Transport and Recording tabbed along the bottom; its
+                              PanelVisibility is set in the ctor and must match the docks
+                              in the blob). Owned by Application.
 ```
+
+### Qt UI Structure
+
+```
+src/ui/
+├── Theme.{h,cpp}         - The single owner of colour, type and motion for the C++ side,
+│                           mirroring resources/shaderplayer.qss. Apply() sets Fusion, the
+│                           QPalette, the application font, and the stylesheet, in that
+│                           order. Motion(ms) returns 0 under AppConfig::reducedMotion.
+├── MainWindow.{h,cpp}    - QMainWindow shell: menu bar, eight RegionDocks, and a
+│                           QStackedWidget central area (index 0 ViewportWidget, index 1
+│                           the empty state). Owns the refresh contract (below) and routes
+│                           keyPressEvent into Application::HandleKeyboardShortcuts.
+│                           RegionDock carries one region's hue on four channels: a tinted
+│                           icon, the top hairline, the title colour, and a hover glow.
+├── ViewportWidget.{h,cpp}- The one surface Qt must not paint: WA_PaintOnScreen +
+│                           WA_NativeWindow, paintEngine() returns nullptr, and its own
+│                           IDXGISwapChain1 from winId(). RenderAndPresent() letterboxes
+│                           via BlitDisplayToRect and returns whether it presented.
+├── EditorPanel, LibraryPanel, ParamsPanel, KeyframeDetail, BezierEditor,
+│   TransportPanel, RecordingPanel, NoisePanel, SpoutPanel, AudioPanel
+│                         - One class per dock, each taking SP::Application& and calling
+│                           into it directly. No observer layer.
+├── HlslHighlighter.{h,cpp} - KSyntaxHighlighting driving the editor document.
+├── Toast.{h,cpp}         - Transient notices. Frameless Qt::Tool top-levels, not child
+│                           widgets: the viewport is a native HWND that Windows composites
+│                           over anything Qt paints into the parent, and raise() cannot
+│                           reorder an alien widget against it.
+├── KeyMap.h              - The one Qt-key → Win32 VK mapping, shared by MainWindow and
+│                           KeybindingDialog. Refuses Space, Escape and the keypad.
+└── dialogs/              - Dialog (shared elevation shell), KeybindingDialog,
+                            KeybindingsReferenceDialog, NewShaderDialog, CaptureDialog,
+                            WorkspacesDialog. Each is constructed per showing and destroyed
+                            on return, so no modal state can leak between openings.
+```
+
+**The refresh contract.** This is the whole difference from the outgoing immediate-mode UI:
+
+- `MainWindow::Tick()` runs every frame and touches only the viewport and the live meters
+  (transport clock, audio bars, keyframe-driven parameter values, Spout status). A panel
+  that rebuilt itself here would fight the user's cursor and burn CPU on an idle window.
+- `RefreshLibrary()` when the preset list or the active preset changes.
+- `RefreshParameters()` when the active preset's parameters change.
+- `RefreshAll()` both, plus the editor document.
+
+Every `SetActivePreset` call site owes `RefreshParameters()` and `Application::OnParamChanged()`
+(see "ShaderManager API"); a site that also adds or renames a preset owes `RefreshLibrary()`.
 
 ### Shader System
 
@@ -169,7 +224,9 @@ SamplerState noiseSampler : register(s1);   // WRAP addressing
 ```
 
 - `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called at startup and via `Application::RegenerateNoise()`.
-- UI: View → Noise Generator (`UIManager::DrawNoisePanel` / `m_showNoisePanel`).
+- UI: View → Noise Generator (`src/ui/NoisePanel`). The panel's preview is a genuine GPU
+  readback of the bound texture (`GetNoiseSRV()` → `CopyResource` into a STAGING clone →
+  map), not a CPU re-simulation, so it cannot drift from what the shaders sample.
 - Config: `AppConfig::noise` (`NoiseSettings { float scale; int textureSize; }`), persisted as `noiseScale`/`noiseTextureSize` in `config.json`.
 - Noise UV pattern for per-cell variation: `cellCoord / 64.0 + cellUv * (freq / 64.0)` — unique slice per cell, `freq` scales zoom.
 
@@ -186,9 +243,17 @@ Every texture the pipeline creates (video, noise, spectrum, display, compositor 
 ### Prerequisites
 
 - Windows 11 (Windows 10 may work but untested)
-- Visual Studio 2022 (or MinGW-w64 with C++20 support)
-- CMake 3.20 or later
+- Visual Studio 2022 or later (Build Tools are sufficient; MSVC only, since the build
+  depends on Qt's msvc2022_64 package)
+- Qt 6.9 or later, msvc2022_64, at a path given to CMake as `CMAKE_PREFIX_PATH`
+- CMake 3.21 or later (`CMakePresets.json` is version 3)
 - FFmpeg development libraries (headers + libs)
+
+extra-cmake-modules and KSyntaxHighlighting are fetched and built by CMake; nothing to
+install. ECM is configured and installed into `build/ecm-install` at configure time (it is
+pure `.cmake` files, so nothing compiles) because KSyntaxHighlighting does
+`find_package(ECM NO_MODULE)` and then overwrites `CMAKE_MODULE_PATH` with
+`ECM_MODULE_PATH` — a populated source tree on `CMAKE_MODULE_PATH` cannot satisfy it.
 
 ### FFmpeg Setup
 
@@ -202,19 +267,61 @@ On a fresh clone:
    ```
 3. CMake autodiscovers `third_party/ffmpeg/` — no flags needed
 
+The copy runs at build time and fails the build with a named error if the directory holds
+no DLLs, so an empty `third_party/ffmpeg/bin/` can no longer yield an executable that links
+but dies at load with `avcodec-62.dll was not found`. Adding the DLLs needs a rebuild, not
+a re-configure.
+
 If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>` to CMake and leave `third_party/ffmpeg/` unpopulated.
 
 ### Building
 
-`build/` is configured with the Ninja generator (single-config — no `--config` flag, output at `build/ShaderPlayer.exe`). Command-line builds work only from a shell where the MSVC environment has been initialised — otherwise the link fails with `memcpy` unresolved:
+`CMakePresets.json` is the source of truth for configuration. `windows-msvc` (Ninja,
+RelWithDebInfo, `build/`) is the only supported configuration; single-config, so there is
+no `--config` flag and the output is `build/ShaderPlayer.exe`.
+
+**Never ship or hand over a Debug build.** Debug links `ucrtbased.dll`, `msvcp140d.dll` and
+friends, which `windeployqt` does not deploy and which exist only on machines with the
+Windows SDK installed. `windows-msvc-debug` therefore targets a separate `build-debug/` so
+the two cannot clobber each other; use it to step through code, not to give to anyone.
+
+Configure, then build:
 
 ```
-cmd /c "call \"C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat\" >nul && cmake --build build"
+cmake --preset windows-msvc
+cmake --build build
 ```
 
-Building from the Visual Studio IDE works without the extra step. Adjust the vcvars path to the installed edition — `vswhere.exe -latest -property installationPath` locates it.
+Command-line builds work only from a shell where the MSVC environment has been initialised
+— otherwise the link fails with `memcpy` unresolved. From a plain shell:
 
-FFmpeg DLLs are copied next to the executable automatically at post-build.
+```
+cmd /c "set ""PATH=C:\Program Files (x86)\Microsoft Visual Studio\Installer;C:\Qt\6.9.1\msvc2022_64\bin;%PATH%"" & call ""<vcvars64.bat>"" >nul & cmake --build build"
+```
+
+Four things in that line are load-bearing:
+
+- **The PATH additions must come BEFORE `call vcvars64.bat`, not after.** `cmd` expands
+  `%PATH%` when it *parses* the line, so `set PATH=...;%PATH%` written after the call
+  expands to the pre-vcvars value and silently discards everything vcvars added. A build
+  that survives this anyway is living on absolute tool paths cached by CMake; the next
+  clean configure fails with `LNK1158: cannot run 'rc.exe'`.
+- **The Visual Studio `Installer` directory must be on PATH**, because `vcvars64.bat`
+  invokes `vswhere.exe` by bare name. Without it vcvars prints `'vswhere.exe' is not
+  recognized`, then reports "Environment initialized" having set neither `INCLUDE`, `LIB`
+  nor the tool paths — which surfaces as `fatal error C1083: Cannot open include file:
+  'type_traits'` from every target.
+- **Qt's `bin` must be on PATH**: KSyntaxHighlighting builds `katehighlightingindexer.exe`
+  and runs it during the build, which fails with `0xc0000135` without it.
+- Adjust the vcvars path to the installed edition (`vswhere.exe -latest -property
+  installationPath` locates it). It may be a **BuildTools** install under
+  `Program Files (x86)`, not Community.
+
+Building from the Visual Studio IDE works without the extra step.
+
+Post-build steps copy the FFmpeg DLLs (`tools/copy_ffmpeg.cmake`), the
+KSyntaxHighlighting DLL, and the Qt runtime (`tools/deploy_qt.cmake` wrapping
+`windeployqt`).
 
 **Run from the project root** (not from `build/`) so the relative `shaders/` path resolves correctly, or use the Shader Library → "Scan Folder" button to point at the shaders directory manually. A fallback also looks for `shaders/` next to the executable at startup.
 
@@ -234,23 +341,61 @@ Presets saved to config include only the `filepath` and shortcut — source is r
 
 Layout presets stored as `.ini` files in `layouts/` next to the executable (path in `AppConfig::layoutsDirectory`). Not referenced in `config.json` — discovered by `WorkspaceManager::ScanDirectory()` at startup. Keybindings are in the `.ini` file headers, not config.json. Access via View > Workspace Presets.
 
-A preset must record the visibility of **every** closable dockable panel, carried as `PanelVisibility` (`Common.h`) in `WorkspacePreset::panels` and moved through `UIManager::GetVisibility()`/`ApplyVisibility()`. Omitting one is not a cosmetic loss: the loaded layout still holds a dock node for the hidden panel, ImGui deletes empty leaf nodes and merges their siblings, so the saved split is destroyed and the panel re-docks arbitrarily when next opened. Adding a closable panel therefore needs a `PanelVisibility` field, a `show*` key in `WorkspaceManager::ParsePresetFile`/`WritePresetFile`, and a matching flag on the built-in Default in the `WorkspaceManager` ctor. `Video` and `Shader Parameters` are always submitted and are deliberately excluded.
+The layout itself is a base64 `QMainWindow::saveState()` blob under the header's `state=`
+key. `ParsePresetFile` splits on the **first** `=` only, so base64 padding round-trips; a
+file with no `state=` key is skipped by `ScanDirectory` rather than crashing it.
+
+`saveState`/`restoreState` are passed `kWorkspaceStateVersion` (`MainWindow.cpp`). **Bump
+it whenever the dock set or any dock object name changes**, so a stale layout is refused
+rather than half-applied. `restoreState` is atomic: on a version mismatch or a corrupt blob
+it leaves the layout untouched and returns `false`, and every caller falls back to
+`MainWindow::ArrangeDefaultLayout()`.
+
+Dock object names (`dockLibrary`, `dockEditor`, `dockParams`, `dockTransport`,
+`dockRecording`, `dockNoise`, `dockSpout`, `dockAudio`) are load-bearing: `saveState` keys
+off them.
+
+A preset must record the visibility of **every** closable dock, carried as `PanelVisibility`
+(`Common.h`) in `WorkspacePreset::panels` and moved through `MainWindow::GetVisibility()`/
+`ApplyVisibility()`. `restoreState` restores a dock's geometry but not the decision to have
+it hidden, so a preset that omits one reopens that panel wherever the blob last placed it.
+Adding a closable dock therefore needs a `PanelVisibility` field, a `show*` key in
+`WorkspaceManager::ParsePresetFile`/`WritePresetFile`, a line in `GetVisibility`/
+`ApplyVisibility`, and a matching flag on the built-in Default in the `WorkspaceManager`
+ctor. `Video` and `Shader Parameters` are always submitted and are deliberately excluded.
+
+**First run** is distinguished by `AppConfig::windowState` being empty, since only
+`MainWindow::closeEvent` ever writes it. Empty → apply the factory layout via
+`LoadPreset(0, ...)` + `ApplyVisibility`; non-empty → restore the user's own geometry and
+state. The returning-user path deliberately does not call `ApplyVisibility`: `saveState`
+already records each dock's visibility.
 
 ## Development Notes
 
 ### Render Loop (RenderFrame)
 
-Each frame:
+`RenderFrame()` returns whether the viewport presented; `TickOnce()` passes that up to
+WinMain's timer, which is where the loop's pacing comes from. Each frame:
+
 1. `UploadVideoFrame()` — maps video texture and DMA-copies current VideoFrame (RGBA8)
-2. `BeginFrame()` — updates cbuffer, clears backbuffer, sets **entire** PS pipeline state including `m_activePS`
-3. `RenderToDisplay()` — changes RT to `m_displayTexture`, calls `Draw(3,0)`, restores backbuffer RT
-4. `VideoOutputWindow::BlitAndPresent()` (if open) — calls `BlitDisplayTo()` then presents the second swap chain
-5. ImGui render pass — `ImGui::Image(GetDisplaySRV(), ...)` composites the processed frame
-6. `Present(vsync=true)`
+2. `BeginFrame()` — updates cbuffer, sets the **entire** PS pipeline state including
+   `m_activePS`. Binds no render target: every draw path below binds its own.
+3. `RenderToDisplay()` — binds `m_displayRTV`, calls `Draw(3,0)`, and leaves it bound
+4. `VideoOutputWindow::BlitAndPresent()` (if open) — `BlitDisplayTo()` then presents the
+   second swap chain
+5. `SpoutOutput::SendFrame(GetDisplayTexture())`
+6. Recording capture, gated on `m_newVideoFrame`, then a restoring `BeginFrame()`
+7. `MainWindow::Tick()` — the viewport blits and presents on its own swap chain (the vsync
+   block that paces the loop), and the live meters move
 
-`BlitDisplayTo(rtv, w, h)` — draws `m_displaySRV` via passthrough PS into the given RTV, then restores main backbuffer RT, main viewport, `m_activePS`, and `m_videoSRV` as t0. Safe to call between `RenderToDisplay()` and recording capture.
+`BlitDisplayTo(rtv, w, h)` — draws `m_displaySRV` via passthrough PS into the given RTV,
+then restores the main viewport, `m_activePS`, and `m_videoSRV` as t0. **The caller's RTV
+is left bound**: the renderer owns no backbuffer to restore. Safe to call between
+`RenderToDisplay()` and recording capture.
 
-`EndFrame()` (draws fullscreen triangle to backbuffer) is intentionally not called — the video is displayed via `ImGui::Image`, not a direct backbuffer draw.
+`BlitDisplayToRect(rtv, x, y, w, h, clearColor)` — the same, but clears the whole RTV to
+`clearColor` and draws into a sub-rectangle. `ClearRenderTargetView` ignores the viewport,
+which is what lets the letterbox borders show the clear colour. Used by `ViewportWidget`.
 
 ### Shader Compile Path
 
@@ -262,13 +407,17 @@ Each frame:
 
 `m_presets` and `m_compiledShaders` are always the same length. Every `AddPreset` does both `push_back`s; every `RemovePreset` does both `erase`s. Never modify one without the other.
 
+Removing the **active** preset must go through `SetPassthrough()`, not a bare `m_activeIndex = -1`. The renderer holds a raw `ID3D11PixelShader*` handed to it by `SetActivePreset`, and the erase releases the only `ComPtr` keeping it alive — clearing the index alone leaves the renderer drawing with a freed shader until the next activation.
+
 ### COM Requirement
 
-`ScanFolderDialog()` uses `IFileOpenDialog` (Vista+ shell COM API). `CoInitializeEx` / `CoUninitialize` are called in `WinMain`. The COM apartment must be initialised before any shell dialog is shown.
+File pickers are `QFileDialog` and need no COM apartment of their own, but the DirectShow
+device enumeration behind `CaptureDialog` does. `CoInitializeEx` / `CoUninitialize` stay in
+`WinMain` for it.
 
 ### shaderDirectory Path Resolution
 
-`AppConfig::shaderDirectory` defaults to `"shaders"` (CWD-relative). At startup, if that path doesn't exist, `Application::Initialize` falls back to `<exe_dir>/shaders`. Config is saved with the resolved path after "Scan Folder" is used, so it persists.
+`AppConfig::shaderDirectory` defaults to `"shaders"` (CWD-relative). At startup, if that path doesn't exist, `Application::InitializeQt` falls back to `<exe_dir>/shaders`. `ScanFolderDialog` writes the chosen path into the config and calls `SaveConfig()` immediately, so it persists across an abnormal exit as well as a clean one.
 
 ### Adding a New Shader
 
@@ -325,45 +474,110 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
 
 ## Known Limitations
 
-- Windows-only (Direct3D 11 requirement)
+- Windows-only (Direct3D 11 requirement; the Qt UI itself is portable, the renderer is not)
 - Audio playback via miniaudio (WASAPI). Volume/mute in transport bar. `AppConfig::audioVolume`/`muteAudio` persisted in config.json.
 - ProRes support depends on FFmpeg build configuration
 - Recording framerate matches playback framerate (no arbitrary output rates)
 
-## ImGui Notes
+## Qt Notes
 
-- `ImGuiKey` is not 1:1 with Win32 VK codes (broken since ImGui 1.87) — use `GetKeyState(VK_*)` for key state in modal/input code
-- `ImGui::SameLine(x)` takes absolute offset from window left — use `GetContentRegionMax().x` for right-alignment, not `GetContentRegionAvail().x`
-- Static locals in modal draw functions persist across sessions; use an `s_wasOpen` bool sentinel to reset edge-detection state when a modal reopens
-- `EndPopup()` closes ALL popups including modals — `EndPopupModal` does not exist; using it causes a compile error
-- `ImGui::SaveIniSettingsToMemory(&size)` / `ImGui::LoadIniSettingsFromMemory(str, size)` — captures and restores full docking layout; safe to call outside a frame. `LoadIniSettingsFromMemory` sets ImGui's internal `SettingsLoaded` flag, so calling it before the first `NewFrame` suppresses the automatic `imgui.ini` load
-- `LoadIniSettingsFromMemory` must **never** be called between `NewFrame()` and `Render()`. Its pre-read handler (`DockSettingsHandler_ClearAll`) destroys every dock node and clears every window's `DockId`, so an in-flight frame is left holding freed nodes: the dock tree collapses to a bare `CentralNode`, every panel drops out to a floating window at a stale position, and the wreckage is then serialised to `imgui.ini`. ImGui's own assert against this is commented out, so it fails silently rather than aborting. Workspace preset loads are requested via `Application::LoadWorkspacePreset` (which only queues an index) and applied by `ApplyPendingWorkspacePreset()` in `Run()` between frames. Any new caller must go through that queue, never `WorkspaceManager::LoadPreset` directly. `SaveIniSettingsToMemory` has no such restriction (ImGui itself calls it from inside `NewFrame`)
-- Dock splitter minimums come from the single global `style.WindowMinSize`; there is no per-node minimum, and `SetNextWindowSizeConstraints` is explicitly discarded for docked windows. Keep it below the smallest node dimension in the shipped layout, and note that `kDefaultLayoutIni` is authored at 3840x2126 — ImGui rescales `SizeRef` proportionally, so the 73px transport node lands at ~36px on a 1080p desktop and fights the 64px floor
-- `ImGui_ImplDX11_RenderDrawData` **saves and restores all D3D11 pipeline state** (VS, PS, CBs, SRVs, RTVs, viewports). Code after `EndFrame()` has the same pipeline state as before `BeginFrame()` — do not assume ImGui has clobbered it.
-- Toggle buttons using `PushStyleColor`/`PopStyleColor`: snapshot the bool BEFORE the button call (`bool wasActive = m_flag; if (wasActive) Push...; if (Button(...)) m_flag=!m_flag; if (wasActive) Pop...`). Checking `m_flag` after the button call breaks push/pop symmetry on the click frame.
-- `DrawKeyframeDetail` receives `anyChanged` by reference — set it on ALL mutation paths including early returns, or `OnParamChanged()` won't fire for that edit.
-- `ImGui::ArrowButton("##id", ImGuiDir_Left/Right/Up/Down)` renders a built-in arrow button — use instead of Unicode arrows (default font is ASCII-only)
-- `ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)` — required to show tooltips on disabled widgets; plain `IsItemHovered()` returns false when the item is disabled
+- **A `font-size` or `font-family` in a QSS rule overrides `QWidget::setFont()`** on every
+  widget the selector matches, and Qt propagates a stylesheet font to child widgets. A base
+  `QWidget { font-size: 10pt; }` therefore silently flattens every deliberate type step set
+  in C++ — display headings render at body size and the whole hierarchy collapses to one
+  size, with no warning and nothing wrong-looking in the code. The base font is set as the
+  **application** font in `Theme::Apply` instead (an inherited default, not an override).
+  Only the object-name rules in the sheet (`#PanelTitle`, `#Caption`, `#Mono`,
+  `QDockWidget`) carry `font-size`, and those are meant to win.
+- **KSyntaxHighlighting headers cannot be included as `<KSyntaxHighlighting/Theme>`** from
+  `src/ui`. The CamelCase forwarder is a one-line `#include "theme.h"`, and MSVC resolves a
+  quoted include against the directories of every already-open file before the `-I` list, so
+  on a case-insensitive filesystem it resolves to our own `src/ui/Theme.h` and the
+  `KSyntaxHighlighting` namespace never appears. `format.h` quotes `"theme.h"` too, so
+  `<KSyntaxHighlighting/Format>` is equally poisoned. Use the lowercase real headers with
+  angle brackets: `<theme.h>`, `<format.h>`, `<syntaxhighlighter.h>`, `<definition.h>`,
+  `<repository.h>`.
+- `Repository::addCustomSearchPath(p)` scans `p/syntax` and `p/themes`, never `p` itself.
+  The call passes `":/syntax"`, so `resources/syntax/*` is aliased into `:/syntax/syntax/`
+  and `:/syntax/themes/` in the qrc while staying in `resources/syntax/` on disk.
+- **A `QScrollArea` with `setWidgetResizable(true)` and no horizontal scrollbar clips the
+  overflow rather than scrolling it**, and the column that goes first is the rightmost.
+  Any such panel must instead refuse to be narrower than its content: take the width from
+  `m_content->minimumSizeHint().width()` plus the vertical scrollbar's extent, never from a
+  hand-summed constant that drifts when a column is added.
+- **`ViewportWidget` owns a native child HWND**, which Windows composites over everything
+  Qt paints into the parent's client area. `raise()` cannot fix it (it reorders native
+  siblings; an alien widget is not one), so a plain child widget placed over the picture is
+  invisible. Anything that must appear over the viewport is a frameless `Qt::Tool`
+  top-level — which is also the only form `setWindowOpacity` works on, since it
+  early-returns on `!isWindow()`.
+- **Qt paints nothing into the viewport's region**, so a `PrintWindow`/backing-store capture
+  of the window shows stale pixels there rather than the rendered frame. A screenshot that
+  appears to show the empty state under a live shader is a capture artefact, not a bug.
+- Menu accelerators are **displayed, not bound**: the text after `\t` in an action's label.
+  `Application::HandleKeyboardShortcuts` owns every key in the product and
+  `MainWindow::keyPressEvent` routes into it, so a real `QShortcut` would fire the action
+  twice.
+- Qt key codes must be mapped to Win32 VK codes before reaching any binding code — every
+  stored binding is a VK code. `src/ui/KeyMap.h` is the single mapping; it covers A-Z, 0-9
+  and F1-F12 and refuses the keypad (Windows dispatches `VK_NUMPAD*`, so a binding stored
+  as `'0'` would never fire) and Space/Escape (reserved actions, named by the dispatch side
+  itself).
+- Escape is the one shortcut a focused text field does not swallow — no `QLineEdit`,
+  `QPlainTextEdit` or spin box claims it — so it reaches `keyPressEvent` mid-edit and is
+  guarded there. Every printable key and Space is already consumed as typed input.
+  `qobject_cast<QLineEdit*>(QApplication::focusWidget())` covers every spin box too, since
+  `QAbstractSpinBox` sets its internal `QLineEdit` as focus proxy.
+- **Do not style** `QComboBox::drop-down`, `QSpinBox::up-button` or `::down-button`. Any
+  rule on those subcontrols switches them to CSS box layout and the arrow glyph disappears.
+  The same applies to `QDockWidget`'s float and close buttons.
+- QSS alpha is an integer 0-255, never 0-1: `rgba(255,255,255,0.06)` is invisible.
+- QSS has no `box-shadow`. A lift is a `QGraphicsDropShadowEffect` attached in C++; note
+  that the effect renders the whole widget through a pixmap, so it is the expensive channel.
+- Top-level popups (`QMenu`, `QToolTip`, combo views) cannot be translucent over the canvas
+  — they are their own windows and would show the desktop through. They use the token colour
+  pre-composited on canvas instead.
+- Tooltips work on disabled widgets with no workaround, unlike the outgoing UI.
+- Every mutation path in `KeyframeDetail` must end in `Mutated()`, which is the single site
+  that emits `Changed()`. A branch that returns early without it means `OnParamChanged()`
+  never fires for that edit.
 - Use `memcmp(a, b, N * sizeof(float)) == 0` for float-array equality checks (e.g. "is value at default"); reliable for exact IEEE 754 round-trips between storage and comparison
 
 ## VideoEncoder Notes
 
 - `time_base = {1, fps*1000}` → one frame = **1000 time_base units**. PTS must be `frameIndex * 1000LL`, not `frameIndex`. Getting this wrong produces a valid-but-broken file where all frames are crammed into ~2ms, which players display as a frozen single frame.
-- `RenderToTexture()` leaves the active RT as `m_renderTextureRTV` (not the backbuffer). Call `BeginFrame()` after to restore the backbuffer RT; otherwise ImGui's save/restore will lock in the render texture as the RT for the rest of the frame.
+- `RenderToTexture()` leaves the active RT as `m_renderTextureRTV`. Call `BeginFrame()` after it so the pipeline state the rest of the frame depends on is put back.
 - Recording capture must happen **after** `RenderToDisplay()` (video pipeline state active) and **before** any subsequent `BeginFrame()` that might alter the video texture or cbuffer. Gate submission on `m_newVideoFrame` so the encoder receives exactly one frame per decoded video frame — not one per display frame.
 
 ## ShaderManager API
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
-- `SetActivePreset` is called in **both** `Application.cpp` and `UIManager.cpp` — after any new call-site, always add `OnParamChanged()` (Application) or `m_app.OnParamChanged()` (UIManager)
+- `SetActivePreset` is called from `Application.cpp`, `ui/LibraryPanel.cpp`, `ui/MainWindow.cpp` and `ui/dialogs/NewShaderDialog.cpp` — every new call site owes `OnParamChanged()` and `MainWindow::RefreshParameters()`, plus `RefreshLibrary()` if it also added or renamed a preset (see "The refresh contract")
 - `GetActivePresetIndex()` returns `int` (−1 = passthrough); `GetActivePreset()` returns `ShaderPreset*` (null when passthrough). Never guess `GetActiveIndex` — it doesn't exist.
 
 ## Application API
 
+- **Lifecycle**: `InitializeQt()` (a `QApplication` must already exist), `TickOnce()` →
+  `bool` (whether the viewport presented), `Shutdown()`, `RequestExit()` (sets the flag and
+  calls `QCoreApplication::quit()`; without it File > Exit is dead, since there is no
+  message loop of ours to break out of). `GetMainWindow()` returns `MainWindow*`, which is
+  null until the window is built — every call site must tolerate that, because `OpenVideo`
+  and friends are reachable from inside `InitializeQt`.
+- **Initialisation order in `InitializeQt` is load-bearing**: renderer (device only, from a
+  provisional size), then `ShaderManager` and `WorkspaceManager`, and only then `MainWindow`
+  + `show()` + `ViewportWidget::CreateSwapChain()`. Panels read those subsystems from their
+  own constructors (`LibraryPanel::Refresh` dereferences `GetShaderManager()`), so building
+  the window earlier is an access violation. `RefreshAll()` and `OnParamChanged()` go last,
+  after the preset and workspace restore.
+- **Teardown order too**: `Shutdown()` resets `m_mainWindow` before `m_renderer.Shutdown()`.
+  The window owns the viewport, the viewport owns a swap chain created from the renderer's
+  device, and a swap chain must not outlive its device.
+- `OpenRecordingOutputDialog(const std::string& currentPath)` returns the chosen path, or an
+  empty string on cancel.
 - `FindBindingConflict(vkCode, modifiers, excludeShaderIdx, excludeWorkspaceIdx)` — returns human-readable conflict string (empty = free). Checks hardcoded reserved keys (Space, Escape, F1–F7, F9, Ctrl+N/O/S), all shader presets, all workspace presets. Use this whenever assigning any new keybinding. Reserved F-keys: F1 Editor, F2 Library, F3 Transport, F4 Recording, F5 Compile, F6 Keybindings, F7 Video Output Window, F8 Spout Output, F9 Record toggle.
-- `GetConfig()` returns a non-const `AppConfig&` — UIManager can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle.
+- `GetConfig()` returns a non-const `AppConfig&` — a panel can write preferences directly and call `SaveConfig()` to persist. Used by the `timeDisplayFrames` toggle and by `MainWindow::SetReducedMotion`.
 - `RegenerateNoise()` — reads `AppConfig::noise`, calls `D3D11Renderer::UpdateNoiseTexture`, saves config. Use this; do not call `UpdateNoiseTexture` directly.
-- `GetAudioData()` returns `const AudioData&` — live band/spectrum values; used by UIManager for AudioBand ProgressBar meters.
+- `GetAudioData()` returns `const AudioData&` — live band/spectrum values; read by `ParamsPanel` for AudioBand meters and by `AudioPanel` for the bands and spectrum.
 - `UpdateAudioSettings()` — writes `AppConfig::audio` from UI sliders to `m_audioAnalyzer`, then calls `SaveConfig()`.
 
 ## AppConfig Persistence Pattern
@@ -446,7 +660,7 @@ Parameters exceeding 32 floats total are skipped with a warning appended to `Sha
 
 ### Randomiser
 
-`UIManager::RandomiseParam(ShaderParam&)` rolls one parameter and returns false for types with no value to roll (Event, AudioBand, and Long with an empty `VALUES` list). Every branch draws from the same range its widget exposes, so a rolled value is always one the user could have set by hand. Colour alpha is deliberately left alone — it is an opacity everywhere it is read, and randomising it makes effects invisible. The per-parameter `R` button and the panel's "Randomise all" both skip parameters under active keyframe control, since the timeline would overwrite the roll on the next frame.
+`ParamsPanel::RandomiseParam(ShaderParam&)` rolls one parameter and returns false for types with no value to roll (Event, AudioBand, and Long with an empty `VALUES` list). Every branch draws from the same range its widget exposes, so a rolled value is always one the user could have set by hand. Colour alpha is deliberately left alone — it is an opacity everywhere it is read, and randomising it makes effects invisible. The per-parameter `R` button and the panel's "Randomise all" both skip parameters under active keyframe control, since the timeline would overwrite the roll on the next frame.
 
 ### Persistence
 
@@ -460,11 +674,11 @@ Per-parameter keyframe animation tied to absolute video time. Each `ShaderParam`
 
 **Evaluation pipeline** (Application.cpp): `EvaluateKeyframes()` runs in `RenderFrame()` after `SetShaderTime` and before `BeginFrame`. For each animated parameter, it calls `KeyframeTimeline::Evaluate()` at `m_playbackTime`, writes interpolated values to `param.values[]`, then calls `OnParamChanged()`. Bool/Long params use step interpolation (snap after lerp). Event params are not keyframeable.
 
-**UI** (UIManager.cpp): KF toggle button per param (except Event). When enabled: "+ Key" button adds a keyframe at current playback time, timestamp chips seek on click, detail panel shows time/value editors, interpolation mode combo, and a 160x100px inline bezier curve editor with draggable control points. Widgets are disabled during keyframe playback. Diamond markers appear on the transport timeline for the selected parameter.
+**UI** (`ui/ParamsPanel`, `ui/KeyframeDetail`, `ui/BezierEditor`): a KF toggle per param (except Event). When enabled, `ParamsPanel::KeyframeDetailHost(paramIndex)` reveals a full-width host in the grid row beneath that parameter, carrying the "+ Key" button, the timestamp chips (click to seek), the time/value editors, the interpolation combo, and the inline bezier editor (200x140 px minimum, 12 px grab targets). Widgets are disabled during keyframe playback, with a tooltip saying why. Diamond markers appear on the transport scrubber for the selected parameter, and can be dragged there under follow mode or Shift.
 
 **Persistence** (ConfigManager.cpp): Keyframes serialised as `"keyframes": { "ParamName": { "enabled": true, "keys": [...] } }` in config.json, keyed by param name. Restored via `ShaderPreset::savedKeyframes` on load.
 
-**Important**: `m_selectedKeyframeParam` and `m_selectedKeyframeIndex` (UIManager) must be reset to -1 whenever the active preset changes, to prevent stale indices into a different preset's param/keyframe vectors. Also reset `m_keyframeFollowMode` at the same sites, and when the KF toggle is disabled for a param.
+**Important**: the keyframe selection lives in `ParamsPanel` (`SetKeyframeSelection`, `SelectedKeyframeParam`, `SelectedKeyframeIndex`, signal `KeyframeSelectionChanged`) and must be cleared at three sites — when the preset changes, when a stale index outruns the new param list, and when a KF toggle goes off — or it indexes into a different preset's vectors. `TransportPanel`'s follow mode resets with it.
 
 **Keyframe reposition pattern**: copy the keyframe, call `RemoveKeyframe(idx)`, call `AddKeyframe(copy)`, update `m_selectedKeyframeIndex` with the returned index. Never modify `kf.time` in-place — sorted order is maintained only via remove/re-insert.
 
@@ -480,7 +694,7 @@ All automations live under `.claude/`. Do not edit `config.json` directly — it
 
 ### MCP Server: context7
 
-Live documentation lookup for D3D11, HLSL, FFmpeg, and ImGui APIs.
+Live documentation lookup for D3D11, HLSL, FFmpeg, and Qt APIs.
 
 **Installed**: `claude mcp add context7 -- cmd /c npx -y @upstash/context7-mcp` (stored in `.claude.json`; Windows requires `cmd /c` wrapper)
 

@@ -13,18 +13,27 @@ public:
     D3D11Renderer(const D3D11Renderer&) = delete;
     D3D11Renderer& operator=(const D3D11Renderer&) = delete;
 
-    // Initialization
-    bool Initialize(HWND hwnd, int width, int height);
+    // Initialization. The renderer owns no window and no swap chain: every surface it
+    // draws to is either an offscreen texture or an RTV handed in by a caller that owns
+    // its own swap chain (ViewportWidget, VideoOutputWindow).
+    bool Initialize(int width, int height);
     void Shutdown();
     bool IsInitialized() const { return m_device != nullptr; }
 
-    // Resize handling
-    bool Resize(int width, int height);
+    // Tracks the viewport's client size for the `resolution` cbuffer field (and the
+    // post-blit viewport restores in BlitDisplayTo/BlitDisplayToRect). Call on every
+    // ViewportWidget::resizeEvent. Deliberately does NOT touch m_displayTexture: that
+    // texture is sized from video/generative content resolution (see RenderToDisplay),
+    // not from the window, and is letterboxed into whatever viewport exists — resizing
+    // it here would only be overwritten by the next RenderToDisplay call and would
+    // thrash a GPU resource on every pixel of a drag for no visible effect. No swap
+    // chain, backbuffer or HWND is created or touched here.
+    void Resize(int width, int height);
 
-    // Frame operations
+    // Frame operations. BeginFrame sets the whole pixel-shader pipeline state
+    // (m_activePS, SRVs, samplers, cbuffers) that RenderToDisplay and the recording
+    // path both rely on, so it must be called before either of them each frame.
     void BeginFrame();
-    void EndFrame();
-    void Present(bool vsync = true);
 
     // Video frame upload
     bool UploadVideoFrame(const VideoFrame& frame);
@@ -38,16 +47,26 @@ public:
     bool RenderToTexture();
     bool CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int& outWidth, int& outHeight);
 
-    // Render to display texture (for ImGui::Image preview)
+    // Render to the display texture — the shader-processed frame every consumer reads
+    // (the viewport, the detached output window, Spout).
     void RenderToDisplay();
     ID3D11ShaderResourceView* GetDisplaySRV()    const { return m_displaySRV.Get(); }
     ID3D11Texture2D*          GetDisplayTexture() const { return m_displayTexture.Get(); }
     int GetDisplayWidth()  const { return m_displayWidth; }
     int GetDisplayHeight() const { return m_displayHeight; }
 
-    // Blit the already-processed display texture into an external RTV (e.g. a second
-    // swap chain window).  Restores the main backbuffer RT and active PS afterwards.
+    // Blit the already-processed display texture into an external RTV (a caller's swap
+    // chain). The caller's RTV is left bound; the active PS and the video SRV are
+    // restored so the next RenderToDisplay finds the pipeline as BeginFrame left it.
     void BlitDisplayTo(ID3D11RenderTargetView* rtv, int width, int height);
+
+    // As BlitDisplayTo, but clears the full RTV to clearColor (RGBA, 0..1) and draws
+    // into the sub-rectangle [rectX, rectY, rectWidth, rectHeight] rather than the
+    // whole surface. Used for letterboxed viewports (Qt's ViewportWidget) where the
+    // draw rectangle does not fill the target surface. Restores the same state
+    // BlitDisplayTo does.
+    void BlitDisplayToRect(ID3D11RenderTargetView* rtv, int rectX, int rectY,
+                            int rectWidth, int rectHeight, const float clearColor[4]);
 
     // Shader uniforms
     void SetShaderTime(float time);
@@ -79,13 +98,11 @@ public:
     // Accessors
     ID3D11Device* GetDevice() const { return m_device.Get(); }
     ID3D11DeviceContext* GetContext() const { return m_context.Get(); }
-    ID3D11RenderTargetView* GetRenderTargetView() const { return m_renderTargetView.Get(); }
     int GetWidth() const { return m_width; }
     int GetHeight() const { return m_height; }
 
 private:
-    bool CreateDeviceAndSwapChain(HWND hwnd, int width, int height);
-    bool CreateRenderTarget();
+    bool CreateDevice();
     bool CreateVideoTexture(int width, int height);
     bool CreateRenderToTexture(int width, int height);
     bool CreateDisplayTexture(int width, int height);
@@ -93,13 +110,10 @@ private:
     bool CreateShaderResources();
     bool CreatePassthroughShader();
     bool CreateCompositorShader();
-    void ReleaseRenderTarget();
 
-    // Device and swap chain
+    // Device
     ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_context;
-    ComPtr<IDXGISwapChain1> m_swapChain;
-    ComPtr<ID3D11RenderTargetView> m_renderTargetView;
 
     // Video texture
     ComPtr<ID3D11Texture2D> m_videoTexture;
@@ -114,7 +128,7 @@ private:
     int m_renderTextureWidth  = 0;
     int m_renderTextureHeight = 0;
 
-    // Display texture (shader-processed frame for ImGui::Image preview)
+    // Display texture (the shader-processed frame every consumer blits from)
     ComPtr<ID3D11Texture2D> m_displayTexture;
     ComPtr<ID3D11RenderTargetView> m_displayRTV;
     ComPtr<ID3D11ShaderResourceView> m_displaySRV;
@@ -178,7 +192,6 @@ private:
     int   m_generativeHeight = 1080;
     int   m_videoBlendMode   = 0;
     float m_videoBlendFactor = 0.0f;
-    HWND m_hwnd = nullptr;
 };
 
 } // namespace SP

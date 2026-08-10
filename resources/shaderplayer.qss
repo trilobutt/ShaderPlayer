@@ -1,0 +1,636 @@
+/* ============================================================================
+   ShaderPlayer — Qt Widgets stylesheet.
+
+   The single owner of colour for the Qt UI, mirrored literally in src/ui/Theme.h
+   (which holds the same values for the code that paints at runtime: region tints,
+   glow, animation durations). Change a token in both places or in neither.
+
+   Tokens
+     canvas            #0B0B0B            anchor            #160B2A
+     panel-fill        rgba(255,255,255,15)     ~6%
+     panel-fill-raised rgba(255,255,255,26)     ~10%  dialogs, menus, popups
+     panel-border      rgba(255,255,255,38)     ~15%  1px hairline
+     input-fill        rgba(0,0,0,110)          recessed fields
+     panel-radius      10px   control-radius 6px   dialog-radius 14px
+     space-unit        8px    between-panel gap 24px
+     text-primary      #ECECEC   text-secondary #B8BCC4   text-on-accent #06181B
+     accent-primary    #3DE0F0 cyan     (reserved: global interactive state)
+     accent-secondary  #5AA8FF azure    accent-tertiary #A3F04A lime
+     accent-quaternary #FF5FD2 magenta
+     state-warning     #FFB63D amber    state-error     #FF5A52 red
+
+   Notes on the medium
+     - QSS alpha is an integer 0-255, never 0-1. `rgba(255,255,255,0.06)` is invisible.
+     - Top-level popups (QMenu, QToolTip, combo views) cannot be translucent over the
+       canvas: they are their own windows and would show the desktop through. They use
+       the token colour pre-composited on canvas instead: panel-fill -> #191919,
+       panel-fill-raised -> #242424, input-fill -> #060606.
+     - QSS has no box-shadow. Hover therefore brightens the border as well as the fill;
+       the lift itself is a QGraphicsDropShadowEffect attached in C++ where it matters.
+     - QComboBox::drop-down, QSpinBox::up-button and ::down-button are deliberately
+       unstyled. Any rule on them switches the subcontrol to CSS box layout and the
+       arrow glyph disappears.
+   ============================================================================ */
+
+/* ---- Base ----------------------------------------------------------------
+   The QWidget base paints the canvas and nothing else. Giving it a panel colour
+   would paint anonymous layout containers, viewports and splitters too, and the
+   window collapses into one filled slab with no ground left between panels.     */
+
+QWidget {
+    background: #0B0B0B;
+    color: #ECECEC;
+    selection-background-color: #3DE0F0;
+    selection-color: #06181B;
+}
+/* The base font (Tahoma 10pt) is deliberately NOT set here. A font-size in a QSS rule
+   overrides QWidget::setFont() on every widget it matches, so a base rule on QWidget
+   silently flattens every type step the panels set in C++ and the hierarchy collapses to
+   one size. It is applied as the application font in Theme::Apply instead, which is an
+   inherited default rather than an override. The object-name rules below still carry
+   font-size on purpose: those are meant to win. */
+
+QMainWindow,
+QDialog {
+    background: #0B0B0B;
+}
+
+/* Docks tile edge to edge by default. A transparent separator at 12px is the air
+   between the floating panels, and stays draggable. */
+QMainWindow::separator {
+    background: transparent;
+    width: 12px;
+    height: 12px;
+}
+QMainWindow::separator:hover {
+    background: rgba(61, 224, 240, 45);
+}
+
+QSplitter::handle {
+    background: transparent;
+}
+QSplitter::handle:horizontal { width: 12px; }
+QSplitter::handle:vertical   { height: 12px; }
+QSplitter::handle:hover {
+    background: rgba(61, 224, 240, 45);
+}
+
+/* ---- Panels --------------------------------------------------------------
+   Every dock's content is wrapped in a QFrame#PanelFrame. The margin is what lets
+   the canvas read as a continuous field behind discrete islands.                */
+
+QFrame#PanelFrame {
+    background: rgba(255, 255, 255, 15);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 10px;
+    margin: 6px;
+}
+QFrame#PanelFrame:hover {
+    border-color: rgba(255, 255, 255, 70);
+}
+
+/* Dialogs and other raised surfaces sit one step up the elevation stack. */
+QFrame#DialogFrame {
+    background: rgba(255, 255, 255, 26);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 14px;
+    margin: 6px;
+}
+
+/* The panel's top hairline. Neutral here; each dock repaints it in its own region
+   hue from Theme::kRegion*, which is also how the region identifies itself when the
+   dock is active rather than only under the cursor. */
+QFrame#PanelHairline {
+    background: rgba(255, 255, 255, 38);
+    border: none;
+    border-radius: 1px;
+    max-height: 2px;
+    min-height: 2px;
+    margin: 0px;
+}
+
+/* The title bar text is drawn with the QDockWidget's own font, so this is where the
+   panel-title size lives. The float and close buttons stay unstyled: a rule on them
+   replaces their native pixmap and they vanish. */
+QDockWidget {
+    background: #0B0B0B;
+    color: #ECECEC;
+    font-size: 11pt;
+    font-weight: bold;
+}
+QDockWidget::title {
+    background: transparent;
+    text-align: left;
+    padding: 6px 10px 4px 12px;
+}
+
+/* ---- Text ----------------------------------------------------------------
+   Hierarchy comes from weight and size. text-secondary is for captions only;
+   everything else stays at text-primary.                                        */
+
+QLabel {
+    background: transparent;
+    color: #ECECEC;
+}
+QLabel:disabled {
+    color: #7A7E86;
+}
+QLabel#PanelTitle {
+    font-size: 11pt;
+    font-weight: bold;
+    padding: 2px 0px 6px 0px;
+}
+QLabel#SectionTitle {
+    font-weight: bold;
+    padding: 8px 0px 4px 0px;
+}
+QLabel#Caption {
+    color: #B8BCC4;
+    font-size: 9pt;
+}
+QLabel#StatusOk      { color: #A3F04A; font-weight: bold; }
+QLabel#StatusWarning { color: #FFB63D; font-weight: bold; }
+QLabel#StatusError   { color: #FF5A52; font-weight: bold; }
+QLabel#Link          { color: #5AA8FF; }
+
+/* Monospace is confined to the editor and to fixed-width columnar data. */
+QPlainTextEdit#ShaderEditor,
+QTextEdit#ShaderEditor,
+QPlainTextEdit#LogView,
+QLabel#Mono {
+    font-family: Consolas;
+    font-size: 10pt;
+}
+
+/* ---- Chrome --------------------------------------------------------------
+   Menu bar, tool bar and status bar sit on the canvas. No solid fills: their
+   content is what should be visible, not their background.                      */
+
+QMenuBar {
+    background: transparent;
+    border: none;
+    padding: 2px 6px;
+}
+QMenuBar::item {
+    background: transparent;
+    color: #ECECEC;
+    padding: 5px 10px;
+    border-radius: 6px;
+}
+QMenuBar::item:selected {
+    background: rgba(255, 255, 255, 26);
+    color: #3DE0F0;
+}
+QMenuBar::item:pressed {
+    background: rgba(61, 224, 240, 70);
+    color: #ECECEC;
+}
+
+QMenu {
+    background: #242424;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 10px;
+    padding: 6px;
+}
+QMenu::item {
+    background: transparent;
+    padding: 6px 26px 6px 26px;
+    border-radius: 6px;
+}
+QMenu::item:selected {
+    background: rgba(61, 224, 240, 70);
+    color: #ECECEC;
+}
+QMenu::item:disabled {
+    color: #7A7E86;
+}
+QMenu::separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 38);
+    margin: 6px 10px;
+}
+
+QToolBar {
+    background: transparent;
+    border: none;
+    padding: 4px;
+    spacing: 6px;
+}
+QToolBar::separator {
+    background: rgba(255, 255, 255, 38);
+    width: 1px;
+    margin: 4px 8px;
+}
+
+QStatusBar {
+    background: transparent;
+    border-top: 1px solid rgba(255, 255, 255, 38);
+    color: #B8BCC4;
+}
+QStatusBar::item {
+    border: none;
+}
+
+/* ---- Buttons -------------------------------------------------------------
+   Hover brightens the border as well as the fill; a hover that only shifts fill
+   colour is under-built.                                                        */
+
+QPushButton {
+    background: rgba(255, 255, 255, 26);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    color: #ECECEC;
+    padding: 6px 14px;
+    min-height: 18px;
+}
+QPushButton:hover {
+    background: rgba(255, 255, 255, 45);
+    border-color: rgba(61, 224, 240, 150);
+}
+QPushButton:pressed {
+    background: rgba(61, 224, 240, 80);
+    border-color: #3DE0F0;
+}
+QPushButton:checked {
+    background: rgba(61, 224, 240, 65);
+    border-color: #3DE0F0;
+}
+QPushButton:focus {
+    border: 1px solid #3DE0F0;
+}
+QPushButton:disabled {
+    background: rgba(255, 255, 255, 10);
+    border-color: rgba(255, 255, 255, 20);
+    color: #7A7E86;
+}
+
+/* The one primary action per surface. */
+QPushButton#Primary {
+    background: #3DE0F0;
+    border: 1px solid #3DE0F0;
+    color: #06181B;
+    font-weight: bold;
+}
+QPushButton#Primary:hover {
+    background: #6BE9F5;
+    border-color: #ECECEC;
+}
+QPushButton#Primary:pressed {
+    background: #2FBCCB;
+}
+QPushButton#Primary:disabled {
+    background: rgba(61, 224, 240, 60);
+    border-color: rgba(61, 224, 240, 60);
+    color: rgba(6, 24, 27, 160);
+}
+
+/* Destructive and record actions. */
+QPushButton#Danger {
+    background: rgba(255, 90, 82, 45);
+    border: 1px solid #FF5A52;
+    color: #FF5A52;
+    font-weight: bold;
+}
+QPushButton#Danger:hover {
+    background: rgba(255, 90, 82, 80);
+    border-color: #ECECEC;
+}
+QPushButton#Danger:pressed {
+    background: #FF5A52;
+    color: #06181B;
+}
+
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #ECECEC;
+    padding: 5px;
+}
+QToolButton:hover {
+    background: rgba(255, 255, 255, 30);
+    border-color: rgba(61, 224, 240, 150);
+}
+QToolButton:pressed,
+QToolButton:checked {
+    background: rgba(61, 224, 240, 70);
+    border-color: #3DE0F0;
+}
+QToolButton:disabled {
+    color: #7A7E86;
+}
+
+/* ---- Inputs --------------------------------------------------------------
+   Recessed: darker than the panel hosting them, tighter radius, no lift.        */
+
+QLineEdit,
+QPlainTextEdit,
+QTextEdit,
+QAbstractSpinBox,
+QComboBox {
+    background: rgba(0, 0, 0, 110);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    color: #ECECEC;
+    padding: 4px 8px;
+    selection-background-color: #3DE0F0;
+    selection-color: #06181B;
+}
+/* Room for the native arrows, which the base style draws in the space the padding
+   leaves. The subcontrols themselves stay unstyled. */
+QAbstractSpinBox { padding-right: 20px; }
+QComboBox        { padding-right: 24px; }
+
+QLineEdit:hover,
+QPlainTextEdit:hover,
+QTextEdit:hover,
+QAbstractSpinBox:hover,
+QComboBox:hover {
+    border-color: rgba(255, 255, 255, 80);
+}
+QLineEdit:focus,
+QPlainTextEdit:focus,
+QTextEdit:focus,
+QAbstractSpinBox:focus,
+QComboBox:focus,
+QComboBox:on {
+    border-color: #3DE0F0;
+}
+QLineEdit:disabled,
+QPlainTextEdit:disabled,
+QTextEdit:disabled,
+QAbstractSpinBox:disabled,
+QComboBox:disabled {
+    background: rgba(0, 0, 0, 60);
+    border-color: rgba(255, 255, 255, 20);
+    color: #7A7E86;
+}
+QLineEdit[readOnly="true"] {
+    color: #B8BCC4;
+}
+
+/* The popup is a top-level window: solid, not translucent. */
+QComboBox QAbstractItemView {
+    background: #242424;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    padding: 4px;
+    outline: none;
+    selection-background-color: rgba(61, 224, 240, 90);
+    selection-color: #ECECEC;
+}
+
+/* Checked reads as a filled accent chip against an empty recess: a shape difference
+   as well as a colour one, so it survives without the native tick glyph. */
+QCheckBox,
+QRadioButton {
+    background: transparent;
+    color: #ECECEC;
+    spacing: 8px;
+    padding: 2px 0px;
+}
+QCheckBox::indicator,
+QRadioButton::indicator {
+    width: 15px;
+    height: 15px;
+    background: rgba(0, 0, 0, 110);
+    border: 1px solid rgba(255, 255, 255, 80);
+}
+QCheckBox::indicator { border-radius: 4px; }
+QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator:hover,
+QRadioButton::indicator:hover {
+    border-color: #3DE0F0;
+}
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked {
+    background: #3DE0F0;
+    border-color: #3DE0F0;
+}
+QCheckBox::indicator:disabled,
+QRadioButton::indicator:disabled {
+    background: rgba(0, 0, 0, 60);
+    border-color: rgba(255, 255, 255, 26);
+}
+QCheckBox:disabled,
+QRadioButton:disabled {
+    color: #7A7E86;
+}
+
+QGroupBox {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 10px;
+    margin-top: 14px;
+    padding: 12px 8px 8px 8px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0px 6px;
+    background: transparent;
+    color: #ECECEC;
+    font-weight: bold;
+}
+
+/* ---- Sliders and progress ------------------------------------------------
+   Controls read as physical objects: a knob big enough to grab, a fill with mass. */
+
+QSlider::groove:horizontal {
+    background: rgba(0, 0, 0, 110);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 4px;
+    height: 6px;
+}
+QSlider::sub-page:horizontal {
+    background: #3DE0F0;
+    border: 1px solid #3DE0F0;
+    border-radius: 4px;
+    height: 6px;
+}
+QSlider::groove:vertical {
+    background: rgba(0, 0, 0, 110);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 4px;
+    width: 6px;
+}
+QSlider::add-page:vertical {
+    background: #3DE0F0;
+    border: 1px solid #3DE0F0;
+    border-radius: 4px;
+    width: 6px;
+}
+QSlider::handle:horizontal {
+    background: #ECECEC;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 8px;
+    width: 14px;
+    margin: -6px 0px;
+}
+QSlider::handle:vertical {
+    background: #ECECEC;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 8px;
+    height: 14px;
+    margin: 0px -6px;
+}
+QSlider::handle:hover {
+    background: #3DE0F0;
+    border-color: #3DE0F0;
+}
+QSlider::handle:pressed {
+    background: #6BE9F5;
+    border-color: #ECECEC;
+}
+QSlider::handle:disabled {
+    background: #7A7E86;
+    border-color: rgba(255, 255, 255, 20);
+}
+
+QProgressBar {
+    background: rgba(0, 0, 0, 110);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    color: #ECECEC;
+    text-align: center;
+    min-height: 16px;
+}
+QProgressBar::chunk {
+    background: #5AA8FF;
+    border-radius: 5px;
+    margin: 1px;
+}
+
+/* ---- Item views ---------------------------------------------------------- */
+
+QListView,
+QTreeView,
+QTableView {
+    background: rgba(0, 0, 0, 110);
+    alternate-background-color: rgba(255, 255, 255, 10);
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    color: #ECECEC;
+    outline: none;
+    padding: 2px;
+}
+QListView::item,
+QTreeView::item,
+QTableView::item {
+    border-radius: 4px;
+    padding: 5px 6px;
+}
+QListView::item:hover,
+QTreeView::item:hover,
+QTableView::item:hover {
+    background: rgba(255, 255, 255, 30);
+}
+QListView::item:selected,
+QTreeView::item:selected,
+QTableView::item:selected {
+    background: rgba(61, 224, 240, 75);
+    color: #ECECEC;
+}
+
+QHeaderView::section {
+    background: rgba(255, 255, 255, 15);
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 38);
+    color: #ECECEC;
+    font-weight: bold;
+    padding: 5px 6px;
+}
+QTableView QTableCornerButton::section {
+    background: rgba(255, 255, 255, 15);
+    border: none;
+}
+
+/* ---- Tabs ---------------------------------------------------------------- */
+
+QTabWidget::pane {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 10px;
+    top: -1px;
+}
+QTabBar {
+    background: transparent;
+}
+QTabBar::tab {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #ECECEC;
+    margin-right: 4px;
+    padding: 6px 14px;
+}
+QTabBar::tab:hover {
+    background: rgba(255, 255, 255, 30);
+    border-color: rgba(61, 224, 240, 150);
+}
+QTabBar::tab:selected {
+    background: rgba(61, 224, 240, 60);
+    border-color: #3DE0F0;
+}
+QTabBar::tab:disabled {
+    color: #7A7E86;
+}
+
+/* ---- Scrollbars ----------------------------------------------------------
+   Traditional, always visible, wide enough to grab. Auto-hiding scrollbars are a
+   mobile pattern and have no place in dense desktop tooling.                    */
+
+QScrollBar:vertical {
+    background: rgba(0, 0, 0, 110);
+    border: none;
+    border-radius: 7px;
+    width: 14px;
+    margin: 0px;
+}
+QScrollBar:horizontal {
+    background: rgba(0, 0, 0, 110);
+    border: none;
+    border-radius: 7px;
+    height: 14px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: rgba(255, 255, 255, 60);
+    border-radius: 6px;
+    margin: 1px;
+    min-height: 36px;
+}
+QScrollBar::handle:horizontal {
+    background: rgba(255, 255, 255, 60);
+    border-radius: 6px;
+    margin: 1px;
+    min-width: 36px;
+}
+QScrollBar::handle:hover {
+    background: rgba(61, 224, 240, 180);
+}
+QScrollBar::handle:pressed {
+    background: #3DE0F0;
+}
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    background: none;
+    border: none;
+    height: 0px;
+    width: 0px;
+}
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: transparent;
+}
+
+/* ---- Tooltips and popups ------------------------------------------------- */
+
+QToolTip {
+    background: #242424;
+    border: 1px solid rgba(255, 255, 255, 38);
+    border-radius: 6px;
+    color: #ECECEC;
+    padding: 5px 8px;
+}

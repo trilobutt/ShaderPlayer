@@ -1,5 +1,4 @@
 #include "WorkspaceManager.h"
-#include "imgui.h"
 #include <charconv>
 #include <fstream>
 #include <sstream>
@@ -8,81 +7,35 @@
 
 namespace SP {
 
-// Hardcoded factory layout. To update, arrange the windows as desired, save a
-// workspace preset, then paste that .ini file's ImGui section here (drop the
-// [WorkspacePreset] header and the LastUsed lines) and mirror its visibility
-// flags in the WorkspaceManager constructor below.
-static const char* const kDefaultLayoutIni = R"INI(
-[Window][DockSpace]
-Pos=0,0
-Size=3840,2126
-Collapsed=0
-
-[Window][Video]
-Pos=603,29
-Size=2224,1798
-Collapsed=0
-DockId=0x00000003,0
-
-[Window][Shader Library]
-Pos=2829,29
-Size=1011,2097
-Collapsed=0
-DockId=0x00000002,0
-
-[Window][Shader Parameters]
-Pos=0,29
-Size=601,2097
-Collapsed=0
-DockId=0x00000005,0
-
-[Window][Transport]
-Pos=603,1829
-Size=2224,73
-Collapsed=0
-DockId=0x00000007,0
-
-[Window][Shader Editor]
-Pos=2829,29
-Size=1011,2097
-Collapsed=0
-DockId=0x00000002,1
-
-[Window][Recording Settings]
-Pos=603,1904
-Size=2224,222
-Collapsed=0
-DockId=0x00000008,0
-
-[Window][Noise Generator]
-Pos=60,60
-Size=505,327
-Collapsed=0
-
-[Docking][Data]
-DockSpace         ID=0xD71539A0 Window=0x3DA2F1DE Pos=0,29 Size=3840,2097 Split=X
-  DockNode        ID=0x00000005 Parent=0xD71539A0 SizeRef=601,2097 Selected=0xAF40F580
-  DockNode        ID=0x00000006 Parent=0xD71539A0 SizeRef=3237,2097 Split=X
-    DockNode      ID=0x00000001 Parent=0x00000006 SizeRef=2224,2097 Split=Y Selected=0x954F7004
-      DockNode    ID=0x00000003 Parent=0x00000001 SizeRef=3037,1798 CentralNode=1 Selected=0x954F7004
-      DockNode    ID=0x00000004 Parent=0x00000001 SizeRef=3037,297 Split=Y Selected=0x04C1370C
-        DockNode  ID=0x00000007 Parent=0x00000004 SizeRef=2224,73 Selected=0x04C1370C
-        DockNode  ID=0x00000008 Parent=0x00000004 SizeRef=2224,222 Selected=0x00A96232
-    DockNode      ID=0x00000002 Parent=0x00000006 SizeRef=1011,2097 Selected=0x5DAA59D9
-)INI";
+// Hardcoded factory layout, as a base64 QMainWindow::saveState() blob: Parameters left,
+// Library over Editor right, Viewport centre, Transport and Recording along the bottom.
+// Captured from a hand-arranged window, so it is opaque by nature — to change it, arrange
+// the window, save a workspace preset, and paste that .ini file's `state=` value here.
+//
+// The panel flags on the built-in Default in the constructor below MUST match the docks
+// this blob contains. Qt deletes an empty dock area and redistributes its space, so a
+// panel hidden here but marked visible there lands somewhere arbitrary.
+static const char* const kDefaultLayoutState =
+    "AAAA/wAAAAH9AAAAAwAAAAAAAAG8AAADDfwCAAAAAfsAAAAUAGQAbwBjAGsAUABhAHIAYQBt"
+    "AHMBAAAAHgAAAw0AAADeAP///wAAAAEAAAGQAAADDfwCAAAAAfwAAAAeAAADDQAAAUMBAAAd"
+    "+gAAAAABAAAAAvsAAAAWAGQAbwBjAGsATABpAGIAcgBhAHIAeQEAAAXwAAABkAAAAN0A////"
+    "+wAAABQAZABvAGMAawBFAGQAaQB0AG8AcgEAAAAA/////wAAALwA////AAAAAwAAB4AAAAFi"
+    "/AEAAAAB/AAAAAAAAAeAAAABTgD////6AAAAAAEAAAAF+wAAABoAZABvAGMAawBUAHIAYQBu"
+    "AHMAcABvAHIAdAEAAAAA/////wAAAU4A////+wAAABoAZABvAGMAawBSAGUAYwBvAHIAZABp"
+    "AG4AZwEAAAAA/////wAAAPsA////+wAAABIAZABvAGMAawBOAG8AaQBzAGUAAAAAAP////8A"
+    "AADuAP////sAAAASAGQAbwBjAGsAUwBwAG8AdQB0AAAAAAD/////AAABBwD////7AAAAEgBk"
+    "AG8AYwBrAEEAdQBkAGkAbwAAAAAA/////wAAAOcA////AAAEHAAAAw0AAAAEAAAABAAAAAgA"
+    "AAAI/AAAAAA=";
 
 WorkspaceManager::WorkspaceManager() {
     // Index 0 is always the built-in Default preset
     WorkspacePreset defaultPreset;
     defaultPreset.name = "Default";
     defaultPreset.filepath = "";  // no file
-    // Must match the panels present in kDefaultLayoutIni above — every panel with
-    // a dock node in that blob has to be visible, or ImGui drops the empty node.
     defaultPreset.panels.editor      = true;
     defaultPreset.panels.library     = true;
     defaultPreset.panels.transport   = true;
     defaultPreset.panels.recording   = true;
-    defaultPreset.panels.keybindings = false;
     defaultPreset.panels.noise       = false;
     defaultPreset.panels.spout       = false;
     defaultPreset.panels.audio       = false;
@@ -118,20 +71,18 @@ void WorkspaceManager::ScanDirectory() {
         if (entry.path().extension() != ".ini") continue;
 
         WorkspacePreset preset;
-        std::string imguiBlock;
-        if (ParsePresetFile(entry.path().string(), preset, imguiBlock)) {
+        std::string stateBase64;
+        if (ParsePresetFile(entry.path().string(), preset, stateBase64)) {
             preset.filepath = entry.path().string();
             m_presets.push_back(std::move(preset));
         }
     }
 }
 
-int WorkspaceManager::SavePreset(const std::string& name, const PanelVisibility& panels)
+int WorkspaceManager::SavePreset(const std::string& name, const QByteArray& state,
+                                  const PanelVisibility& panels)
 {
-    // Capture current ImGui layout
-    size_t iniSize = 0;
-    const char* iniData = ImGui::SaveIniSettingsToMemory(&iniSize);
-    std::string imguiBlob(iniData, iniSize);
+    const std::string stateBase64 = state.toBase64().toStdString();
 
     WorkspacePreset preset;
     preset.name = name;
@@ -166,7 +117,7 @@ int WorkspaceManager::SavePreset(const std::string& name, const PanelVisibility&
         }
     }
 
-    if (!WritePresetFile(preset, imguiBlob)) return -1;
+    if (!WritePresetFile(preset, stateBase64)) return -1;
 
     // If a preset with this filepath already exists, update it in-place
     for (int i = 1; i < static_cast<int>(m_presets.size()); ++i) {
@@ -180,7 +131,7 @@ int WorkspaceManager::SavePreset(const std::string& name, const PanelVisibility&
     return static_cast<int>(m_presets.size()) - 1;
 }
 
-bool WorkspaceManager::LoadPreset(int index, PanelVisibility& panels)
+bool WorkspaceManager::LoadPreset(int index, QByteArray& state, PanelVisibility& panels)
 {
     if (index < 0 || index >= static_cast<int>(m_presets.size())) return false;
 
@@ -188,16 +139,17 @@ bool WorkspaceManager::LoadPreset(int index, PanelVisibility& panels)
     panels = preset.panels;
 
     if (index == 0) {
-        // Built-in Default
-        ImGui::LoadIniSettingsFromMemory(kDefaultLayoutIni);
+        // Built-in Default: the captured factory layout above. MainWindow still falls
+        // back to its programmatic layout if this ever decodes to nothing.
+        state = QByteArray::fromBase64(QByteArray(kDefaultLayoutState));
         return true;
     }
 
     WorkspacePreset dummy;
-    std::string imguiBlock;
-    if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return false;
+    std::string stateBase64;
+    if (!ParsePresetFile(preset.filepath, dummy, stateBase64)) return false;
 
-    ImGui::LoadIniSettingsFromMemory(imguiBlock.c_str(), imguiBlock.size());
+    state = QByteArray::fromBase64(QByteArray::fromStdString(stateBase64));
     return true;
 }
 
@@ -215,14 +167,14 @@ bool WorkspaceManager::SetKeybinding(int index, int vkCode, int modifiers) {
     preset.shortcutModifiers = modifiers;
 
     WorkspacePreset dummy;
-    std::string imguiBlock;
-    if (!ParsePresetFile(preset.filepath, dummy, imguiBlock)) return false;
-    return WritePresetFile(preset, imguiBlock);
+    std::string stateBase64;
+    if (!ParsePresetFile(preset.filepath, dummy, stateBase64)) return false;
+    return WritePresetFile(preset, stateBase64);
 }
 
 bool WorkspaceManager::ParsePresetFile(const std::string& filepath,
                                         WorkspacePreset& out,
-                                        std::string& imguiBlock) const
+                                        std::string& stateBase64) const
 {
     std::ifstream file(filepath);
     if (!file.is_open()) return false;
@@ -230,7 +182,7 @@ bool WorkspaceManager::ParsePresetFile(const std::string& filepath,
     std::string line;
     bool inHeader = false;
     bool foundHeader = false;
-    std::string imguiAccum;
+    bool foundState = false;
 
     while (std::getline(file, line)) {
         // Strip trailing \r for Windows line endings
@@ -242,46 +194,44 @@ bool WorkspaceManager::ParsePresetFile(const std::string& filepath,
             continue;
         }
 
-        if (inHeader) {
-            // A new section header that isn't ours signals the end of the metadata
-            if (!line.empty() && line[0] == '[') {
-                inHeader = false;
-                imguiAccum += line + '\n';
-                continue;
-            }
-            // Parse key=value
-            auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
-            std::string key = line.substr(0, eq);
-            std::string val = line.substr(eq + 1);
+        // Everything in this format lives inside the one [WorkspacePreset] section; a
+        // further section header (only ever seen on a stale legacy-format file) ends it.
+        if (!inHeader) continue;
+        if (!line.empty() && line[0] == '[') break;
+        if (line.empty()) continue;
 
-            if (key == "name")               out.name = val;
-            else if (key == "shortcutKey") {
-                std::from_chars(val.data(), val.data() + val.size(), out.shortcutKey);
-            }
-            else if (key == "shortcutModifiers") {
-                std::from_chars(val.data(), val.data() + val.size(), out.shortcutModifiers);
-            }
-            else if (key == "showEditor")           out.panels.editor      = (val == "1");
-            else if (key == "showLibrary")          out.panels.library     = (val == "1");
-            else if (key == "showTransport")        out.panels.transport   = (val == "1");
-            else if (key == "showRecording")        out.panels.recording   = (val == "1");
-            else if (key == "showKeybindingsPanel") out.panels.keybindings = (val == "1");
-            else if (key == "showNoisePanel")       out.panels.noise       = (val == "1");
-            else if (key == "showSpoutPanel")       out.panels.spout       = (val == "1");
-            else if (key == "showAudioPanel")       out.panels.audio       = (val == "1");
-        } else {
-            imguiAccum += line + '\n';
+        // Split on the FIRST '=' only: substr(eq + 1) keeps everything after it, including
+        // any further '=' characters, so base64 padding in a `state=` value round-trips.
+        const auto eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        const std::string key = line.substr(0, eq);
+        const std::string val = line.substr(eq + 1);
+
+        if (key == "name")                      out.name = val;
+        else if (key == "shortcutKey") {
+            std::from_chars(val.data(), val.data() + val.size(), out.shortcutKey);
         }
+        else if (key == "shortcutModifiers") {
+            std::from_chars(val.data(), val.data() + val.size(), out.shortcutModifiers);
+        }
+        else if (key == "showEditor")           out.panels.editor      = (val == "1");
+        else if (key == "showLibrary")          out.panels.library     = (val == "1");
+        else if (key == "showTransport")        out.panels.transport   = (val == "1");
+        else if (key == "showRecording")        out.panels.recording   = (val == "1");
+        else if (key == "showNoisePanel")       out.panels.noise       = (val == "1");
+        else if (key == "showSpoutPanel")       out.panels.spout       = (val == "1");
+        else if (key == "showAudioPanel")       out.panels.audio       = (val == "1");
+        else if (key == "state") { stateBase64 = val; foundState = true; }
     }
 
-    if (!foundHeader) return false;
-    imguiBlock = std::move(imguiAccum);
+    // A file missing `state=` is a preset from the superseded layout format (or is otherwise
+    // unusable); ScanDirectory relies on this returning false to skip it rather than crash.
+    if (!foundHeader || !foundState) return false;
     return true;
 }
 
 bool WorkspaceManager::WritePresetFile(const WorkspacePreset& preset,
-                                        const std::string& imguiBlob) const
+                                        const std::string& stateBase64) const
 {
     std::ofstream file(preset.filepath);
     if (!file.is_open()) return false;
@@ -294,12 +244,10 @@ bool WorkspaceManager::WritePresetFile(const WorkspacePreset& preset,
     file << "showLibrary=" << (preset.panels.library ? 1 : 0) << '\n';
     file << "showTransport=" << (preset.panels.transport ? 1 : 0) << '\n';
     file << "showRecording=" << (preset.panels.recording ? 1 : 0) << '\n';
-    file << "showKeybindingsPanel=" << (preset.panels.keybindings ? 1 : 0) << '\n';
     file << "showNoisePanel=" << (preset.panels.noise ? 1 : 0) << '\n';
     file << "showSpoutPanel=" << (preset.panels.spout ? 1 : 0) << '\n';
     file << "showAudioPanel=" << (preset.panels.audio ? 1 : 0) << '\n';
-    file << '\n';
-    file << imguiBlob;
+    file << "state=" << stateBase64 << '\n';
 
     return file.good();
 }

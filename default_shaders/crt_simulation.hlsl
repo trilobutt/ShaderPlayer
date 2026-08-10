@@ -1,27 +1,35 @@
 /*{
   "SHADER_TYPE": "video",
   "INPUTS": [
-    { "NAME": "BarrelStrength", "TYPE": "float", "MIN": 0.0,  "MAX": 0.5,  "DEFAULT": 0.18,  "LABEL": "Barrel Distortion" },
-    { "NAME": "MaskType",       "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Shadow","Slot","Trinitron"], "DEFAULT": 0, "LABEL": "Mask Type" },
-    { "NAME": "MaskScale",      "TYPE": "float", "MIN": 0.5,  "MAX": 3.0,  "DEFAULT": 1.0,   "LABEL": "Mask Scale" },
-    { "NAME": "ScanlineStr",    "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.35,  "LABEL": "Scanline Strength" },
-    { "NAME": "ScanlineCount",  "TYPE": "long",  "VALUES": [240,480,576,720], "LABELS": ["240 (arcade)","480 (NTSC)","576 (PAL)","720"], "DEFAULT": 480, "LABEL": "Scanlines" },
-    { "NAME": "BloomAmount",    "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25,  "LABEL": "Bloom" },
-    { "NAME": "BleedStrength",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.3,   "LABEL": "Colour Bleed" },
-    { "NAME": "Exposure",       "TYPE": "float", "MIN": 0.5,  "MAX": 4.0,  "DEFAULT": 1.6,   "LABEL": "Exposure" }
+    { "NAME": "Curvature",           "TYPE": "point2d", "MIN": 0.0, "MAX": 1.0, "DEFAULT": [0.5, 0.5], "LABEL": "Curvature H/V" },
+    { "NAME": "Vignette",            "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.5,   "LABEL": "Vignette" },
+    { "NAME": "MaskType",            "TYPE": "long",  "VALUES": [0,1,2], "LABELS": ["Shadow","Slot","Trinitron"], "DEFAULT": 0, "LABEL": "Mask Type" },
+    { "NAME": "MaskScale",           "TYPE": "float", "MIN": 0.5,  "MAX": 3.0,  "DEFAULT": 1.0,   "LABEL": "Mask Scale" },
+    { "NAME": "ScanlineStr",         "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.35,  "LABEL": "Scanline Strength" },
+    { "NAME": "ScanlineCount",       "TYPE": "long",  "VALUES": [240,480,576,720], "LABELS": ["240 (arcade)","480 (NTSC)","576 (PAL)","720"], "DEFAULT": 480, "LABEL": "Scanlines" },
+    { "NAME": "ScanlineTint",        "TYPE": "color", "DEFAULT": [1.0, 1.0, 1.0, 1.0], "LABEL": "Scanline Tint" },
+    { "NAME": "BloomAmount",         "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.25,  "LABEL": "Bloom" },
+    { "NAME": "BloomThreshold",      "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.75,  "LABEL": "Bloom Threshold" },
+    { "NAME": "BloomRadius",         "TYPE": "float", "MIN": 0.0,  "MAX": 8.0,  "DEFAULT": 2.0,   "LABEL": "Bloom Radius (px)" },
+    { "NAME": "BleedStrength",       "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.3,   "LABEL": "Colour Bleed" },
+    { "NAME": "ChromaticAberration", "TYPE": "float", "MIN": 0.0,  "MAX": 8.0,  "DEFAULT": 0.0,   "LABEL": "Chromatic Aberration (px)" },
+    { "NAME": "BlurAmount",          "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.0,   "LABEL": "Defocus" },
+    { "NAME": "BlurRadius",          "TYPE": "float", "MIN": 0.0,  "MAX": 4.0,  "DEFAULT": 1.0,   "LABEL": "Defocus Radius (px)" },
+    { "NAME": "Exposure",            "TYPE": "float", "MIN": 0.5,  "MAX": 4.0,  "DEFAULT": 1.6,   "LABEL": "Exposure" }
   ]
 }*/
 
-// CRT emulation: barrel distortion, phosphor mask, scanlines, phosphor bloom,
-// and sub-pixel colour bleed.
+// CRT emulation: tube curvature, phosphor mask, scanlines, phosphor bloom,
+// defocus, and two kinds of colour misregistration (horizontal gun
+// misconvergence and radial lens dispersion).
 //
 // Everything downstream of the video fetch runs in linear light, because every
 // one of these effects is a multiplication of emitted light by a transmission
 // factor, and phosphor bloom is light adding to light. The linearisation is
-// gamma 2.0 (square/sqrt) rather than the exact sRGB curve: there are 18 texture
-// fetches per pixel to convert, the round trip is exact when the controls are at
-// zero, and the residual difference against true sRGB is far below the mask and
-// scanline modulation sitting on top of it.
+// gamma 2.0 (square/sqrt) rather than the exact sRGB curve: there are up to 30
+// texture fetches per pixel to convert, the round trip is exact when the
+// controls are at zero, and the residual difference against true sRGB is far
+// below the mask and scanline modulation sitting on top of it.
 //
 // Scanlines are tied to a line count, not to the output resolution. A CRT has a
 // fixed number of lines however large the tube is, and the previous
@@ -50,16 +58,52 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-float3 fetchLin(float2 uv) {
-    float3 c = videoTexture.Sample(videoSampler, uv).rgb;
-    return c * c;
+// Tube curvature. Edge-weighted rather than radial: the horizontal displacement
+// is driven by |y| and the vertical by |x|, so the picture stays flat along both
+// centre lines and bows only toward the corners. That is how a tube is actually
+// shaped, and it is the thing a k1*r^2 lens term gets wrong — a lens bulges the
+// middle of every edge as hard as the corners.
+//
+// The upstream form takes its curvature as a DIVISOR: larger means flatter and
+// zero is a division by zero, which is not a control to hand a user. The slider
+// here is the reciprocal of it — 0 is dead flat, 1 is maximum bulge — so the
+// divisor is kCurveDiv/Curvature and the reciprocal cancels into a multiply that
+// is exactly zero at zero. kCurveDiv is therefore the divisor at full slider.
+static const float kCurveDiv = 1.6;
+
+float2 crtCurve(float2 uv, float2 amount) {
+    float2 p = uv * 2.0 - 1.0;
+    float2 warp = abs(p.yx) * (amount / kCurveDiv);
+    p += p * warp * warp;
+    return p * 0.5 + 0.5;
 }
 
-// Barrel / pincushion distortion.
-float2 barrelDistort(float2 uv, float k1) {
-    float2 c = uv - 0.5;
-    float r2 = dot(c, c);
-    return 0.5 + c * (1.0 + k1 * r2);
+// Linear-light fetch, masked to the source image. A tap landing off the picture
+// must contribute nothing; clamp addressing instead smears the edge texel
+// outward along the whole border, which is very visible once curvature pushes
+// the corners past the frame. w is the footprint of the tube edge, measured once
+// on the continuous warped coordinate in main and passed in, so this stays free
+// of derivatives and can be called from inside branches and unrolled loops. It
+// is a smoothstep and not a step for the same reason the border below is: a hard
+// test here puts the one-pixel staircase straight back.
+float3 fetchLin(float2 uv, float w) {
+    // SampleLevel rather than Sample: these taps are loop-carried and sit under
+    // uniform branches. Every texture in this pipeline is MipLevels = 1, so the
+    // two return identical values.
+    float3 c = videoTexture.SampleLevel(videoSampler, uv, 0).rgb;
+    float2 d = abs(uv - 0.5) * 2.0;
+    float  inside = 1.0 - smoothstep(1.0 - w, 1.0 + w, max(d.x, d.y));
+    return c * c * inside;
+}
+
+// One beam sample: the three guns do not land in the same place, so each channel
+// comes from its own offset. Both misregistration terms are folded into rOff and
+// bOff by the caller, which keeps a sample at three fetches however many of them
+// are switched on.
+float3 fetchBeam(float2 uv, float2 rOff, float2 bOff, float w) {
+    return float3(fetchLin(uv + rOff, w).r,
+                  fetchLin(uv,        w).g,
+                  fetchLin(uv + bOff, w).b);
 }
 
 // Three phosphor mask patterns. `m` is the mask-space coordinate (one triad per
@@ -108,38 +152,61 @@ float3 phosphorMask(float2 m, float w, int mtype) {
 float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
-    float2 warpUV = barrelDistort(uv, BarrelStrength * 0.5);
+    float2 warpUV = crtCurve(uv, Curvature);
 
     // Tube edge. The previous hard test produced a jagged one-pixel staircase all
     // the way round the curved border, which is the first thing the eye lands on.
+    // edgeMax is continuous in the warped coordinate, so its derivative is a real
+    // footprint and it doubles as the filter width for every fetch below.
     float2 edgeDist = abs(warpUV - 0.5) * 2.0;
     float  edgeMax  = max(edgeDist.x, edgeDist.y);
     float  ew       = max(fwidth(edgeMax), 1e-5);
     float  border   = 1.0 - smoothstep(1.0 - ew, 1.0 + ew, edgeMax);
-    float  vigSmooth = smoothstep(1.0, 0.7, edgeMax);
 
-    // Sub-pixel colour bleed: the electron beams for the three guns do not land
-    // in exactly the same place.
-    float bleedAmt = BleedStrength * 0.003;
-    float3 col = float3(fetchLin(warpUV + float2(-bleedAmt, 0)).r,
-                        fetchLin(warpUV).g,
-                        fetchLin(warpUV + float2( bleedAmt, 0)).b);
+    // Two independent misregistrations, summed into one pair of channel offsets.
+    // BleedStrength is horizontal beam misconvergence, a property of the gun
+    // assembly and so the same everywhere on the tube. ChromaticAberration is
+    // lens dispersion, which splits the channels along the radius from the screen
+    // centre; the 1e-4 is what keeps normalize() defined at the exact centre.
+    float  bleedAmt = BleedStrength * 0.003;
+    float2 caDir    = normalize(uv * 2.0 - 1.0 + 1e-4);
+    float2 caOff    = caDir * (ChromaticAberration / resolution);
+    float2 rOff     = float2(-bleedAmt, 0.0) + caOff;
+    float2 bOff     = float2( bleedAmt, 0.0) - caOff;
+
+    float3 col = fetchBeam(warpUV, rOff, bOff, ew);
+
+    // Defocus: a beam that is not sharply converged on the phosphor, as a 4-tap
+    // cross in linear light. It runs before the bloom so a defocused tube blooms
+    // from the softened image, which is the order the two happen in physically.
+    if (BlurAmount > 1e-3) {
+        float2 blurStep = BlurRadius / resolution;
+        float3 blurSum = fetchBeam(warpUV + float2(blurStep.x, 0.0), rOff, bOff, ew)
+                       + fetchBeam(warpUV - float2(blurStep.x, 0.0), rOff, bOff, ew)
+                       + fetchBeam(warpUV + float2(0.0, blurStep.y), rOff, bOff, ew)
+                       + fetchBeam(warpUV - float2(0.0, blurStep.y), rOff, bOff, ew);
+        col = lerp(col, blurSum * 0.25, BlurAmount);
+    }
 
     // Phosphor bloom: bright areas spill into their neighbours. Added, not
     // blended: this is light leaving one phosphor and arriving at another, and
     // the previous double application (a lerp toward a sum already scaled by the
     // same slider) meant the control did nothing for its first third of travel.
     if (BloomAmount > 1e-3) {
-        float bloomRadius = BloomAmount * 0.012;
+        float2 bloomStep = BloomRadius / resolution;
         float3 bloomCol = 0.0;
         [unroll]
         for (int bx = -2; bx <= 2; ++bx) {
             for (int by = -1; by <= 1; ++by) {
-                bloomCol += fetchLin(warpUV + float2(bx, by) * bloomRadius);
+                bloomCol += fetchLin(warpUV + float2(bx, by) * bloomStep, ew);
             }
         }
         bloomCol /= 15.0;
-        float bloomMask = smoothstep(0.25, 0.8, spLuma(col));
+        // Threshold knee: nothing under BloomThreshold blooms at all and the
+        // response above it is linear up to white. The fixed smoothstep that used
+        // to sit here gave neither end of that to the user.
+        float bloomMask = saturate(max(0.0, spLuma(col) - BloomThreshold)
+                                   / max(1e-4, 1.0 - BloomThreshold));
         col += bloomCol * bloomMask * BloomAmount * 1.5;
     }
 
@@ -149,14 +216,32 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float scanW     = max(fwidth(scanPhase), 1e-5);
     float scan      = 0.5 - 0.5 * spBandLimitedCos(scanPhase, scanW);
     col *= 1.0 - ScanlineStr * scan;
+    // Phosphor colour. lerp(1, tint, k) is exactly 1 for a white tint, so the
+    // default leaves the luminance-only dip above untouched; a warm or green tint
+    // colours the gaps between the lines the way a single-phosphor tube does.
+    // Alpha is the tint's own strength, per the colour-alpha convention: at 1 this is
+    // unchanged, at 0 the tint drops out and the luminance dip above stands alone.
+    col *= lerp(float3(1.0, 1.0, 1.0), ScanlineTint.rgb, scan * ScanlineStr * ScanlineTint.a);
 
     // Mask coordinate is continuous, so its derivative is exact even under the
-    // barrel warp. Fold to the triad only after measuring the footprint.
+    // curvature warp. Fold to the triad only after measuring the footprint.
     float2 maskUV = warpUV * resolution / max(MaskScale, 0.01);
     float  maskW  = max(max(fwidth(maskUV.x), fwidth(maskUV.y)), 1e-4) * 0.5;
     col *= phosphorMask(maskUV, maskW, MaskType);
 
-    col *= border * vigSmooth * Exposure;
+    // Corner falloff. A fifth power of the larger of the two axis distances,
+    // quartered before it is raised and scaled by 300 after: flat to within a
+    // percent across the middle of the tube and then off a cliff in the last
+    // tenth, which is what distinguishes a tube's corner shadowing from a
+    // photographic vignette. Measured on the unwarped screen coordinate and
+    // applied here in linear light, before the tonemap, since it is a loss of
+    // emitted light and not a grade.
+    float2 vDist = abs(uv * 2.0 - 1.0) * 0.25;
+    float  vOff  = max(vDist.x, vDist.y);
+    float  vOff2 = vOff * vOff;
+    float  vig   = max(0.0, 1.0 - Vignette * 300.0 * vOff2 * vOff2 * vOff);
+
+    col *= border * vig * Exposure;
 
     // The mask and scanlines together take a large bite out of the average level,
     // and Exposure puts it back, which drives the highlights well past white.

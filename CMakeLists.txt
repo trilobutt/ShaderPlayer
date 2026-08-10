@@ -6,6 +6,10 @@ project(ShaderPlayer VERSION 1.0.0 LANGUAGES CXX C)
 # CMP0169 OLD suppresses the deprecation warning for this intentional usage.
 cmake_policy(SET CMP0169 OLD)
 
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets Gui Core)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -56,22 +60,44 @@ else()
     endif()
 endif()
 
-# ImGui sources (fetched or local)
 include(FetchContent)
 
-FetchContent_Declare(
-    imgui
-    GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG docking
-)
-FetchContent_MakeAvailable(imgui)
+# extra-cmake-modules ships CMake modules only, but KSyntaxHighlighting locates it with
+# find_package(ECM NO_MODULE) and then *overwrites* CMAKE_MODULE_PATH with ECM_MODULE_PATH,
+# so a populated source tree is not enough: a real ECMConfig.cmake must exist on disk.
+# Configure and install ECM into the build tree at configure time. Nothing is compiled
+# (ECM is pure .cmake files), so this is a file copy and runs once.
+FetchContent_Declare(ecm
+    GIT_REPOSITORY https://invent.kde.org/frameworks/extra-cmake-modules.git
+    GIT_TAG v6.10.0 GIT_SHALLOW TRUE)
+FetchContent_GetProperties(ecm)
+if(NOT ecm_POPULATED)
+    FetchContent_Populate(ecm)
+endif()
+set(_ECM_PREFIX "${CMAKE_BINARY_DIR}/ecm-install")
+if(NOT EXISTS "${_ECM_PREFIX}/share/ECM/cmake/ECMConfig.cmake")
+    message(STATUS "ECM: configuring and installing into ${_ECM_PREFIX}")
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" -S "${ecm_SOURCE_DIR}" -B "${ecm_BINARY_DIR}"
+                "-DCMAKE_INSTALL_PREFIX=${_ECM_PREFIX}" -DBUILD_TESTING=OFF
+        RESULT_VARIABLE _ECM_RESULT OUTPUT_QUIET)
+    if(NOT _ECM_RESULT EQUAL 0)
+        message(FATAL_ERROR "ECM configure failed (${_ECM_RESULT})")
+    endif()
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}" --install "${ecm_BINARY_DIR}"
+        RESULT_VARIABLE _ECM_RESULT OUTPUT_QUIET)
+    if(NOT _ECM_RESULT EQUAL 0)
+        message(FATAL_ERROR "ECM install failed (${_ECM_RESULT})")
+    endif()
+endif()
+set(ECM_DIR "${_ECM_PREFIX}/share/ECM/cmake")
 
-FetchContent_Declare(
-    imgui_color_text_edit
-    GIT_REPOSITORY https://github.com/BalazsJako/ImGuiColorTextEdit.git
-    GIT_TAG master
-)
-FetchContent_MakeAvailable(imgui_color_text_edit)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(ksyntaxhighlighting
+    GIT_REPOSITORY https://invent.kde.org/frameworks/syntax-highlighting.git
+    GIT_TAG v6.10.0 GIT_SHALLOW TRUE)
+FetchContent_MakeAvailable(ksyntaxhighlighting)
 
 FetchContent_Declare(
     json
@@ -155,23 +181,6 @@ else()
     target_compile_options(spout_lib PRIVATE -w)
 endif()
 
-# ImGui library
-add_library(imgui_lib STATIC
-    ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_demo.cpp
-    ${imgui_SOURCE_DIR}/imgui_draw.cpp
-    ${imgui_SOURCE_DIR}/imgui_tables.cpp
-    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_win32.cpp
-    ${imgui_SOURCE_DIR}/backends/imgui_impl_dx11.cpp
-    ${imgui_color_text_edit_SOURCE_DIR}/TextEditor.cpp
-)
-target_include_directories(imgui_lib PUBLIC
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${imgui_color_text_edit_SOURCE_DIR}
-)
-
 # src/ShaderCommon.hlsli is the single source of truth for the injected shader
 # helper library: embedded here as a raw string literal for the runtime compiler,
 # and read directly off disk by tools/validate_shaders.py.
@@ -199,13 +208,34 @@ add_executable(ShaderPlayer WIN32
     src/D3D11Renderer.cpp
     src/ShaderManager.cpp
     src/VideoEncoder.cpp
-    src/UIManager.cpp
     src/ConfigManager.cpp
     src/WorkspaceManager.cpp
     src/KeyframeTimeline.cpp
     src/VideoOutputWindow.cpp
     src/SpoutOutput.cpp
     src/AudioPlayer.cpp
+    src/ui/Theme.cpp
+    src/ui/ViewportWidget.cpp
+    src/ui/HlslHighlighter.cpp
+    src/ui/EditorPanel.cpp
+    src/ui/LibraryPanel.cpp
+    src/ui/ParamsPanel.cpp
+    src/ui/KeyframeDetail.cpp
+    src/ui/TransportPanel.cpp
+    src/ui/RecordingPanel.cpp
+    src/ui/NoisePanel.cpp
+    src/ui/SpoutPanel.cpp
+    src/ui/AudioPanel.cpp
+    src/ui/dialogs/Dialog.cpp
+    src/ui/dialogs/KeybindingDialog.cpp
+    src/ui/dialogs/KeybindingsReferenceDialog.cpp
+    src/ui/dialogs/NewShaderDialog.cpp
+    src/ui/dialogs/CaptureDialog.cpp
+    src/ui/dialogs/WorkspacesDialog.cpp
+    src/ui/Toast.cpp
+    src/ui/BezierEditor.cpp
+    src/ui/MainWindow.cpp
+    resources/resources.qrc
     resources/ShaderPlayer.rc
 )
 
@@ -217,7 +247,6 @@ target_include_directories(ShaderPlayer PRIVATE
 )
 
 target_link_libraries(ShaderPlayer PRIVATE
-    imgui_lib
     nlohmann_json::nlohmann_json
     kissfft_lib
     spout_lib
@@ -226,21 +255,57 @@ target_link_libraries(ShaderPlayer PRIVATE
     dxgi
     dxguid
     strmiids
+    dbghelp
     ole32
     winmm
     ${FFMPEG_LIBRARIES}
+    Qt6::Widgets
+    Qt6::Gui
+    Qt6::Core
+    # Built in-tree by FetchContent, so the unqualified target name applies; the
+    # KF6::SyntaxHighlighting alias exists only in the installed export.
+    KF6SyntaxHighlighting
 )
 
-# Copy FFmpeg DLLs to output directory
+# Copy FFmpeg DLLs to the output directory. Delegated to a script so the glob runs at
+# BUILD time: globbing here would fix the file list at configure time, and populating
+# third_party/ffmpeg/bin afterwards would then change nothing until CMake was re-run,
+# silently yielding an exe that links but cannot start. See tools/copy_ffmpeg.cmake.
 if(DEFINED FFMPEG_BIN_DIR AND EXISTS "${FFMPEG_BIN_DIR}")
-    file(GLOB FFMPEG_DLLS "${FFMPEG_BIN_DIR}/*.dll")
-    foreach(DLL ${FFMPEG_DLLS})
-        add_custom_command(TARGET ShaderPlayer POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${DLL}" $<TARGET_FILE_DIR:ShaderPlayer>
-        )
-    endforeach()
+    add_custom_command(TARGET ShaderPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                "-DBIN_DIR=${FFMPEG_BIN_DIR}"
+                "-DDEST_DIR=$<TARGET_FILE_DIR:ShaderPlayer>"
+                -P "${CMAKE_SOURCE_DIR}/tools/copy_ffmpeg.cmake"
+        COMMENT "Copying FFmpeg runtime")
 endif()
+
+# Copy KSyntaxHighlighting DLL (LGPL: kept as a shared library, never statically
+# linked, to avoid relinking obligations)
+add_custom_command(TARGET ShaderPlayer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "$<TARGET_FILE:KF6SyntaxHighlighting>" $<TARGET_FILE_DIR:ShaderPlayer>
+)
+
+# Deploy Qt runtime (DLLs, plugins) next to the executable. Wrapped in a script so the
+# pre-port state (exe links Qt but references none of it) is not a build failure.
+if(TARGET Qt6::windeployqt)
+    set(_WINDEPLOYQT $<TARGET_FILE:Qt6::windeployqt>)
+else()
+    get_target_property(_QT_CORE_LOC Qt6::Core IMPORTED_LOCATION_RELEASE)
+    if(NOT _QT_CORE_LOC)
+        get_target_property(_QT_CORE_LOC Qt6::Core IMPORTED_LOCATION)
+    endif()
+    get_filename_component(_QT_BIN "${_QT_CORE_LOC}" DIRECTORY)
+    set(_WINDEPLOYQT "${_QT_BIN}/windeployqt.exe")
+endif()
+
+add_custom_command(TARGET ShaderPlayer POST_BUILD
+    COMMAND ${CMAKE_COMMAND}
+            "-DWINDEPLOYQT=${_WINDEPLOYQT}"
+            "-DTARGET_EXE=$<TARGET_FILE:ShaderPlayer>"
+            -P "${CMAKE_SOURCE_DIR}/tools/deploy_qt.cmake"
+    COMMENT "Deploying Qt runtime")
 
 # Install
 install(TARGETS ShaderPlayer RUNTIME DESTINATION bin)

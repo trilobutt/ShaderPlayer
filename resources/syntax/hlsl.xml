@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language>
+<!--
+    hlsl.xml — Kate syntax definition for the shaders ShaderPlayer compiles.
+
+    Structurally derived from KSyntaxHighlighting's own data/syntax/glsl.xml, with the
+    word lists replaced by Shader Model 5.0 pixel-shader HLSL.
+
+    Two deliberate omissions, both for the same reason: a definition that colours a name
+    as an intrinsic advertises a function the compiler will reject.
+      - atanh (and asinh/acosh) are NOT ps_5_0 intrinsics; fxc answers X3004. See the
+        HLSL gotchas in CLAUDE.md for the hand-rolled replacement.
+      - noise() parses but is not implemented for ps_5_0.
+
+    The "ISF Block" context covers the leading /*{ ... }*/ parameter declaration that
+    ShaderManager::ParseISFParams reads. It is a comment to fxc and the authoritative
+    parameter list to this application, so it gets its own attribute and reads as a
+    distinct recessed region rather than as one more comment.
+
+    Beyond Normal there are exactly four contexts: the ISF block, a line comment, a block
+    comment and a string. Preprocessor directives are matched in place instead, which
+    leaves the body of a `#define Name custom[0].x` highlighted as the HLSL it expands to.
+-->
+<language name="HLSL"
+          section="3D"
+          extensions="*.hlsl;*.fx;*.ps"
+          mimetype="text/x-hlsl"
+          version="1"
+          kateversion="5.0"
+          author="ShaderPlayer"
+          license="MIT"
+          indenter="cstyle">
+	<highlighting>
+		<list name="controlflow">
+			<item>break</item>
+			<item>case</item>
+			<item>continue</item>
+			<item>default</item>
+			<item>discard</item>
+			<item>do</item>
+			<item>else</item>
+			<item>for</item>
+			<item>if</item>
+			<item>return</item>
+			<item>switch</item>
+			<item>while</item>
+		</list>
+		<list name="keywords">
+			<item>asm</item>
+			<item>cbuffer</item>
+			<item>class</item>
+			<item>compile</item>
+			<item>false</item>
+			<item>interface</item>
+			<item>namespace</item>
+			<item>pass</item>
+			<item>register</item>
+			<item>packoffset</item>
+			<item>struct</item>
+			<item>tbuffer</item>
+			<item>technique</item>
+			<item>true</item>
+			<item>typedef</item>
+		</list>
+		<list name="types">
+			<item>void</item>
+			<item>bool</item>
+			<item>bool2</item>
+			<item>bool3</item>
+			<item>bool4</item>
+			<item>int</item>
+			<item>int2</item>
+			<item>int3</item>
+			<item>int4</item>
+			<item>uint</item>
+			<item>uint2</item>
+			<item>uint3</item>
+			<item>uint4</item>
+			<item>dword</item>
+			<item>half</item>
+			<item>half2</item>
+			<item>half3</item>
+			<item>half4</item>
+			<item>float</item>
+			<item>float2</item>
+			<item>float3</item>
+			<item>float4</item>
+			<item>double</item>
+			<item>double2</item>
+			<item>double3</item>
+			<item>double4</item>
+			<item>min16float</item>
+			<item>min10float</item>
+			<item>min16int</item>
+			<item>min12int</item>
+			<item>min16uint</item>
+
+			<item>float1x1</item>
+			<item>float2x2</item>
+			<item>float2x3</item>
+			<item>float2x4</item>
+			<item>float3x2</item>
+			<item>float3x3</item>
+			<item>float3x4</item>
+			<item>float4x2</item>
+			<item>float4x3</item>
+			<item>float4x4</item>
+			<item>half2x2</item>
+			<item>half3x3</item>
+			<item>half4x4</item>
+			<item>int2x2</item>
+			<item>int3x3</item>
+			<item>int4x4</item>
+			<item>matrix</item>
+			<item>vector</item>
+
+			<item>Buffer</item>
+			<item>ByteAddressBuffer</item>
+			<item>ConsumeStructuredBuffer</item>
+			<item>AppendStructuredBuffer</item>
+			<item>StructuredBuffer</item>
+			<item>RWBuffer</item>
+			<item>RWByteAddressBuffer</item>
+			<item>RWStructuredBuffer</item>
+			<item>RWTexture1D</item>
+			<item>RWTexture1DArray</item>
+			<item>RWTexture2D</item>
+			<item>RWTexture2DArray</item>
+			<item>RWTexture3D</item>
+			<item>Texture1D</item>
+			<item>Texture1DArray</item>
+			<item>Texture2D</item>
+			<item>Texture2DArray</item>
+			<item>Texture2DMS</item>
+			<item>Texture2DMSArray</item>
+			<item>Texture3D</item>
+			<item>TextureCube</item>
+			<item>TextureCubeArray</item>
+			<item>SamplerState</item>
+			<item>SamplerComparisonState</item>
+			<item>sampler</item>
+			<item>sampler1D</item>
+			<item>sampler2D</item>
+			<item>sampler3D</item>
+			<item>samplerCUBE</item>
+		</list>
+		<list name="typequal">
+			<item>centroid</item>
+			<item>column_major</item>
+			<item>const</item>
+			<item>extern</item>
+			<item>groupshared</item>
+			<item>in</item>
+			<item>inline</item>
+			<item>inout</item>
+			<item>linear</item>
+			<item>nointerpolation</item>
+			<item>noperspective</item>
+			<item>out</item>
+			<item>precise</item>
+			<item>row_major</item>
+			<item>sample</item>
+			<item>shared</item>
+			<item>static</item>
+			<item>uniform</item>
+			<item>unorm</item>
+			<item>snorm</item>
+			<item>volatile</item>
+		</list>
+		<list name="semantics">
+			<item>SV_POSITION</item>
+			<item>SV_Position</item>
+			<item>SV_TARGET</item>
+			<item>SV_Target</item>
+			<item>SV_Target0</item>
+			<item>SV_Target1</item>
+			<item>SV_Target2</item>
+			<item>SV_Target3</item>
+			<item>SV_DEPTH</item>
+			<item>SV_Depth</item>
+			<item>SV_Coverage</item>
+			<item>SV_IsFrontFace</item>
+			<item>SV_SampleIndex</item>
+			<item>SV_ClipDistance</item>
+			<item>SV_CullDistance</item>
+			<item>SV_InstanceID</item>
+			<item>SV_PrimitiveID</item>
+			<item>SV_VertexID</item>
+			<item>SV_RenderTargetArrayIndex</item>
+			<item>SV_DispatchThreadID</item>
+			<item>SV_GroupID</item>
+			<item>SV_GroupIndex</item>
+			<item>SV_GroupThreadID</item>
+			<item>POSITION</item>
+			<item>NORMAL</item>
+			<item>TANGENT</item>
+			<item>BINORMAL</item>
+			<item>COLOR</item>
+			<item>COLOR0</item>
+			<item>COLOR1</item>
+			<item>TEXCOORD0</item>
+			<item>TEXCOORD1</item>
+			<item>TEXCOORD2</item>
+			<item>TEXCOORD3</item>
+			<item>TEXCOORD4</item>
+			<item>TEXCOORD5</item>
+			<item>TEXCOORD6</item>
+			<item>TEXCOORD7</item>
+			<item>VPOS</item>
+			<item>VFACE</item>
+		</list>
+		<list name="intrinsics">
+			<item>abort</item>
+			<item>abs</item>
+			<item>acos</item>
+			<item>all</item>
+			<item>AllMemoryBarrier</item>
+			<item>AllMemoryBarrierWithGroupSync</item>
+			<item>any</item>
+			<item>asdouble</item>
+			<item>asfloat</item>
+			<item>asin</item>
+			<item>asint</item>
+			<item>asuint</item>
+			<item>atan</item>
+			<item>atan2</item>
+			<item>ceil</item>
+			<item>CheckAccessFullyMapped</item>
+			<item>clamp</item>
+			<item>clip</item>
+			<item>cos</item>
+			<item>cosh</item>
+			<item>countbits</item>
+			<item>cross</item>
+			<item>D3DCOLORtoUBYTE4</item>
+			<item>ddx</item>
+			<item>ddx_coarse</item>
+			<item>ddx_fine</item>
+			<item>ddy</item>
+			<item>ddy_coarse</item>
+			<item>ddy_fine</item>
+			<item>degrees</item>
+			<item>determinant</item>
+			<item>DeviceMemoryBarrier</item>
+			<item>DeviceMemoryBarrierWithGroupSync</item>
+			<item>distance</item>
+			<item>dot</item>
+			<item>dst</item>
+			<item>EvaluateAttributeAtCentroid</item>
+			<item>EvaluateAttributeAtSample</item>
+			<item>EvaluateAttributeSnapped</item>
+			<item>exp</item>
+			<item>exp2</item>
+			<item>f16tof32</item>
+			<item>f32tof16</item>
+			<item>faceforward</item>
+			<item>firstbithigh</item>
+			<item>firstbitlow</item>
+			<item>floor</item>
+			<item>fma</item>
+			<item>fmod</item>
+			<item>frac</item>
+			<item>frexp</item>
+			<item>fwidth</item>
+			<item>GetRenderTargetSampleCount</item>
+			<item>GetRenderTargetSamplePosition</item>
+			<item>GroupMemoryBarrier</item>
+			<item>GroupMemoryBarrierWithGroupSync</item>
+			<item>InterlockedAdd</item>
+			<item>InterlockedAnd</item>
+			<item>InterlockedCompareExchange</item>
+			<item>InterlockedCompareStore</item>
+			<item>InterlockedExchange</item>
+			<item>InterlockedMax</item>
+			<item>InterlockedMin</item>
+			<item>InterlockedOr</item>
+			<item>InterlockedXor</item>
+			<item>isfinite</item>
+			<item>isinf</item>
+			<item>isnan</item>
+			<item>ldexp</item>
+			<item>length</item>
+			<item>lerp</item>
+			<item>lit</item>
+			<item>log</item>
+			<item>log10</item>
+			<item>log2</item>
+			<item>mad</item>
+			<item>max</item>
+			<item>min</item>
+			<item>modf</item>
+			<item>msad4</item>
+			<item>mul</item>
+			<item>normalize</item>
+			<item>pow</item>
+			<item>radians</item>
+			<item>rcp</item>
+			<item>reflect</item>
+			<item>refract</item>
+			<item>reversebits</item>
+			<item>round</item>
+			<item>rsqrt</item>
+			<item>saturate</item>
+			<item>sign</item>
+			<item>sin</item>
+			<item>sincos</item>
+			<item>sinh</item>
+			<item>smoothstep</item>
+			<item>sqrt</item>
+			<item>step</item>
+			<item>tan</item>
+			<item>tanh</item>
+			<item>tex1D</item>
+			<item>tex1Dbias</item>
+			<item>tex1Dgrad</item>
+			<item>tex1Dlod</item>
+			<item>tex1Dproj</item>
+			<item>tex2D</item>
+			<item>tex2Dbias</item>
+			<item>tex2Dgrad</item>
+			<item>tex2Dlod</item>
+			<item>tex2Dproj</item>
+			<item>tex3D</item>
+			<item>tex3Dbias</item>
+			<item>tex3Dgrad</item>
+			<item>tex3Dlod</item>
+			<item>tex3Dproj</item>
+			<item>texCUBE</item>
+			<item>texCUBEbias</item>
+			<item>texCUBEgrad</item>
+			<item>texCUBElod</item>
+			<item>texCUBEproj</item>
+			<item>transpose</item>
+			<item>trunc</item>
+
+			<item>CalculateLevelOfDetail</item>
+			<item>CalculateLevelOfDetailUnclamped</item>
+			<item>Gather</item>
+			<item>GatherAlpha</item>
+			<item>GatherBlue</item>
+			<item>GatherCmp</item>
+			<item>GatherGreen</item>
+			<item>GatherRed</item>
+			<item>GetDimensions</item>
+			<item>GetSamplePosition</item>
+			<item>Load</item>
+			<item>Sample</item>
+			<item>SampleBias</item>
+			<item>SampleCmp</item>
+			<item>SampleCmpLevelZero</item>
+			<item>SampleGrad</item>
+			<item>SampleLevel</item>
+		</list>
+		<contexts>
+			<context attribute="Normal Text" lineEndContext="#stay" name="Normal">
+				<DetectSpaces />
+
+				<!-- The ISF block rule must precede the plain block-comment rule: /*{ is
+				     also a valid /* opener and whichever matches first wins. -->
+				<StringDetect attribute="ISF Block" context="ISF Block" String="/*{" beginRegion="Comment" />
+				<Detect2Chars attribute="Comment" context="Line Comment" char="/" char1="/" />
+				<Detect2Chars attribute="Comment" context="Block Comment" char="/" char1="*" beginRegion="Comment" />
+
+				<RegExpr attribute="Preprocessor" context="#stay" String="#\s*[a-zA-Z_]+" firstNonSpace="true" />
+
+				<keyword attribute="Control Flow"  String="controlflow" context="#stay" />
+				<keyword attribute="Keyword"       String="keywords"    context="#stay" />
+				<keyword attribute="Data Type"     String="types"       context="#stay" />
+				<keyword attribute="Type Qualifier" String="typequal"   context="#stay" />
+				<keyword attribute="Semantic"      String="semantics"   context="#stay" />
+				<keyword attribute="Intrinsic"     String="intrinsics"  context="#stay" />
+
+				<!-- Float and Int take no child rules in this schema, so a literal's
+				     type suffix (1.0f, 8u) falls through to Normal Text rather than
+				     being absorbed into the number. -->
+				<Float attribute="Float" context="#stay" />
+				<HlCOct attribute="Octal" context="#stay" />
+				<HlCHex attribute="Hex" context="#stay" />
+				<Int attribute="Decimal" context="#stay" />
+
+				<DetectChar attribute="String" context="String" char="&quot;" />
+
+				<DetectChar attribute="Symbol" context="#stay" char="{" beginRegion="Brace1" />
+				<DetectChar attribute="Symbol" context="#stay" char="}" endRegion="Brace1" />
+
+				<RegExpr attribute="Function" context="#stay" String="\b[_a-zA-Z][_a-zA-Z0-9]*(?=\s*\()" />
+				<AnyChar attribute="Symbol" context="#stay" String="+-/*%&lt;&gt;[]().^|&amp;~=!:;,?" />
+			</context>
+
+			<!-- The parameter declaration ShaderManager::ParseISFParams reads. One flat
+			     attribute: the whole block is the region, and its own colour plus its
+			     background band are what set it apart from an ordinary comment. -->
+			<context attribute="ISF Block" lineEndContext="#stay" name="ISF Block">
+				<StringDetect attribute="ISF Block" context="#pop" String="}*/" endRegion="Comment" />
+				<DetectSpaces />
+				<DetectIdentifier />
+			</context>
+
+			<context attribute="Comment" lineEndContext="#pop" name="Line Comment">
+				<LineContinue attribute="Comment" context="#stay" />
+				<DetectSpaces />
+				<IncludeRules context="##Comments" />
+			</context>
+
+			<context attribute="Comment" lineEndContext="#stay" name="Block Comment">
+				<Detect2Chars attribute="Comment" context="#pop" char="*" char1="/" endRegion="Comment" />
+				<DetectSpaces />
+				<IncludeRules context="##Comments" />
+			</context>
+
+			<context attribute="String" lineEndContext="#pop" name="String">
+				<LineContinue attribute="String" context="#stay" />
+				<HlCStringChar attribute="String" context="#stay" />
+				<DetectChar attribute="String" context="#pop" char="&quot;" />
+			</context>
+		</contexts>
+		<itemDatas>
+			<itemData name="Normal Text"    defStyleNum="dsNormal" />
+			<itemData name="Keyword"        defStyleNum="dsKeyword" />
+			<itemData name="Control Flow"   defStyleNum="dsControlFlow" />
+			<itemData name="Data Type"      defStyleNum="dsDataType" />
+			<itemData name="Type Qualifier" defStyleNum="dsDataType" />
+			<itemData name="Semantic"       defStyleNum="dsAttribute" />
+			<itemData name="Intrinsic"      defStyleNum="dsBuiltIn" />
+			<itemData name="Function"       defStyleNum="dsFunction" />
+			<itemData name="Decimal"        defStyleNum="dsDecVal" />
+			<itemData name="Octal"          defStyleNum="dsBaseN" />
+			<itemData name="Hex"            defStyleNum="dsBaseN" />
+			<itemData name="Float"          defStyleNum="dsFloat" />
+			<itemData name="Symbol"         defStyleNum="dsOperator" />
+			<itemData name="Preprocessor"   defStyleNum="dsPreprocessor" />
+			<itemData name="Comment"        defStyleNum="dsComment" />
+			<itemData name="String"         defStyleNum="dsString" />
+			<itemData name="ISF Block"      defStyleNum="dsDocumentation" />
+		</itemDatas>
+	</highlighting>
+	<general>
+		<comments>
+			<comment name="singleLine" start="//" />
+			<comment name="multiLine" start="/*" end="*/" region="Comment" />
+		</comments>
+		<keywords casesensitive="1" />
+	</general>
+</language>

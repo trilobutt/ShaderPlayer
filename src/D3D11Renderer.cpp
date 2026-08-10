@@ -128,16 +128,11 @@ D3D11Renderer::~D3D11Renderer() {
     Shutdown();
 }
 
-bool D3D11Renderer::Initialize(HWND hwnd, int width, int height) {
-    m_hwnd = hwnd;
+bool D3D11Renderer::Initialize(int width, int height) {
     m_width = width;
     m_height = height;
 
-    if (!CreateDeviceAndSwapChain(hwnd, width, height)) {
-        return false;
-    }
-
-    if (!CreateRenderTarget()) {
+    if (!CreateDevice()) {
         return false;
     }
 
@@ -157,13 +152,18 @@ bool D3D11Renderer::Initialize(HWND hwnd, int width, int height) {
     return true;
 }
 
+void D3D11Renderer::Resize(int width, int height) {
+    if (width <= 0 || height <= 0) return;      // minimized / not-yet-laid-out window
+    if (width == m_width && height == m_height) return;
+    m_width = width;
+    m_height = height;
+}
+
 void D3D11Renderer::Shutdown() {
     if (m_context) {
         m_context->ClearState();
         m_context->Flush();
     }
-
-    ReleaseRenderTarget();
 
     m_videoTexture.Reset();
     m_videoSRV.Reset();
@@ -189,12 +189,11 @@ void D3D11Renderer::Shutdown() {
     m_sampler.Reset();
     m_blendState.Reset();
     m_rasterizerState.Reset();
-    m_swapChain.Reset();
     m_context.Reset();
     m_device.Reset();
 }
 
-bool D3D11Renderer::CreateDeviceAndSwapChain(HWND hwnd, int width, int height) {
+bool D3D11Renderer::CreateDevice() {
     UINT createDeviceFlags = 0;
 #ifdef _DEBUG
     createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -240,75 +239,7 @@ bool D3D11Renderer::CreateDeviceAndSwapChain(HWND hwnd, int width, int height) {
     }
 #endif
 
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    // Get DXGI factory
-    ComPtr<IDXGIDevice> dxgiDevice;
-    hr = m_device.As(&dxgiDevice);
-    if (FAILED(hr)) return false;
-
-    ComPtr<IDXGIAdapter> dxgiAdapter;
-    hr = dxgiDevice->GetAdapter(&dxgiAdapter);
-    if (FAILED(hr)) return false;
-
-    ComPtr<IDXGIFactory2> dxgiFactory;
-    hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
-    if (FAILED(hr)) return false;
-
-    // Create swap chain
-    DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
-    swapChainDesc.Width = width;
-    swapChainDesc.Height = height;
-    swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.SampleDesc.Quality = 0;
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapChainDesc.BufferCount = 2;
-    swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-
-    hr = dxgiFactory->CreateSwapChainForHwnd(
-        m_device.Get(),
-        hwnd,
-        &swapChainDesc,
-        nullptr,
-        nullptr,
-        &m_swapChain
-    );
-
     return SUCCEEDED(hr);
-}
-
-bool D3D11Renderer::CreateRenderTarget() {
-    ComPtr<ID3D11Texture2D> backBuffer;
-    HRESULT hr = m_swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
-    if (FAILED(hr)) return false;
-
-    hr = m_device->CreateRenderTargetView(backBuffer.Get(), nullptr, &m_renderTargetView);
-    return SUCCEEDED(hr);
-}
-
-void D3D11Renderer::ReleaseRenderTarget() {
-    if (m_context) {
-        m_context->OMSetRenderTargets(0, nullptr, nullptr);
-    }
-    m_renderTargetView.Reset();
-}
-
-bool D3D11Renderer::Resize(int width, int height) {
-    if (width <= 0 || height <= 0) return false;
-    
-    m_width = width;
-    m_height = height;
-
-    ReleaseRenderTarget();
-
-    HRESULT hr = m_swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-    if (FAILED(hr)) return false;
-
-    return CreateRenderTarget();
 }
 
 bool D3D11Renderer::CreateShaderResources() {
@@ -600,7 +531,7 @@ bool D3D11Renderer::CreateDisplayTexture(int width, int height) {
     texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     texDesc.SampleDesc.Count = 1;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
-    // Must be both RTV (rendered into) and SRV (sampled by ImGui)
+    // Must be both RTV (rendered into) and SRV (sampled when blitted out)
     texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 
     HRESULT hr = m_device->CreateTexture2D(&texDesc, nullptr, &m_displayTexture);
@@ -671,13 +602,10 @@ void D3D11Renderer::RenderToDisplay() {
         m_context->Draw(3, 0);
     }
 
-    // Restore backbuffer as RT so ImGui can render into it
-    m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
-    D3D11_VIEWPORT mainVP = {};
-    mainVP.Width    = static_cast<float>(m_width);
-    mainVP.Height   = static_cast<float>(m_height);
-    mainVP.MaxDepth = 1.0f;
-    m_context->RSSetViewports(1, &mainVP);
+    // m_displayRTV is deliberately left bound. Every consumer of the display texture
+    // (ViewportWidget, VideoOutputWindow) binds its own RTV before it binds
+    // m_displaySRV, so the read-while-bound hazard cannot arise, and there is no
+    // backbuffer of ours left to restore.
 }
 
 void D3D11Renderer::BlitDisplayTo(ID3D11RenderTargetView* rtv, int width, int height) {
@@ -698,8 +626,41 @@ void D3D11Renderer::BlitDisplayTo(ID3D11RenderTargetView* rtv, int width, int he
     m_context->PSSetShaderResources(0, 1, m_displaySRV.GetAddressOf());
     m_context->Draw(3, 0);
 
-    // Restore main backbuffer RT, viewport, active PS, and video SRV
-    m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
+    // Restore viewport, active PS and video SRV. The caller's RTV stays bound: the
+    // renderer owns no swap chain of its own, and RenderToDisplay sets its own RT.
+    D3D11_VIEWPORT mainVP = {};
+    mainVP.Width    = static_cast<float>(m_width);
+    mainVP.Height   = static_cast<float>(m_height);
+    mainVP.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &mainVP);
+    m_context->PSSetShader(m_activePS.Get(), nullptr, 0);
+    if (m_videoSRV)
+        m_context->PSSetShaderResources(0, 1, m_videoSRV.GetAddressOf());
+}
+
+void D3D11Renderer::BlitDisplayToRect(ID3D11RenderTargetView* rtv, int rectX, int rectY,
+                                       int rectWidth, int rectHeight, const float clearColor[4]) {
+    if (!m_displaySRV || !rtv) return;
+
+    // ClearRenderTargetView clears the entire view regardless of the viewport set
+    // below, which is what lets the letterbox borders show the clear colour.
+    m_context->ClearRenderTargetView(rtv, clearColor);
+    m_context->OMSetRenderTargets(1, &rtv, nullptr);
+
+    D3D11_VIEWPORT vp = {};
+    vp.TopLeftX = static_cast<float>(rectX);
+    vp.TopLeftY = static_cast<float>(rectY);
+    vp.Width    = static_cast<float>(rectWidth);
+    vp.Height   = static_cast<float>(rectHeight);
+    vp.MaxDepth = 1.0f;
+    m_context->RSSetViewports(1, &vp);
+
+    // Passthrough — display texture is already shader-processed
+    m_context->PSSetShader(m_passthroughPS.Get(), nullptr, 0);
+    m_context->PSSetShaderResources(0, 1, m_displaySRV.GetAddressOf());
+    m_context->Draw(3, 0);
+
+    // Restore viewport, active PS and video SRV — same contract as BlitDisplayTo.
     D3D11_VIEWPORT mainVP = {};
     mainVP.Width    = static_cast<float>(m_width);
     mainVP.Height   = static_cast<float>(m_height);
@@ -857,12 +818,8 @@ void D3D11Renderer::BeginFrame() {
         m_context->Unmap(m_constantBuffer.Get(), 0);
     }
 
-    // Clear render target
-    float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    m_context->ClearRenderTargetView(m_renderTargetView.Get(), clearColor);
-
-    // Set render target
-    m_context->OMSetRenderTargets(1, m_renderTargetView.GetAddressOf(), nullptr);
+    // No render target is bound here: there is no backbuffer to clear, and every draw
+    // path below (RenderToDisplay, RenderToTexture, BlitDisplayTo*) binds its own.
 
     // Set viewport
     D3D11_VIEWPORT viewport = {};
@@ -900,15 +857,6 @@ void D3D11Renderer::BeginFrame() {
 
     m_context->RSSetState(m_rasterizerState.Get());
     m_context->OMSetBlendState(m_blendState.Get(), nullptr, 0xFFFFFFFF);
-}
-
-void D3D11Renderer::EndFrame() {
-    // Draw fullscreen triangle
-    m_context->Draw(3, 0);
-}
-
-void D3D11Renderer::Present(bool vsync) {
-    m_swapChain->Present(vsync ? 1 : 0, 0);
 }
 
 bool D3D11Renderer::RenderToTexture() {

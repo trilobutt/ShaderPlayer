@@ -1,0 +1,198 @@
+{
+    "metadata": {
+        "name": "ShaderPlayer Dark",
+        "revision": 1,
+        "license": "SPDX-License-Identifier: MIT",
+        "copyright": [
+            "ShaderPlayer editor theme, authored from the token table in src/ui/Theme.h."
+        ]
+    },
+
+    "_comment": [
+        "This file is the ONE place the token colours are repeated for the editor.",
+        "src/ui/HlslHighlighter.cpp and src/ui/EditorPanel.cpp write no colour of their",
+        "own: the gutter, the current-line band, the brace match and the error mark all",
+        "read their colour back out of the editor-colors block below. Change a value here",
+        "and in src/ui/Theme.h together, or in neither.",
+        "",
+        "Syntax colours follow one rule the reader can learn in a second: azure is the",
+        "language grammar, cyan its types, lime the intrinsics fxc provides, amber the",
+        "numbers, rose the strings, violet the preprocessor. Anything left near-white is",
+        "the author's own code. Magenta (#FF5FD2) never appears here because nothing in a",
+        "grammar can know it: HlslHighlighter paints the injected-preamble identifiers in",
+        "it as a second pass, so an unfamiliar name is instantly placeable as this",
+        "application's rather than the file's."
+    ],
+
+    "text-styles": {
+        "Normal": {
+            "text-color": "#ECECEC",
+            "selected-text-color": "#06181B"
+        },
+        "Keyword": {
+            "text-color": "#5AA8FF",
+            "selected-text-color": "#06181B"
+        },
+        "ControlFlow": {
+            "text-color": "#5AA8FF",
+            "selected-text-color": "#06181B",
+            "bold": true
+        },
+        "Attribute": {
+            "text-color": "#5AA8FF",
+            "selected-text-color": "#06181B",
+            "italic": true
+        },
+        "DataType": {
+            "text-color": "#3DE0F0",
+            "selected-text-color": "#06181B"
+        },
+        "BuiltIn": {
+            "text-color": "#A3F04A",
+            "selected-text-color": "#06181B"
+        },
+        "Extension": {
+            "text-color": "#A3F04A",
+            "selected-text-color": "#06181B"
+        },
+        "Function": {
+            "text-color": "#ECECEC",
+            "selected-text-color": "#06181B"
+        },
+        "Variable": {
+            "text-color": "#ECECEC",
+            "selected-text-color": "#06181B"
+        },
+        "Constant": {
+            "text-color": "#FFB63D",
+            "selected-text-color": "#06181B"
+        },
+        "DecVal": {
+            "text-color": "#FFB63D",
+            "selected-text-color": "#06181B"
+        },
+        "BaseN": {
+            "text-color": "#FFB63D",
+            "selected-text-color": "#06181B"
+        },
+        "Float": {
+            "text-color": "#FFB63D",
+            "selected-text-color": "#06181B"
+        },
+        "Char": {
+            "text-color": "#FF7A9C",
+            "selected-text-color": "#06181B"
+        },
+        "SpecialChar": {
+            "text-color": "#FF7A9C",
+            "selected-text-color": "#06181B",
+            "bold": true
+        },
+        "String": {
+            "text-color": "#FF7A9C",
+            "selected-text-color": "#06181B"
+        },
+        "VerbatimString": {
+            "text-color": "#FF7A9C",
+            "selected-text-color": "#06181B"
+        },
+        "SpecialString": {
+            "text-color": "#FF7A9C",
+            "selected-text-color": "#06181B"
+        },
+        "Import": {
+            "text-color": "#A97CFF",
+            "selected-text-color": "#06181B"
+        },
+        "Preprocessor": {
+            "text-color": "#A97CFF",
+            "selected-text-color": "#06181B"
+        },
+        "Operator": {
+            "text-color": "#B8BCC4",
+            "selected-text-color": "#06181B"
+        },
+        "Comment": {
+            "text-color": "#B8BCC4",
+            "selected-text-color": "#06181B",
+            "italic": true
+        },
+        "Documentation": {
+            "_comment": "The leading ISF block. It stays at caption contrast (9.6:1 on the band below) and recedes by sitting on its own violet-tinted slab instead, because it is the authoritative parameter declaration and dimming real content below the legibility floor is not an option.",
+            "text-color": "#B8BCC4",
+            "background-color": "#171225",
+            "selected-text-color": "#06181B",
+            "italic": true
+        },
+        "Annotation": {
+            "text-color": "#B8BCC4",
+            "selected-text-color": "#06181B",
+            "italic": true
+        },
+        "CommentVar": {
+            "text-color": "#B8BCC4",
+            "selected-text-color": "#06181B",
+            "italic": true
+        },
+        "RegionMarker": {
+            "text-color": "#5AA8FF",
+            "selected-text-color": "#06181B",
+            "background-color": "#171225"
+        },
+        "Information": {
+            "text-color": "#5AA8FF",
+            "selected-text-color": "#06181B"
+        },
+        "Warning": {
+            "text-color": "#FFB63D",
+            "selected-text-color": "#06181B"
+        },
+        "Alert": {
+            "text-color": "#FF5A52",
+            "selected-text-color": "#06181B",
+            "background-color": "#2A1413",
+            "bold": true
+        },
+        "Error": {
+            "text-color": "#FF5A52",
+            "selected-text-color": "#06181B",
+            "underline": true
+        },
+        "Others": {
+            "text-color": "#A3F04A",
+            "selected-text-color": "#06181B"
+        }
+    },
+
+    "editor-colors": {
+        "_comment": "EditorPanel reads CurrentLine, BracketMatching, IconBorder, Separator, LineNumbers, CurrentLineNumber and MarkError back out of the loaded theme. They are the editor chrome, and they live here so no colour is spelled out in C++.",
+        "BackgroundColor": "#0B0B0B",
+        "TextSelection": "#3DE0F0",
+        "CurrentLine": "#0AFFFFFF",
+        "BracketMatching": "#603DE0F0",
+        "IconBorder": "#40000000",
+        "Separator": "#40A97CFF",
+        "LineNumbers": "#B8BCC4",
+        "CurrentLineNumber": "#A97CFF",
+        "CodeFolding": "#264A50",
+        "IndentationLine": "#1AFFFFFF",
+        "WordWrapMarker": "#1AFFFFFF",
+        "TabMarker": "#26FFFFFF",
+        "SpellChecking": "#FF5A52",
+        "SearchHighlight": "#60A3F04A",
+        "ReplaceHighlight": "#60FFB63D",
+        "ModifiedLines": "#FFB63D",
+        "SavedLines": "#A3F04A",
+        "MarkBookmark": "#405AA8FF",
+        "MarkBreakpointActive": "#40FF5A52",
+        "MarkBreakpointReached": "#40FFB63D",
+        "MarkBreakpointDisabled": "#40FF5FD2",
+        "MarkExecution": "#40B8BCC4",
+        "MarkWarning": "#40FFB63D",
+        "MarkError": "#FF5A52",
+        "TemplateBackground": "#171225",
+        "TemplatePlaceholder": "#264A50",
+        "TemplateFocusedPlaceholder": "#2F6A73",
+        "TemplateReadOnlyPlaceholder": "#2A1413"
+    }
+}
