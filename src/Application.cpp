@@ -3,7 +3,10 @@
 #include "ui/MainWindow.h"
 #include "ui/ViewportWidget.h"
 #include <shellapi.h>
+#include <cstdint>
 #include <fstream>
+#include <future>
+#include <vector>
 
 #include <QCoreApplication>
 #include <QFileDialog>
@@ -35,6 +38,70 @@ bool Application::InitializeQt() {
     // Load configuration
     m_configManager.Load(ConfigManager::GetDefaultConfigPath());
 
+    // ---- CPU-only prep, run alongside D3D11CreateDevice --------------------------------
+    // D3D11CreateDevice spends the better part of half a second inside the display driver
+    // with this thread doing nothing at all. Three pieces of startup work need no D3D
+    // device to produce their result — the noise texture's pixels, the shader sources and
+    // their ISF metadata, and the audio output device — so they are started here and
+    // collected further down, each immediately before the first thing that needs it.
+    //
+    // Nothing launched here touches m_renderer, m_shaderManager or any Qt object. The
+    // config is read but not written until every job has been collected.
+    const AppConfig& startupConfig = m_configManager.GetConfig();
+    const int noiseSize = D3D11Renderer::ClampNoiseSize(startupConfig.noise.textureSize);
+
+    std::future<std::vector<uint8_t>> noiseJob = std::async(
+        std::launch::async,
+        [scale = startupConfig.noise.scale, noiseSize] {
+            return D3D11Renderer::GenerateNoisePixels(scale, noiseSize);
+        });
+
+    std::future<std::vector<ShaderPreset>> presetJob = std::async(
+        std::launch::async,
+        [&presets = startupConfig.shaderPresets] {
+            std::vector<ShaderPreset> loaded;
+            loaded.reserve(presets.size());
+            for (const auto& configPreset : presets) {
+                if (configPreset.filepath.empty()) continue;
+
+                ShaderPreset preset;
+                if (!ShaderManager::LoadShaderMetadataFromFile(configPreset.filepath, preset))
+                    continue;
+
+                preset.shortcutKey       = configPreset.shortcutKey;
+                preset.shortcutModifiers = configPreset.shortcutModifiers;
+
+                // Restore saved param values and keyframe timelines by name
+                for (auto& param : preset.params) {
+                    auto it = configPreset.savedParamValues.find(param.name);
+                    if (it != configPreset.savedParamValues.end()) {
+                        const auto& vals = it->second;
+                        for (int i = 0; i < 4 && i < static_cast<int>(vals.size()); ++i)
+                            param.values[i] = vals[i];
+                    }
+                    auto kit = configPreset.savedKeyframes.find(param.name);
+                    if (kit != configPreset.savedKeyframes.end()) {
+                        param.timeline = kit->second;
+                    }
+                }
+                loaded.push_back(std::move(preset));
+            }
+            return loaded;
+        });
+
+    // miniaudio opens the WASAPI device itself and initialises COM on whatever thread
+    // calls it, so this is free to run here. Collected before OpenVideo below, which is
+    // the first thing on this thread to touch the player.
+    std::future<void> audioJob = std::async(
+        std::launch::async,
+        [this, volume = startupConfig.audioVolume, mute = startupConfig.muteAudio] {
+            // Non-fatal — the app continues without audio on headless systems.
+            if (m_audioPlayer.Initialize()) {
+                m_audioPlayer.SetVolume(volume);
+                m_audioPlayer.SetMute(mute);
+            }
+        });
+
     // Initialize D3D11 — device only; every swap chain in the process belongs to the
     // window that presents it (ViewportWidget, VideoOutputWindow).
     //
@@ -52,10 +119,11 @@ bool Application::InitializeQt() {
         return false;
     }
 
-    // Generate initial noise texture (bound globally as t1/s1 for all shaders)
+    // Upload the noise texture the worker built while the device was coming up (bound
+    // globally as t1/s1 for all shaders).
     {
         const auto& cfg = m_configManager.GetConfig();
-        m_renderer.UpdateNoiseTexture(cfg.noise.scale, cfg.noise.textureSize);
+        m_renderer.UploadNoisePixels(noiseJob.get(), noiseSize);
         m_renderer.SetGenerativeResolution(cfg.generativeWidth, cfg.generativeHeight);
     }
 
@@ -87,33 +155,10 @@ bool Application::InitializeQt() {
     // it needs a realised native handle from winId().
     m_mainWindow->Viewport()->CreateSwapChain();
 
-    // Load shader presets from config.
-    // LoadShaderMetadataFromFile reads+parses ISF without compiling; AddPreset compiles
-    // once. This avoids the double-compile that LoadShaderFromFile + AddPreset incurred.
-    for (auto& configPreset : m_configManager.GetConfig().shaderPresets) {
-        if (!configPreset.filepath.empty()) {
-            ShaderPreset loadedPreset;
-            if (m_shaderManager->LoadShaderMetadataFromFile(configPreset.filepath, loadedPreset)) {
-                loadedPreset.shortcutKey       = configPreset.shortcutKey;
-                loadedPreset.shortcutModifiers = configPreset.shortcutModifiers;
-                // Restore saved param values by name
-                for (auto& param : loadedPreset.params) {
-                    auto it = configPreset.savedParamValues.find(param.name);
-                    if (it != configPreset.savedParamValues.end()) {
-                        const auto& vals = it->second;
-                        for (int i = 0; i < 4 && i < static_cast<int>(vals.size()); ++i)
-                            param.values[i] = vals[i];
-                    }
-                    // Restore saved keyframe timeline
-                    auto kit = configPreset.savedKeyframes.find(param.name);
-                    if (kit != configPreset.savedKeyframes.end()) {
-                        param.timeline = kit->second;
-                    }
-                }
-                m_shaderManager->AddPreset(loadedPreset);
-            }
-        }
-    }
+    // Compile the presets the worker read and parsed above. AddPresets compiles the whole
+    // batch across all cores, which is what keeps a cold bytecode cache from serialising
+    // ~45 D3DCompile calls into several seconds.
+    m_shaderManager->AddPresets(presetJob.get());
 
     // Resolve the shader directory: if the configured path doesn't exist, try the
     // directory next to the executable (works for dev builds run from build/Release/).
@@ -135,6 +180,9 @@ bool Application::InitializeQt() {
     // Create shaders directory if it doesn't exist
     std::filesystem::create_directories(m_configManager.GetConfig().shaderDirectory);
 
+    // OpenVideo flushes the audio player, so the device must have finished opening first.
+    audioJob.get();
+
     // Open last video if available
     if (!m_configManager.GetConfig().lastOpenedVideo.empty()) {
         OpenVideo(m_configManager.GetConfig().lastOpenedVideo);
@@ -142,13 +190,6 @@ bool Application::InitializeQt() {
 
     // Apply audio DSP settings from config
     m_audioAnalyzer.UpdateSettings(m_configManager.GetConfig().audio);
-
-    // Initialise audio playback (non-fatal — continues without audio on headless systems)
-    if (m_audioPlayer.Initialize()) {
-        const auto& cfg = m_configManager.GetConfig();
-        m_audioPlayer.SetVolume(cfg.audioVolume);
-        m_audioPlayer.SetMute(cfg.muteAudio);
-    }
 
     m_lastFrameTime = std::chrono::steady_clock::now();
 

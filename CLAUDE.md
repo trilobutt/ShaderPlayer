@@ -99,8 +99,13 @@ src/
 │                             (only works if preset is already in m_presets).
 │                           • AddPreset() — push_back to both vectors (always in sync),
 │                             compiles source if isValid or source non-empty.
+│                           • AddPresets(batch) — bulk AddPreset, compiling the batch
+│                             across all cores (threads claim one preset at a time, since
+│                             compile times across the set vary by an order of magnitude).
+│                             Appends in the order given. Use for any whole-list load:
+│                             serially, 45 cold presets cost ~13.9 s against ~3.7 s here.
 │                           • ScanDirectory() — scans for .hlsl/.fx/.ps, skips
-│                             already-loaded paths.
+│                             already-loaded paths, hands the rest to AddPresets.
 │                           • SetActivePreset(index) — calls
 │                             D3D11Renderer::SetActivePixelShader with
 │                             m_compiledShaders[index].Get(); null → passthrough.
@@ -244,7 +249,7 @@ Texture2D noiseTexture : register(t1);
 SamplerState noiseSampler : register(s1);   // WRAP addressing
 ```
 
-- `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called at startup and via `Application::RegenerateNoise()`.
+- `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called via `Application::RegenerateNoise()`. It is `GenerateNoisePixels` + `UploadNoisePixels`, which are also callable separately: the CPU half is `static`, needs no device, and splits its rows across all cores (at the 1024² default it is ~200 ms on one core and ~15 ms on sixteen), so startup runs it on a worker while the device comes up. `ClampNoiseSize` gives a caller that generates ahead of time the same clamped size to pass back into the upload.
 - UI: View → Noise Generator (`src/ui/NoisePanel`). The panel's preview is a genuine GPU
   readback of the bound texture (`GetNoiseSRV()` → `CopyResource` into a STAGING clone →
   map), not a CPU re-simulation, so it cannot drift from what the shaders sample.
@@ -508,12 +513,29 @@ which is what lets the letterbox borders show the clear colour. Used by `Viewpor
 ### Shader Compile Path
 
 - **Editor compile (F5)**: `Application::CompileCurrentShader(source)` → updates `preset->source`, calls `ShaderManager::RecompilePreset(activeIndex)` (index-based, reliable), then `SetActivePreset(activeIndex)` to push new `m_activePS` to the renderer. Effect appears on the next `BeginFrame`.
-- **Initial load / scan**: `LoadShaderFromFile` → `CompilePreset(localPreset)` (pointer search finds nothing, compiled shader discarded) → `AddPreset(preset)` recompiles and stores. This double-compile is intentional to keep `AddPreset` as the single point of vector-sync.
+- **Initial load / scan**: read and parse first, compile as a batch. `LoadShaderMetadataFromFile` (static, touches no manager state, safe on a worker thread) fills source + ISF params, then `AddPresets(batch)` compiles the lot across all cores. Both the startup restore in `InitializeQt` and `ScanDirectory` go this way.
 - **No active preset + compile**: `AddPreset` creates the preset, `SetActivePreset` applies it.
+
+### Shader Bytecode Cache
+
+`D3D11Renderer::CompilePixelShader` keys a DXBC blob on the FNV-1a 64 hash of the **full**
+source (preamble included) and stores it in `shader_cache/` next to the exe. A hit skips
+`D3DCompile` entirely and goes straight to `CreatePixelShader`; blobs are driver-JITted, so
+they are portable across GPUs. Editing `ShaderCommon.hlsli` changes every preamble and so
+invalidates the whole cache at once.
+
+The blob is written to a unique temp name and renamed into place. Two presets with
+byte-identical source hash to the same file, and `AddPresets` compiles concurrently, so a
+plain write would let one thread read a half-written blob. A corrupt or stale blob is not
+fatal either way: `CreatePixelShader` fails and the code falls through to a full compile.
+
+This is what makes startup cheap and what makes it expensive when cold — 45 presets cost
+~15 ms warm against ~3.7 s cold. Never remove the cache to "force a clean compile"; delete
+`shader_cache/` instead.
 
 ### Parallel Vectors in ShaderManager
 
-`m_presets` and `m_compiledShaders` are always the same length. Every `AddPreset` does both `push_back`s; every `RemovePreset` does both `erase`s. Never modify one without the other.
+`m_presets` and `m_compiledShaders` are always the same length. Every `AddPreset` does both `push_back`s; every `AddPresets` appends to both in step; every `RemovePreset` does both `erase`s. Never modify one without the other.
 
 Removing the **active** preset must go through `SetPassthrough()`, not a bare `m_activeIndex = -1`. The renderer holds a raw `ID3D11PixelShader*` handed to it by `SetActivePreset`, and the erase releases the only `ComPtr` keeping it alive — clearing the index alone leaves the renderer drawing with a freed shader until the next activation.
 
@@ -553,7 +575,8 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
 
 ## Live Capture (Webcam / RTSP)
 
-- **libavdevice must be linked and registered.** `avdevice` is in `FFMPEG_LIBRARIES` (CMakeLists) and `VideoDecoder.cpp` calls `avdevice_register_all()` once via `EnsureDevicesRegistered()`. avformat's static init does not register device demuxers — without this `av_find_input_format("dshow")` returns null and every webcam open fails silently before touching the device.
+- **libavdevice must be registered, and is deliberately not linked.** avformat's static init does not register device demuxers, so without `avdevice_register_all()` `av_find_input_format("dshow")` returns null and every webcam open fails silently before touching the device. `VideoDecoder::EnsureDevicesRegistered()` calls it once, resolving the DLL through `LoadLibrary` (name composed from `LIBAVDEVICE_VERSION_MAJOR`) plus `GetProcAddress` rather than an import: `avdevice-*.dll` is the most expensive FFmpeg DLL to map (~25 ms) and nothing but capture ever needs it, so linking it taxed every startup. It returns false when the DLL is missing, which disables capture and leaves the rest of the player working. `avdevice` is therefore absent from `FFMPEG_LIBRARIES`, while `tools/copy_ffmpeg.cmake` still copies its DLL.
+- **`/DELAYLOAD` is not an option for the other FFmpeg DLLs.** The bundled import libraries are dlltool-generated (`.o` archive members, Unix timestamps), and MSVC's linker cannot build a delay-import descriptor from those — it emits LNK4199, ignores the flag, and links the DLL eagerly regardless. Delay-loading would need MSVC import libs regenerated from the DLL exports.
 - `VideoDecoder::OpenCapture(deviceOrUrl, isDshow)` — opens a dshow device (`"video=<name>"`) or any URL (RTSP/RTMP/HTTP). Sets `AVFMT_FLAG_NONBLOCK`; `DecodeNextFrame` returns false on `AVERROR(EAGAIN)` (no frame ready, not an error).
 - DirectShow device enumeration: `#include <dshow.h>` + `strmiids.lib`. `CoCreateInstance(CLSID_SystemDeviceEnum)` → `CreateClassEnumerator(CLSID_VideoInputDeviceCategory)` → `IPropertyBag::Read(L"FriendlyName")`. COM already initialised by WinMain.
 - Live timing uses wall-clock accumulation (`m_generativeTime`), not frame PTS (device clock starts at arbitrary values). `IsLiveCapture()` gate in `ProcessFrame` skips the file-mode frame-rate gate and the end-of-stream `SeekToTime(0.0)`.
@@ -662,6 +685,7 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
 - `SetActivePreset` is called from `Application.cpp`, `ui/LibraryPanel.cpp`, `ui/MainWindow.cpp` and `ui/dialogs/NewShaderDialog.cpp` — every new call site owes `OnParamChanged()` and `MainWindow::RefreshParameters()`, plus `RefreshLibrary()` if it also added or renamed a preset (see "The refresh contract")
 - `GetActivePresetIndex()` returns `int` (−1 = passthrough); `GetActivePreset()` returns `ShaderPreset*` (null when passthrough). Never guess `GetActiveIndex` — it doesn't exist.
+- `LoadShaderMetadataFromFile` is `static` and reads only its arguments, which is what lets the startup path run it on a worker thread. Keep it that way: making it touch `m_presets` or `m_renderer` would introduce a data race with `D3D11CreateDevice` running concurrently on the GUI thread.
 - `CheckForChanges()` is called every frame but does real work at most every 500 ms
   (`m_lastWatchCheck`). Without the throttle it runs `exists` + `last_write_time` on all 45
   presets per frame, which measured 1.7 ms of every frame. Do not remove it to make hot
@@ -681,6 +705,21 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
   own constructors (`LibraryPanel::Refresh` dereferences `GetShaderManager()`), so building
   the window earlier is an access violation. `RefreshAll()` and `OnParamChanged()` go last,
   after the preset and workspace restore.
+- **Three `std::async` jobs overlap `D3D11CreateDevice`.** That call sits ~400 ms inside the
+  display driver with the GUI thread idle, which is most of what startup used to be. Launched
+  before it, collected after: the noise texture's pixels (`GenerateNoisePixels`), the shader
+  sources and their ISF metadata (`LoadShaderMetadataFromFile` per config preset), and the
+  audio output device (`AudioPlayer::Initialize`). Three rules hold this together:
+  - **Nothing in a job may touch `m_renderer`, `m_shaderManager` or any Qt object** — the
+    device does not exist yet and the jobs are off the GUI thread. They return plain data
+    that the main thread then hands to the subsystem.
+  - **Each job is collected immediately before the first thing that needs it**, and
+    `audioJob` specifically before `OpenVideo`, which flushes the player.
+  - **The config is read by the jobs and must not be written until they are collected.** The
+    `shaderDirectory` fallback fixup is deliberately placed after `presetJob.get()`.
+
+  On the `m_renderer.Initialize` failure path the futures block in their destructors, which
+  is what keeps the `this` capture in `audioJob` safe.
 - **Teardown order too**: `Shutdown()` resets `m_mainWindow` before `m_renderer.Shutdown()`.
   The window owns the viewport, the viewport owns a swap chain created from the renderer's
   device, and a swap chain must not outlive its device.

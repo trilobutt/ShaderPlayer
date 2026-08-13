@@ -18,8 +18,10 @@ public:
 
     // Shader operations
     bool LoadShaderFromFile(const std::string& filepath, ShaderPreset& outPreset);
-    // Reads and parses ISF metadata but does NOT compile — use before AddPreset to avoid a double-compile.
-    bool LoadShaderMetadataFromFile(const std::string& filepath, ShaderPreset& outPreset);
+    // Reads and parses ISF metadata but does NOT compile — use before AddPreset to avoid a
+    // double-compile. Static and touching no manager state, so the startup path runs it on
+    // a worker thread while the main thread is inside D3D11CreateDevice.
+    static bool LoadShaderMetadataFromFile(const std::string& filepath, ShaderPreset& outPreset);
     bool LoadShaderFromSource(const std::string& name, const std::string& source, ShaderPreset& outPreset);
     bool CompilePreset(ShaderPreset& preset);
     // Compile a preset already stored at the given index and update m_compiledShaders[index].
@@ -27,6 +29,11 @@ public:
     
     // Preset management
     int AddPreset(const ShaderPreset& preset);
+    // Bulk equivalent of AddPreset over a whole batch, compiling across all cores. Only
+    // worth using for the startup load, where the batch is the entire preset list and a
+    // cold cache would otherwise serialise ~45 D3DCompile calls into several seconds.
+    // Presets are appended in the order given, so indices are the caller's to predict.
+    void AddPresets(std::vector<ShaderPreset> presets);
     void RemovePreset(int index);
     void UpdatePreset(int index, const ShaderPreset& preset);
     ShaderPreset* GetPreset(int index);

@@ -12,7 +12,7 @@
     { "NAME": "EdgeGlow",    "TYPE": "float", "MIN": 0.0,  "MAX": 3.0, "DEFAULT": 0.4, "LABEL": "Edge Glow" },
     { "NAME": "Exposure",    "TYPE": "float", "MIN": 0.1,  "MAX": 4.0, "DEFAULT": 1.0, "LABEL": "Exposure" },
     { "NAME": "VignetteAmt", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.25,"LABEL": "Vignette" },
-    { "NAME": "AudioAmount", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 0.6, "LABEL": "Audio Amount" },
+    { "NAME": "AudioAmount", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0, "DEFAULT": 1.0, "LABEL": "Audio Amount" },
     { "NAME": "BassIn",      "TYPE": "audio", "BAND": "bass", "LABEL": "Bass" },
     { "NAME": "HighIn",      "TYPE": "audio", "BAND": "high", "LABEL": "Treble" },
     { "NAME": "BeatIn",      "TYPE": "audio", "BAND": "beat", "LABEL": "Beat" }
@@ -99,8 +99,11 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float2 uv = input.uv;
 
     // --- Audio modulation ---
-    // Bass pushes the Mobius drift out toward the ideal boundary (tiles rush past),
-    // treble thickens the geodesic edges, beats brighten the tiles.
+    // Bass pumps the disc scale and pushes the Mobius drift out toward the ideal
+    // boundary (tiles rush past), treble thickens the geodesic edges, beats brighten
+    // the tiles and flare the glow. The band values themselves sit around 0.01-0.3
+    // on music, so every coefficient here is scaled for that range rather than for
+    // a nominal 0-1 signal.
     float aBass = BassIn * AudioAmount;
     float aHigh = HighIn * AudioAmount;
     float aBeat = BeatIn * AudioAmount;
@@ -109,11 +112,14 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float aspect = resolution.x / resolution.y;
     float2 z = (uv - 0.5) * 2.0;
     z.x *= aspect;
-    z /= max(DiscScale, 0.01);
+
+    // Bass expands the disc, so the whole tiling breathes with the low end.
+    float discZoom = max(DiscScale, 0.01) * (1.0 + aBass * 1.5);
+    z /= discZoom;
 
     // Euclidean size of one pixel in disc coordinates. Both axes scale by
-    // 2/(resolution.y * DiscScale) after the aspect correction, so it is a scalar.
-    float pixEuclid = 2.0 / (resolution.y * max(DiscScale, 0.01));
+    // 2/(resolution.y * discZoom) after the aspect correction, so it is a scalar.
+    float pixEuclid = 2.0 / (resolution.y * discZoom);
 
     float rSq = dot(z, z);
     if (FillFrame) {
@@ -143,7 +149,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Animated Möbius drift: a point orbiting near the disc centre.
     float driftAngle = time * MobiusSpeed;
-    float driftR     = (0.15 + 0.12 * sin(time * MobiusSpeed * 0.37)) * (1.0 + aBass * 2.2);
+    float driftR     = (0.15 + 0.12 * sin(time * MobiusSpeed * 0.37))
+                     * (1.0 + aBass * 5.0 + aBeat * 3.0);
     driftR           = min(driftR, 0.92);
     float2 driftPt   = float2(cos(driftAngle), sin(driftAngle)) * driftR;
     z = mobius(z, driftPt);
@@ -191,7 +198,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Convert the invariant hyperbolic footprint back to a Euclidean one here.
     float  foot = max(hypFoot * (1.0 - dot(zLocal, zLocal)) * 0.5, 1e-7);
 
-    float  ew       = EdgeWidth * (1.0 + aHigh * 3.0);
+    float  ew       = EdgeWidth * (1.0 + aHigh * 12.0);
     float  edgeMask = smoothstep(ew - foot, ew + foot, edgeDist);
 
     // Edge colour is black; tiles alternate between TileColourA and TileColourB.
@@ -207,7 +214,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Subtle depth shading by distance from disc centre.
     float disc_r = length(z);
-    tileCol *= (0.6 + 0.4 * (1.0 - disc_r)) * (1.0 + aBeat * 0.8);
+    tileCol *= (0.6 + 0.4 * (1.0 - disc_r)) * (1.0 + aBeat * 3.0 + aBass * 1.5);
 
     float3 col = tileCol * edgeMask;
 
@@ -215,7 +222,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // the image; lighting them from within stops the tiling reading as flat
     // vector art. Bounded at the line width so it cannot divide by zero.
     float glowW = max(ew, foot);
-    col += tileCol * EdgeGlow * glowW / (edgeDist + glowW);
+    col += tileCol * EdgeGlow * (1.0 + aBeat * 4.0 + aHigh * 2.0) * glowW / (edgeDist + glowW);
 
     col *= Exposure;
     col *= spVignette(uv, VignetteAmt, 0.85);

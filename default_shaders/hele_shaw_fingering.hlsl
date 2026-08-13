@@ -3,7 +3,7 @@
     "INPUTS": [
         {"NAME": "viscosityRatio",  "LABEL": "Viscosity Ratio",  "TYPE": "float", "MIN": 0.01, "MAX": 1.0,  "DEFAULT": 0.15},
         {"NAME": "surfaceTension",  "LABEL": "Surface Tension",  "TYPE": "float", "MIN": 0.01, "MAX": 1.0,  "DEFAULT": 0.25},
-        {"NAME": "injectionRate",   "LABEL": "Injection Rate",   "TYPE": "float", "MIN": 0.05, "MAX": 2.0,  "DEFAULT": 0.4},
+        {"NAME": "injectionRate",   "LABEL": "Injection Rate",   "TYPE": "float", "MIN": 0.05, "MAX": 1.0,  "DEFAULT": 0.4},
         {"NAME": "noiseAmplitude",  "LABEL": "Noise Amplitude",  "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.5},
         {"NAME": "colourByPressure","LABEL": "Colour by Pressure","TYPE": "bool",  "DEFAULT": true},
         {"NAME": "formulation",     "LABEL": "Geometry",         "TYPE": "long",

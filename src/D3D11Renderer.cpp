@@ -1,6 +1,8 @@
 #include "D3D11Renderer.h"
 #include <stdexcept>
+#include <atomic>
 #include <fstream>
+#include <thread>
 
 namespace SP {
 
@@ -705,12 +707,20 @@ static uint64_t Fnv1a64(const char* data, size_t len) {
     return h;
 }
 
-// Returns (and lazily creates) the shader_cache/ dir next to the exe.
-static std::filesystem::path GetShaderCacheDir() {
-    char exePath[MAX_PATH];
-    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-    auto dir = std::filesystem::path(exePath).parent_path() / "shader_cache";
-    std::filesystem::create_directories(dir);
+// Returns the shader_cache/ dir next to the exe, creating it once. The directory is
+// resolved on first use and cached: this used to run GetModuleFileName plus a
+// create_directories on every compile, which at 45 presets is 45 redundant syscalls on
+// the startup path. The function-local static also gives the thread-safe one-time
+// initialisation that the parallel compile in ShaderManager::AddPresets relies on.
+static const std::filesystem::path& GetShaderCacheDir() {
+    static const std::filesystem::path dir = [] {
+        char exePath[MAX_PATH];
+        GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+        auto d = std::filesystem::path(exePath).parent_path() / "shader_cache";
+        std::error_code ec;
+        std::filesystem::create_directories(d, ec);
+        return d;
+    }();
     return dir;
 }
 
@@ -780,11 +790,32 @@ bool D3D11Renderer::CompilePixelShader(const std::string& hlslSource, ComPtr<ID3
         return false;
     }
 
-    // Write blob to cache so subsequent startups skip D3DCompile.
+    // Write blob to cache so subsequent startups skip D3DCompile. Written to a unique
+    // temp name and renamed into place: two shaders with byte-identical source hash to
+    // the same file, and compiling those concurrently would otherwise let one thread read
+    // a half-written blob. A rename is atomic, so a reader sees either the old file or
+    // the complete new one.
     {
-        std::ofstream cacheOut(cachePath, std::ios::binary);
-        cacheOut.write(static_cast<const char*>(psBlob->GetBufferPointer()),
-                       static_cast<std::streamsize>(psBlob->GetBufferSize()));
+        static std::atomic<uint32_t> tempCounter{0};
+        char tempSuffix[16];
+        snprintf(tempSuffix, sizeof(tempSuffix), ".%u.tmp",
+                 tempCounter.fetch_add(1, std::memory_order_relaxed));
+        const auto tempPath = GetShaderCacheDir() / (std::string(hashStr) + tempSuffix);
+
+        bool written = false;
+        {
+            std::ofstream cacheOut(tempPath, std::ios::binary);
+            cacheOut.write(static_cast<const char*>(psBlob->GetBufferPointer()),
+                           static_cast<std::streamsize>(psBlob->GetBufferSize()));
+            written = static_cast<bool>(cacheOut);
+        }
+
+        std::error_code ec;
+        if (written) {
+            std::filesystem::rename(tempPath, cachePath, ec);
+        }
+        // A cache that cannot be written is a slower next startup, never a failure here.
+        if (!written || ec) std::filesystem::remove(tempPath, ec);
     }
 
     outError.clear();
@@ -1058,31 +1089,73 @@ void D3D11Renderer::SetGenerativeResolution(int width, int height) {
     m_displayHeight = 0;
 }
 
-bool D3D11Renderer::UpdateNoiseTexture(float scale, int texSize) {
-    if (!m_device) return false;
-    texSize = (std::max)(texSize, 64);
+int D3D11Renderer::ClampNoiseSize(int texSize) {
+    return (std::max)(texSize, 64);
+}
+
+std::vector<uint8_t> D3D11Renderer::GenerateNoisePixels(float scale, int texSize) {
+    texSize = ClampNoiseSize(texSize);
 
     // Generate Perlin in R, Voronoi in G (inverted so cells are bright centers)
     std::vector<uint8_t> pixels(static_cast<size_t>(texSize) * texSize * 4);
 
-    for (int y = 0; y < texSize; ++y) {
-        for (int x = 0; x < texSize; ++x) {
-            float nx = (x + 0.5f) / static_cast<float>(texSize) * scale;
-            float ny = (y + 0.5f) / static_cast<float>(texSize) * scale;
+    // Every pixel is an independent function of its own coordinate, so the rows split
+    // with no sharing at all. At the 1024² default this is ~200 ms of the startup budget
+    // on one core, and the same figure stalls the Noise panel on every regenerate.
+    const auto fillRows = [&pixels, scale, texSize](int yBegin, int yEnd) {
+        for (int y = yBegin; y < yEnd; ++y) {
+            for (int x = 0; x < texSize; ++x) {
+                float nx = (x + 0.5f) / static_cast<float>(texSize) * scale;
+                float ny = (y + 0.5f) / static_cast<float>(texSize) * scale;
 
-            float p = perlinNoise(nx, ny);
-            float v = 1.0f - voronoiNoise(nx, ny);  // invert: bright centres
+                float p = perlinNoise(nx, ny);
+                float v = 1.0f - voronoiNoise(nx, ny);  // invert: bright centres
 
-            p = (std::max)(0.0f, (std::min)(1.0f, p));
-            v = (std::max)(0.0f, (std::min)(1.0f, v));
+                p = (std::max)(0.0f, (std::min)(1.0f, p));
+                v = (std::max)(0.0f, (std::min)(1.0f, v));
 
-            uint8_t* px       = &pixels[(static_cast<size_t>(y) * texSize + x) * 4];
-            px[0] = static_cast<uint8_t>(p * 255.0f);  // R = Perlin
-            px[1] = static_cast<uint8_t>(v * 255.0f);  // G = Voronoi
-            px[2] = 0;
-            px[3] = 255;
+                uint8_t* px       = &pixels[(static_cast<size_t>(y) * texSize + x) * 4];
+                px[0] = static_cast<uint8_t>(p * 255.0f);  // R = Perlin
+                px[1] = static_cast<uint8_t>(v * 255.0f);  // G = Voronoi
+                px[2] = 0;
+                px[3] = 255;
+            }
         }
+    };
+
+    unsigned workers = std::thread::hardware_concurrency();
+    if (workers == 0) workers = 1;
+    workers = (std::min)(workers, static_cast<unsigned>(texSize));
+
+    if (workers <= 1) {
+        fillRows(0, texSize);
+    } else {
+        std::vector<std::thread> threads;
+        threads.reserve(workers - 1);
+        const int band = (texSize + static_cast<int>(workers) - 1) / static_cast<int>(workers);
+        // This thread takes the first band rather than idling in join().
+        for (unsigned i = 1; i < workers; ++i) {
+            const int yBegin = static_cast<int>(i) * band;
+            const int yEnd   = (std::min)(yBegin + band, texSize);
+            if (yBegin >= yEnd) break;
+            threads.emplace_back(fillRows, yBegin, yEnd);
+        }
+        fillRows(0, (std::min)(band, texSize));
+        for (auto& t : threads) t.join();
     }
+
+    return pixels;
+}
+
+bool D3D11Renderer::UpdateNoiseTexture(float scale, int texSize) {
+    if (!m_device) return false;
+    return UploadNoisePixels(GenerateNoisePixels(scale, texSize), ClampNoiseSize(texSize));
+}
+
+bool D3D11Renderer::UploadNoisePixels(const std::vector<uint8_t>& pixels, int texSize) {
+    if (!m_device) return false;
+    texSize = ClampNoiseSize(texSize);
+    if (pixels.size() != static_cast<size_t>(texSize) * texSize * 4) return false;
 
     m_noiseTexture.Reset();
     m_noiseSRV.Reset();

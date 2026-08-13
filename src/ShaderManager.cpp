@@ -3,8 +3,10 @@
 #include "FrameProfiler.h"
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <fstream>
 #include <sstream>
+#include <thread>
 #include <nlohmann/json.hpp>
 
 namespace SP {
@@ -174,6 +176,81 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
     return static_cast<int>(m_presets.size()) - 1;
 }
 
+void ShaderManager::AddPresets(std::vector<ShaderPreset> presets) {
+    if (presets.empty()) return;
+
+    // Parse anything the caller did not already parse. Same rule as AddPreset: a preset
+    // arriving with params already filled has had user values patched into them, and a
+    // re-parse would throw those away.
+    for (auto& p : presets) {
+        if (p.params.empty() && !p.source.empty())
+            p.params = ParseISFParams(p.source, &p.isGenerative, &p.isAudio);
+    }
+
+    // Compile across all cores. D3D11 devices are free-threaded, and D3DCompile in
+    // d3dcompiler_47 is safe to call concurrently; the per-shader cache blob is written
+    // through a temp file and renamed, so two threads landing on the same hash cannot
+    // read a partial file. Nothing here touches m_presets, which is why the results are
+    // collected into a side vector and merged below on this thread alone.
+    struct Result {
+        ComPtr<ID3D11PixelShader> shader;
+        std::string error;
+        bool ok = false;
+        bool compiled = false;   // false = nothing to compile (empty source)
+    };
+    std::vector<Result> results(presets.size());
+
+    // Claimed one at a time rather than in fixed bands: shader compile times vary by an
+    // order of magnitude across this set, and a static split leaves most threads idle
+    // behind whichever band drew the expensive ones.
+    std::atomic<size_t> next{0};
+    const auto compileLoop = [this, &presets, &results, &next] {
+        for (;;) {
+            const size_t i = next.fetch_add(1, std::memory_order_relaxed);
+            if (i >= presets.size()) return;
+
+            ShaderPreset& p = presets[i];
+            if (!p.isValid && p.source.empty()) continue;
+            results[i].compiled = true;
+            const std::string preamble = BuildDefinesPreamble(p.params, p.name);
+            results[i].ok = m_renderer.CompilePixelShader(preamble + p.source,
+                                                          results[i].shader,
+                                                          results[i].error);
+        }
+    };
+
+    unsigned workers = std::thread::hardware_concurrency();
+    if (workers == 0) workers = 1;
+    workers = (std::min)(workers, static_cast<unsigned>(presets.size()));
+
+    std::vector<std::thread> threads;
+    threads.reserve(workers - 1);
+    for (unsigned i = 1; i < workers; ++i) threads.emplace_back(compileLoop);
+    compileLoop();   // this thread works too, rather than idling in join()
+    for (auto& t : threads) t.join();
+
+    // Merge. The two vectors stay in lockstep exactly as AddPreset keeps them.
+    m_presets.reserve(m_presets.size() + presets.size());
+    m_compiledShaders.reserve(m_compiledShaders.size() + presets.size());
+    for (size_t i = 0; i < presets.size(); ++i) {
+        ShaderPreset& p = presets[i];
+        if (results[i].compiled) {
+            p.isValid = results[i].ok;
+            if (results[i].ok) p.compileError.clear();
+            else               p.compileError = results[i].error;
+        }
+
+        if (!p.filepath.empty()) {
+            std::error_code ec;
+            const auto stamp = std::filesystem::last_write_time(p.filepath, ec);
+            if (!ec) m_fileTimestamps[p.filepath] = stamp;
+        }
+
+        m_presets.push_back(std::move(p));
+        m_compiledShaders.push_back(std::move(results[i].shader));
+    }
+}
+
 void ShaderManager::RemovePreset(int index) {
     if (index < 0 || index >= static_cast<int>(m_presets.size())) return;
 
@@ -310,6 +387,12 @@ void ShaderManager::CheckForChanges() {
 void ShaderManager::ScanDirectory(const std::string& directory) {
     if (!std::filesystem::exists(directory)) return;
 
+    // Read and parse every new file first, then hand the whole batch to AddPresets, which
+    // compiles them across all cores. Reading here rather than through LoadShaderFromFile
+    // also drops a compile per shader: that path compiled into a local preset whose
+    // bytecode AddPreset then threw away and recompiled.
+    std::vector<ShaderPreset> batch;
+
     for (const auto& entry : std::filesystem::directory_iterator(directory)) {
         if (!entry.is_regular_file()) continue;
 
@@ -330,11 +413,15 @@ void ShaderManager::ScanDirectory(const std::string& directory) {
 
             if (!alreadyLoaded) {
                 ShaderPreset preset;
-                LoadShaderFromFile(filepath, preset);
-                AddPreset(preset);
+                // An unreadable file is still added, carrying its compileError, exactly as
+                // a file that reads but fails to compile is.
+                LoadShaderMetadataFromFile(filepath, preset);
+                batch.push_back(std::move(preset));
             }
         }
     }
+
+    AddPresets(std::move(batch));
 }
 
 std::string ShaderManager::GetShaderTemplate() {

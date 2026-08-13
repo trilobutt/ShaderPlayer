@@ -3,7 +3,9 @@
 #include <cstring>
 
 extern "C" {
-#include <libavdevice/avdevice.h>
+// Version macros only. The functions are reached through GetProcAddress (see
+// EnsureDevicesRegistered below), so avdevice is deliberately not linked.
+#include <libavdevice/version.h>
 }
 
 namespace SP {
@@ -11,9 +13,35 @@ namespace SP {
 // libavdevice demuxers (dshow among them) are not registered by avformat's
 // static init — without this av_find_input_format("dshow") returns null and
 // every webcam open fails before it reaches the device.
-static void EnsureDevicesRegistered() {
-    static const bool registered = [] { avdevice_register_all(); return true; }();
-    (void)registered;
+//
+// Resolved through LoadLibrary rather than linked, because avdevice-*.dll is the most
+// expensive of the FFmpeg DLLs to map (it drags in the DirectShow stack) and the only one
+// nothing but webcam capture ever needs. Linking it costs every startup ~25 ms to import
+// the one function called here. Delay-loading it via /DELAYLOAD is not an option: the
+// bundled import libraries are dlltool-generated, which MSVC's linker cannot delay-load
+// through — it reports LNK4199 and links the DLL eagerly anyway.
+//
+// Returns false when the DLL is absent, which leaves capture unavailable and the rest of
+// the player working, rather than failing the process at load time as a link would.
+static bool EnsureDevicesRegistered() {
+    static const bool registered = [] {
+        // The versioned name comes from the header the build compiled against, so it
+        // cannot drift from the DLL the rest of FFmpeg was built alongside.
+        char dllName[64];
+        snprintf(dllName, sizeof(dllName), "avdevice-%d.dll", LIBAVDEVICE_VERSION_MAJOR);
+
+        const HMODULE lib = LoadLibraryA(dllName);
+        if (!lib) return false;
+
+        using RegisterAllFn = void (*)(void);
+        const auto registerAll =
+            reinterpret_cast<RegisterAllFn>(GetProcAddress(lib, "avdevice_register_all"));
+        if (!registerAll) return false;   // module stays loaded; nothing else to undo
+
+        registerAll();
+        return true;
+    }();
+    return registered;
 }
 
 VideoDecoder::VideoDecoder() {
@@ -174,7 +202,7 @@ bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     std::string url = deviceOrUrl;
 
     if (isDshow) {
-        EnsureDevicesRegistered();
+        if (!EnsureDevicesRegistered()) return false;
         fmt = av_find_input_format("dshow");
         if (!fmt) return false;
         url = "video=" + deviceOrUrl;

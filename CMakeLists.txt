@@ -74,8 +74,11 @@ if(EXISTS "${_FFMPEG_BUNDLED}/include/libavcodec/avcodec.h")
     set(FFMPEG_INCLUDE_DIRS "${_FFMPEG_BUNDLED}/include")
     set(FFMPEG_LIBRARY_DIRS "${_FFMPEG_BUNDLED}/lib")
     set(FFMPEG_BIN_DIR      "${_FFMPEG_BUNDLED}/bin")
-    # avdevice is required for DirectShow webcam capture (av_find_input_format("dshow"))
-    set(FFMPEG_LIBRARIES    avcodec avdevice avformat avutil swscale swresample)
+    # avdevice is deliberately absent: it is needed only for DirectShow webcam capture,
+    # it is the most expensive FFmpeg DLL to map (~25 ms of every startup), and
+    # VideoDecoder::EnsureDevicesRegistered resolves its one entry point through
+    # LoadLibrary instead. Its DLL is still copied to the output directory below.
+    set(FFMPEG_LIBRARIES    avcodec avformat avutil swscale swresample)
     set(FFMPEG_FOUND TRUE)
     link_directories(${FFMPEG_LIBRARY_DIRS})
 else()
@@ -96,7 +99,7 @@ else()
             set(FFMPEG_INCLUDE_DIRS "${FFMPEG_ROOT}/include")
             set(FFMPEG_LIBRARY_DIRS "${FFMPEG_ROOT}/lib")
             set(FFMPEG_BIN_DIR      "${FFMPEG_ROOT}/bin")
-            set(FFMPEG_LIBRARIES    avcodec avdevice avformat avutil swscale swresample)
+            set(FFMPEG_LIBRARIES    avcodec avformat avutil swscale swresample)
             link_directories(${FFMPEG_LIBRARY_DIRS})
         else()
             message(FATAL_ERROR

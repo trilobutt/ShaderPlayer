@@ -75,11 +75,13 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float runNoise  = noiseTexture.SampleLevel(noiseSampler, float2(noiseAxis * 2.7, time * 0.1), 0).r;
     float runLen    = MaxRunLen * (0.3 + runNoise * 0.7);
 
-    float2 axisDir = (SortAxis == 0) ? float2(1.0 / resolution.x, 0.0)
-                                     : float2(0.0, 1.0 / resolution.y);
+    // The run is measured in UV, so the axis is a unit UV direction. Scaling it by
+    // one pixel here (1/resolution) capped every tap at a quarter of a pixel and
+    // the whole effect resolved to the source image.
+    float2 axisDir = (SortAxis == 0) ? float2(1.0, 0.0) : float2(0.0, 1.0);
     axisDir *= (SortDirection == 0) ? 1.0 : -1.0;
 
-    const int SAMPLES = 16;
+    const int SAMPLES = 24;
     float jitter = spIGN(input.pos.xy);
 
     float3 bestPx   = orig;

@@ -76,6 +76,18 @@ public:
     // Noise texture — generates Perlin (R) + Voronoi (G) into a tiling texture
     // bound globally as t1 / s1 for all pixel shaders.
     bool UpdateNoiseTexture(float scale, int texSize);
+
+    // The two halves of UpdateNoiseTexture, split so the CPU half can run off the GUI
+    // thread. GenerateNoisePixels touches no device state and is safe to call from any
+    // thread before the device exists at all; UploadNoisePixels is the D3D half and must
+    // run on the thread that owns the renderer. `pixels` must hold texSize*texSize*4
+    // bytes, which is what GenerateNoisePixels returns for the same texSize.
+    static std::vector<uint8_t> GenerateNoisePixels(float scale, int texSize);
+    bool UploadNoisePixels(const std::vector<uint8_t>& pixels, int texSize);
+
+    // texSize as GenerateNoisePixels will clamp it. Callers that generate ahead of time
+    // need the clamped value to pass back into UploadNoisePixels.
+    static int ClampNoiseSize(int texSize);
     ID3D11ShaderResourceView* GetNoiseSRV() const { return m_noiseSRV.Get(); }
 
     // Audio data — cbuffer b1 + spectrum texture t3 (1×256 R32_FLOAT).
