@@ -26,7 +26,7 @@
 //
 // Every march step also deposits energy inversely proportional to its distance from
 // the surface. Rays that graze the bulb without hitting it accumulate the most, which
-// is what puts a real halo around the silhouette and lights the lobe gaps — none of
+// is what puts a real halo around the silhouette and lights the lobe gaps, none of
 // which a post-hit pow() ramp can produce.
 
 Texture2D videoTexture : register(t0);
@@ -106,7 +106,7 @@ float3 calcNormal(float3 pos, float pw, int maxIter) {
 
 // IQ soft shadow. The smallest ratio of clearance to distance travelled along the
 // shadow ray is the penumbra, so the whole soft shadow falls out of the same
-// estimator that built the surface — no second render target, no shadow map.
+// estimator that built the surface, with no second render target and no shadow map.
 float softShadow(float3 origin, float3 dir, float pw, int maxIter, float k) {
     float res = 1.0;
     float t   = 0.02;
@@ -158,7 +158,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float   orbitSpd  = OrbitSpeed * (1.0 + aMid * 2.5);
     float3  glowLin   = spSrgbToLinear(GlowColour.rgb);
 
-    // Orbiting camera — slow azimuth + gentle elevation bob; beats dolly in.
+    // Orbiting camera: slow azimuth + gentle elevation bob; beats dolly in.
     float camAngle  = time * orbitSpd;
     float camHeight = sin(time * orbitSpd * 0.3) * 0.4;
     float camDist   = 2.4 - aBeat * 0.55;
@@ -197,7 +197,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         tRay += distEst * 0.7;
     }
 
-    // Deep space background — faint vertical gradient, present under the bulb too so
+    // Deep space background: a faint vertical gradient, present under the bulb too so
     // the silhouette sits in something rather than on flat black.
     float3 col = float3(0.006, 0.010, 0.024) + max(rayDir.y, 0.0) * 0.016;
 

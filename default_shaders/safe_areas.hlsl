@@ -33,15 +33,15 @@
 // Two guide families are drawn:
 //   * Action-safe and title-safe rectangles, centred, as a fraction of the frame.
 //   * An aspect crop box (Crop Colour) showing what survives a re-crop to another
-//     aspect ratio — the guide that matters for social deliverables cut from a
+//     aspect ratio, the guide that matters for social deliverables cut from a
 //     16:9 master. Title safe is then measured inside that crop, not the full frame.
 //
 // Presets:
 //   Custom              action/title come straight from the sliders, no crop box.
-//   EBU R95             93% action / 90% title — current European broadcast practice.
-//   SMPTE 4:3 legacy    90% / 80% — the traditional guide, safe for 4:3 downconversion.
-//   Live / IMAG         85% / 75% — generous margins for screen edge masking and
-//                       keystone correction on projection rigs.
+//   EBU R95             93% action / 90% title (current European broadcast practice).
+//   SMPTE 4:3 legacy    90% / 80% (the traditional guide, safe for 4:3 downconversion).
+//   Live / IMAG         85% / 75% (generous margins for screen edge masking and
+//                       keystone correction on projection rigs).
 //   Social 1:1          square crop, title safe 90% of the crop.
 //   Social 4:5          portrait feed crop (Instagram), title safe 90% of the crop.
 //   Social 9:16         full vertical crop (Stories / Reels / TikTok / Shorts).

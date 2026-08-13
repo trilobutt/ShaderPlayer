@@ -10,7 +10,7 @@
 }*/
 
 // RGB Parade
-// Displays three side-by-side waveform monitors — Red, Green, Blue — each showing
+// Displays three side-by-side waveform monitors (Red, Green, Blue), each showing
 // the distribution of that channel across the full frame width.
 // Y-axis: 0–100 IRE (top = 100).  Graticule at every 10 IRE.
 // Channel waveforms are colour-coded (red / green / blue tint).

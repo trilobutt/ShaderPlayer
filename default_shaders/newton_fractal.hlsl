@@ -27,7 +27,7 @@
 // Each convergence basin gets its own colour rather than a single tint over a
 // generated hue ramp. Six explicit root colours plus the numeric controls fill the
 // 32-float uniform block exactly, so the polynomial degree tops out at 6 and there
-// is no room for a separate glow control — Exposure drives the whole image.
+// is no room for a separate glow control; Exposure drives the whole image.
 //
 // Basin boundaries are not anti-aliased and deliberately so: the boundary between
 // any two basins contains points of every basin at every scale (it is the Julia set
@@ -144,7 +144,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // Smooth (fractional) iteration count. Newton converges quadratically at
     // Relaxation 1.0, so the error satisfies log|e_n| ~ 2^n·log|e_0| and the
     // fractional part falls out as a log2 of the log ratio. Away from 1.0 the
-    // convergence is linear instead and the fraction is only approximate — it still
+    // convergence is linear instead and the fraction is only approximate; it still
     // varies continuously with the pixel, which is all the shading needs, and it is
     // what removes the integer contour steps the raw count produced.
     float dRoot   = max(sqrt(minRootDist), 1e-30);

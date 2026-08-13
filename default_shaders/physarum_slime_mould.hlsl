@@ -112,7 +112,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float trailW   = diffRadius * 0.12 * vFreq * (1.0 + aBass * 2.0);   // width scales with cell size
 
     // Filter width from the ridge's own screen footprint, and never let the tube be
-    // thinner than that — a sub-pixel tube would otherwise break into dashes.
+    // thinner than that, since a sub-pixel tube would otherwise break into dashes.
     float fw    = max(fwidth(edgeDist), 1e-6) * 0.5;
     float tubeW = max(trailW, fw);
     float trail = 1.0 - smoothstep(tubeW - fw, tubeW + fw, edgeDist);
@@ -151,7 +151,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     col += trailLin * trail * wavePulse * decay;
     col += trailLin * GlowAmount * 0.35 * tubeW / max(edgeDist, tubeW * 0.35) * decay;
 
-    // Node glow at Voronoi seeds — inverse-distance, twinkling on the beat.
+    // Node glow at Voronoi seeds: inverse-distance, twinkling on the beat.
     float2 seedUV   = nearSeed / float2(ar, 1.0);
     float  nodeDist = length(uv - seedUV) * vFreq;
     float  nodeAmp  = 0.6 + 0.4 * sin(time * 3.0 + h21(nearSeed) * 6.28) + aBeat * 0.9;

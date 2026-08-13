@@ -84,7 +84,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // which is the same number. The footprint is therefore isotropic and exact, and it
     // has to be computed this way: the axon and node loops both have varying trip counts
     // and early-outs, so fwidth() inside them returns an undefined derivative (fxc says
-    // as much — X3595) and was smearing the line edges by whatever the neighbouring
+    // as much: X3595) and was smearing the line edges by whatever the neighbouring
     // lane happened to be doing.
     float px = 1.0 / max(resolution.y, 1.0);
 
@@ -110,7 +110,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     uint  nCount = uint(max(nodeCount, 1));
     uint  halfK  = uint(max(kNeighbours, 2)) / 2u;
     // Axon gauge tracks the network scale so a scaled-up network keeps its proportions,
-    // but never falls below a pixel — below that the line stops being a line.
+    // but never falls below a pixel, since below that the line stops being a line.
     float axonWidth = max(0.0015 * ar * sqrt(networkScale), px * 0.6);
 
     // --- Draw axons and action potentials ---
@@ -141,7 +141,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
             float period   = 1.0 / max(spontaneousRate, 0.01);
             // Node i fires when phase crosses firingThreshold; audio shortens cycle.
             // RMS runs 0.01-0.3 on real music, so the 0.5 coefficient here is doing
-            // very little on its own — it is the period shortening that carries it.
+            // very little on its own; it is the period shortening that carries it.
             float audioBoost = ampLevel * 0.5;
             float phase    = frac(time / max(period - audioBoost * period * 0.6, 0.05) + nodeSeed[i]);
             bool  hasFired = phase > (1.0 - firingThreshold * 0.4);
@@ -206,7 +206,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // tanh: overlapping halos accumulate without bound where the network is dense.
     col = spLinearToSrgb(spTonemapTanh(col));
 
-    // The halos are wide, low-slope gradients over a near-black background — where
+    // The halos are wide, low-slope gradients over a near-black background, where
     // 8-bit banding is most visible.
     col = spDither(col, input.pos.xy, 1.0 / 255.0);
 

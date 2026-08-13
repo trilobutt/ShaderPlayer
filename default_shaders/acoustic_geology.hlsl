@@ -92,7 +92,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float faultDir  = faultWave * rsqrt(faultWave * faultWave + 0.05);
     float faultedDepth = warpedDepth + faultDir * faultAmt * sin(depth * 20.0 + time * 10.0);
 
-    // Stratum grain at three scales. Two octaves left the rock flat under a zoom —
+    // Stratum grain at three scales. Two octaves left the rock flat under a zoom:
     // the coarse bands carried the image and everything between them was featureless.
     // faultedDepth is a smooth function of uv, so implicit-LOD Sample is valid here.
     // It buys no filtering, though: the noise texture is created with a single mip
@@ -122,7 +122,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float strataPattern = bed * 0.6 + lamina * 0.2 + grain * 0.2;
 
     // Colour palette: bass = warm red-brown, mid = tan/ochre, high = pale grey.
-    // Kept as named rock stops rather than an IQ cosine palette — the four minerals
+    // Kept as named rock stops rather than an IQ cosine palette: the four minerals
     // are the shader's identity, and a continuous ramp cannot hit "red sandstone into
     // pale shale" without passing through hues no rock has. Converted to linear so the
     // lerps between them do not dip in luminance at the crossover.
@@ -165,7 +165,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     col = spLinearToSrgb(spTonemapACES(col));
 
-    // The bed gradients are broad and low-contrast — textbook 8-bit banding.
+    // The bed gradients are broad and low-contrast, which is textbook 8-bit banding.
     col = spDither(col, input.pos.xy, 1.0 / 255.0);
 
     return float4(saturate(col), 1.0);

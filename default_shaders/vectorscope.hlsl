@@ -11,7 +11,7 @@
     ]
 }*/
 
-// Vectorscope — CbCr chrominance distribution (BT.709)
+// Vectorscope: CbCr chrominance distribution (BT.709)
 // X-axis = Cb (blue–yellow),  Y-axis = Cr (red–cyan), both normalised −0.5..+0.5.
 // Centre = neutral grey.  Outer circle = maximum saturation boundary (radius 0.5).
 //
@@ -135,7 +135,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         }
     }
 
-    // Skin tone line — from origin toward (Cb≈0.034, Cr≈0.214) BT.709 flesh direction
+    // Skin tone line: from origin toward (Cb≈0.034, Cr≈0.214) BT.709 flesh direction
     float2 skinDir   = normalize(float2(0.034, 0.214));
     float  proj      = dot(centre, skinDir);
     float2 projected = skinDir * proj;

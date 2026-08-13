@@ -71,8 +71,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     // Radial highlight bloom. There is no feedback buffer, so the streak is built by
     // marching outward along the pixel's own radial line and accumulating whatever
-    // highlight energy sits further out — the analytic equivalent of a zoom blur on the
-    // bright pass. Accumulated in HDR and left to the tonemap, so a hard bass hit reads
+    // highlight energy sits further out (the analytic equivalent of a zoom blur on the
+    // bright pass). Accumulated in HDR and left to the tonemap, so a hard bass hit reads
     // as light spilling rather than as the frame going flat white.
     float3 bloom = 0.0.xxx;
     if (BloomAmt > 0.001) {
@@ -95,7 +95,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
     col *= Exposure;
 
-    // No procedural edges in this shader — every boundary comes from the video's own
+    // No procedural edges in this shader: every boundary comes from the video's own
     // filtered sampling, so there is nothing for spAAStep to band-limit.
 
     // tanh over ACES: the bloom accumulator is unbounded, and tanh keeps the roll-off

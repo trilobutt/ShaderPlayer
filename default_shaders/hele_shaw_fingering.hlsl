@@ -36,8 +36,8 @@
 // derivative taken across it was meaningless. A direction vector is periodic by
 // construction, so the field closes on itself.
 //
-// All three geometries produce the same three quantities — a signed distance to the
-// interface, a pressure, and the interface glow — and share one shading tail. The
+// All three geometries produce the same three quantities (a signed distance to the
+// interface, a pressure, and the interface glow) and share one shading tail. The
 // linear mode used to return early from the middle of the function with its own
 // ad-hoc colouring, so it picked up none of the tonemap, dither or vignette.
 
@@ -152,8 +152,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
     pressure = saturate(pressure);
 
     // The interface is band-limited over its own screen footprint, floored at one
-    // pixel. Previously this was a bool compare, so the finger edge — the single
-    // most looked-at feature in the image — was a hard jagged staircase.
+    // pixel. Previously this was a bool compare, so the finger edge (the single
+    // most looked-at feature in the image) was a hard jagged staircase.
     float w      = max(max(fwidth(sd), px), 1e-6);
     float inside = smoothstep(-w, w, sd);
 

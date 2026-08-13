@@ -18,7 +18,7 @@
     ]
 }*/
 
-// Plasma — pure generative shader; does not require video input.
+// Plasma: pure generative shader; does not require video input.
 // videoTexture is available but unused.
 //
 // The palette is a cyclic three-stop ramp (A -> B -> C -> A) indexed by the plasma
@@ -109,7 +109,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // rises, because each channel reaches 1.0 at a different field value.
     col = spLinearToSrgb(spTonemapACES(col));
 
-    // The ramp is a smooth gradient across the whole frame — the worst case for
+    // The ramp is a smooth gradient across the whole frame, the worst case for
     // 8-bit banding.
     col = spDither(col, input.pos.xy, 1.0 / 255.0);
 

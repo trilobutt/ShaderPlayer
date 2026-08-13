@@ -164,7 +164,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float ang     = atan2(zr.y, zr.x);
         float sectorF = floor((ang + PI) / rotAng);
 
-        // Each sector step crosses a polygon edge — odd crossings flip parity.
+        // Each sector step crosses a polygon edge, so odd crossings flip parity.
         parity ^= (int(abs(sectorF)) & 1);
 
         float rotBack = -sectorF * rotAng;
@@ -174,7 +174,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         // Relaxed tolerance so convergence fires reliably.
         if (abs(zOut.y) < 0.002 && zOut.x < polyR * 1.05) break;
 
-        // Reflect across real axis — each reflection also flips parity.
+        // Reflect across real axis; each reflection also flips parity.
         float2 zRef = reflectReal(zOut);
         parity = 1 - parity;
         z = zRef;

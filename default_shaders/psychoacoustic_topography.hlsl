@@ -26,7 +26,7 @@
 
 // Transparency: the alpha channel of Terrain Tint is the terrain's own opacity and the
 // alpha of Eruption Colour the eruption's; Sky Opacity covers the background. Values
-// below 1 only reveal anything when a Video Blend mode other than Off is selected —
+// below 1 only reveal anything when a Video Blend mode other than Off is selected:
 // the compositor multiplies the blend by this shader's alpha.
 
 // Psychoacoustic topography: FFT as terrain surface.
@@ -72,7 +72,7 @@ float sampleTerrain(float freq, float dfreq) {
 
 // Full world height for a frequency: profile, audio shaping, then eruption gain.
 // `excess` reports how far past the eruption threshold this column sits, as a smooth
-// quantity rather than the bool it used to be — a hard test put a one-pixel colour
+// quantity rather than the bool it used to be; a hard test put a one-pixel colour
 // tear down the side of every erupting peak.
 float terrainHeight(float freq, float dfreq, out float excess) {
     float wy = sampleTerrain(freq, dfreq) * heightScale;
@@ -124,7 +124,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float wz   = lerp(9.0, 0.25, t);                   // world depth
 
         // World X for this pixel column at this depth, and how much it advances per
-        // screen pixel — the whole footprint calculation below hangs off this.
+        // screen pixel; the whole footprint calculation below hangs off this.
         float wx     = (uv.x - 0.5) * wz / fovFactor * ar;
         float dwxdx  = (wz / fovFactor * ar) / max(resolution.x, 1.0);
         float dfreq  = 0.18 * dwxdx;

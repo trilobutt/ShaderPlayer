@@ -121,7 +121,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // One output pixel in p units, and therefore in folded-lattice units too.
     float px = 1.0 / max(resolution.y, 1.0);
 
-    // Audio-driven parameters — boosted for strong reactivity
+    // Audio-driven parameters, boosted for strong reactivity
     float audioRadius  = bassLevel   * 1.1 + midLevel * 0.45;
     float latticeScale = 0.04 + midLevel * 0.04;   // spacing modulated by mid
 

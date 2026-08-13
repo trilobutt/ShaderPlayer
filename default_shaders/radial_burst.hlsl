@@ -83,7 +83,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     t = 1.0 - abs(t * 2.0 - 1.0);
 
     // Derivative of the sector coordinate, taken before any branching. Near the centre
-    // one pixel spans the whole sector, so this grows without bound — which is exactly
+    // one pixel spans the whole sector, so this grows without bound, which is exactly
     // what the band-limited cosine needs to fade the spokes out there.
     float tFoot = fwidth(t);
 

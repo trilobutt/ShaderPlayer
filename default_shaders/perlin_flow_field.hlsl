@@ -80,7 +80,7 @@ float flowAngle(float2 p, float freq, int octs, float pers, float lac) {
 
 // Base signal for the LIC integral, in [0,1]. `foot` is the screen-space
 // footprint of one unit of the grating argument, so the gratings fade to flat
-// grey where they would otherwise alias — the correct filtered answer.
+// grey where they would otherwise alias, which is the correct filtered answer.
 float stripeSignal(float2 q, float foot, float detail) {
     float a1 = SP_TAU * (q.x + q.y);
     float s  = spBandLimitedCos(a1, foot * SP_TAU);

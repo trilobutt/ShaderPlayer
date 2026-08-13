@@ -35,7 +35,7 @@
 // CapWidth   offset 18 → custom[4].z
 // 19/32 floats used.
 
-// Opacity < 1 requires a Video Blend mode other than Off to show anything behind it —
+// Opacity < 1 requires a Video Blend mode other than Off to show anything behind it:
 // the compositor multiplies the blend by this shader's alpha.
 
 Texture2D videoTexture  : register(t0);
@@ -98,8 +98,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // decay is not available; the cap instead tracks the peak of the surrounding
     // spectral neighbourhood (this segment widened by 1.5 segments each way). That is
     // always >= the bar itself, moves more slowly than the bar top, and falls away as
-    // the local peak migrates — the same read as a decaying hold, from data rather than
-    // from state.
+    // the local peak migrates, giving the same read as a decaying hold, from data
+    // rather than from state.
     float capLo = freqCoord((barIdx - 1.5) / bars, LogScale);
     float capHi = freqCoord((barIdx + 2.5) / bars, LogScale);
     float capMag = spanPeak(capLo, capHi, 8) * BarScale;
@@ -160,7 +160,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     // white the moment it crosses 1.
     col = spLinearToSrgb(spTonemapTanh(col));
 
-    // The background wash and the glow tail are both wide smooth gradients — the worst
+    // The background wash and the glow tail are both wide smooth gradients, the worst
     // case for 8-bit banding.
     col = spDither(col, input.pos.xy, 1.0 / 255.0);
 

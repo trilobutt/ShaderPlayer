@@ -49,7 +49,7 @@ struct PS_INPUT {
 //
 // The linearisation is gamma 2.0 (square / square-root) rather than spSrgbToLinear.
 // The exact sRGB curve costs a pow() per tap, and the widest kernel here takes 625
-// taps per blur with two blurs in the annular mode — over a thousand pow() calls per
+// taps per blur with two blurs in the annular mode, over a thousand pow() calls per
 // pixel. Gamma 2.0 is the standard stand-in: the round trip is exact for an unfiltered
 // pixel, so nothing shifts when the filter is a no-op, and it recovers almost all of
 // the benefit of filtering in linear at two instructions.
@@ -69,7 +69,7 @@ float3 sampleLin(float2 uv) {
 // and this shader's input is already-graded display-referred footage. spTonemapACES
 // lifts linear 0.2 to 0.30, so on a low-pass (near-identity) setting it would apply a
 // visible grade to the user's picture rather than protect the highlights. This curve is
-// the identity below the knee, C1-continuous at it, and asymptotic to 1 above it — a
+// the identity below the knee, C1-continuous at it, and asymptotic to 1 above it: a
 // safety net for the modes that add energy, and nothing at all for the modes that do not.
 float3 rollHighlights(float3 c, float knee) {
     float3 over = max(c - knee, 0.0);
@@ -94,7 +94,7 @@ float3 gaussianBlur(float2 uv, float2 px, float radius) {
 // Wedge blur: 1-D blur along `angleDeg`, fanned out to a cone of total width
 // `halfWidthDeg`. Each tap's perpendicular offset grows with its distance along the
 // axis, so the sampled region is a bow-tie about the chosen direction rather than a
-// bare line. This is what `angleWidth` now drives — the parameter was parsed and shown
+// bare line. This is what `angleWidth` now drives; the parameter was parsed and shown
 // in the UI but never read by the shader, so the Directional and Notch modes ignored
 // it entirely; at the 45-degree default the wedge is a modest fan.
 float3 directionalBlur(float2 uv, float2 px, float angleDeg, float halfWidthDeg, float radius) {
@@ -142,7 +142,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     } else if (filterMode == 1) {
         // High-pass: original minus low-pass residual.
         // Differences are left unclamped here and carried to the roll-off at the end,
-        // rather than saturate()d per mode — clipping each channel at its own input
+        // rather than saturate()d per mode; clipping each channel at its own input
         // level is what tinted the blown areas of the residual.
         float3 lo = gaussianBlur(uv, px, kernelR);
         result = max(orig - lo + kMidGrey, 0.0);
@@ -164,7 +164,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         result = max((innerBlur - outerBlur) * 3.0 + kMidGrey, 0.0);
 
     } else {
-        // Notch: directional high-pass — removes features aligned to the angle
+        // Notch: directional high-pass, removing features aligned to the angle
         float3 dBlur     = directionalBlur(uv, px, filterAngle, angleWidth, kernelR * 0.5);
         float3 dBlurPerp = directionalBlur(uv, px, filterAngle + 90.0, angleWidth, kernelR * 0.5);
         result = max(orig - dBlur * 0.5 + dBlurPerp * 0.3 + kMidGrey * 0.4, 0.0);
@@ -174,7 +174,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     result = applyGamma(result, magnitudeGamma);
 
     // Spectrum overlay: local spatial frequency magnitude as a heatmap.
-    // spPalette rather than the previous float3(f, f*0.4, 1-f) ramp — that ramp was
+    // spPalette rather than the previous float3(f, f*0.4, 1-f) ramp; that ramp was
     // not monotonic in luminance, so equal steps in frequency did not read as equal
     // steps in the image and mid-frequencies were indistinguishable from low.
     if (showSpectrum) {

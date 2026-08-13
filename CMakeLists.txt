@@ -172,10 +172,24 @@ if(NOT PERL_EXECUTABLE AND WIN32)
     endif()
 endif()
 
+# ECM's KDE_CLANG_FORMAT (KDEClangFormat.cmake), pulled in by KSyntaxHighlighting via
+# KDEFrameworkCompilerSettings, calls add_custom_command(TARGET clang-format COMMAND ...)
+# with none of PRE_BUILD/PRE_LINK/POST_BUILD on the branch it takes when no clang-format
+# is on the machine. CMake 3.31 added CMP0175 to reject that, and leaving the policy unset
+# emits a dev warning on every configure that lands in the VS Code Problems panel. The
+# code is upstream's and the target is inert (it only echoes a message), so pin the policy
+# OLD for the duration of this dependency rather than carrying the warning. Restore it
+# straight after so nothing else in the tree silently inherits a relaxed policy.
+set(_SP_SAVED_CMP0175 "${CMAKE_POLICY_DEFAULT_CMP0175}")
+set(CMAKE_POLICY_DEFAULT_CMP0175 OLD)
+
 FetchContent_Declare(ksyntaxhighlighting
     GIT_REPOSITORY https://invent.kde.org/frameworks/syntax-highlighting.git
     GIT_TAG v6.10.0 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(ksyntaxhighlighting)
+
+set(CMAKE_POLICY_DEFAULT_CMP0175 "${_SP_SAVED_CMP0175}")
+unset(_SP_SAVED_CMP0175)
 
 FetchContent_Declare(
     json

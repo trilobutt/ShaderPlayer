@@ -17,7 +17,7 @@
 // FeedRate (F) and KillRate (k) select morphological regimes:
 //   F≈0.02 k≈0.05 → maze/labyrinth     F≈0.04 k≈0.06 → stripes
 //   F≈0.06 k≈0.062 → spots/coral       F≈0.08 k≈0.065 → scattered dots
-// This is a stateless approximation — parameters map to pattern geometry
+// This is a stateless approximation: parameters map to pattern geometry
 // rather than running a true Gray-Scott integration.
 //
 // The four colour maps are kept as named stop ramps rather than being replaced
@@ -80,7 +80,7 @@ float3 colourMap(float u) {
                         float3(0.250, 0.700, 0.680),
                         float3(0.690, 1.000, 0.890));
     } else if (ColourMap == 3) {
-        // Greyscale — a perceptual ramp, so it must be encoded, not linear.
+        // Greyscale: a perceptual ramp, so it must be encoded rather than linear.
         return spSrgbToLinear(saturate(u).xxx);
     }
     // Blue (default): midnight → electric blue → ice white
@@ -120,7 +120,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float inh2   = sampleNoise(rotUV, scaleI * 0.95, float2(-t * 0.015 + 3.0, t * 0.02));
     float dog2   = act2 - inh2 * 0.85;
 
-    // Combine layers — the cross-orientation interference creates spots vs stripes.
+    // Combine layers: the cross-orientation interference creates spots vs stripes.
     // KillRate shifts the balance between the two layers.
     float combined = dog * (1.0 - KillRate * 10.0) + dog2 * (KillRate * 10.0 - 0.3);
 
@@ -133,7 +133,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         combined += (act3 - inh3 * 0.85) * Detail * 0.45;
     }
 
-    // Threshold with soft edges — maps to the [0,1] activator concentration "u".
+    // Threshold with soft edges, mapping to the [0,1] activator concentration "u".
     // The fixed 0.15 half-width is the aesthetic softness; fwidth adds whatever
     // extra the pixel footprint needs so the boundary never turns into stairs at
     // high FeedRate, where scaleA reaches 12 cycles of noise per frame width.

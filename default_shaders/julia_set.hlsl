@@ -25,8 +25,8 @@
 // Parameter ranges are chosen so the fractal is always the subject of the frame:
 //
 // C Real / C Imaginary are restricted to the neighbourhood of the Mandelbrot set
-// (roughly |c| < 1). Outside that region the Julia set degenerates into Fatou dust —
-// a sparse scatter with no visible structure — so those values are excluded.
+// (roughly |c| < 1). Outside that region the Julia set degenerates into Fatou dust
+// (a sparse scatter with no visible structure), so those values are excluded.
 //
 // Zoom is a magnification factor: 1.0 frames the whole set (|z| <= 2 bound) with a
 // small margin and no more. Values below 1 are excluded because they pull the camera
@@ -69,7 +69,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     float cx = CX;
     float cy = CY;
 
-    // Optional animated C parameter — Douady rabbit neighbourhood orbit
+    // Optional animated C parameter: Douady rabbit neighbourhood orbit
     if (AnimateC) {
         cx = cos(time * 0.13) * 0.7885;
         cy = sin(time * 0.17) * 0.7885;

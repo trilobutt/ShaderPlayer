@@ -36,7 +36,7 @@ struct PS_INPUT {
     float2 uv  : TEXCOORD0;
 };
 
-// Gaussian half-width in luma units — gives a ~10-pixel-wide trace at 1080p.
+// Gaussian half-width in luma units; gives a ~10-pixel-wide trace at 1080p.
 static const float kSigma    = 0.009;
 static const float kInvS2    = 1.0 / (2.0 * kSigma * kSigma);
 
@@ -86,7 +86,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     bool onGrid = (gridX < threshold || gridX > 1.0 - threshold);
     if (onGrid) {
         float brightness = 0.12;
-        // 0 and 100 IRE are reference black/white — draw them brighter
+        // 0 and 100 IRE are reference black/white, so draw them brighter
         if (targetLuma < 2.0 / resolution.y || targetLuma > 1.0 - 2.0 / resolution.y)
             brightness = 0.35;
         waveCol += brightness;

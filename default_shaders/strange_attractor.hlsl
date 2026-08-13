@@ -30,7 +30,7 @@
 // Emission is inverse-square in pixels, not a Gaussian in UV. Two consequences:
 // the point kernel is a fixed size on screen at any output resolution, and the
 // accumulated value is unbounded, so a dense fold of the attractor genuinely
-// blows past white and blooms once tanh rolls it off — which is the whole look.
+// blows past white and blooms once tanh rolls it off, which is the whole look.
 // Colour is accumulated per sample rather than averaged at the end, so where a
 // fast branch crosses a slow one the two hues add instead of cancelling.
 

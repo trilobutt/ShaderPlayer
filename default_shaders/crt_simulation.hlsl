@@ -61,12 +61,12 @@ struct PS_INPUT {
 // Tube curvature. Edge-weighted rather than radial: the horizontal displacement
 // is driven by |y| and the vertical by |x|, so the picture stays flat along both
 // centre lines and bows only toward the corners. That is how a tube is actually
-// shaped, and it is the thing a k1*r^2 lens term gets wrong — a lens bulges the
+// shaped, and it is the thing a k1*r^2 lens term gets wrong: a lens bulges the
 // middle of every edge as hard as the corners.
 //
 // The upstream form takes its curvature as a DIVISOR: larger means flatter and
 // zero is a division by zero, which is not a control to hand a user. The slider
-// here is the reciprocal of it — 0 is dead flat, 1 is maximum bulge — so the
+// here is the reciprocal of it (0 is dead flat, 1 is maximum bulge), so the
 // divisor is kCurveDiv/Curvature and the reciprocal cancels into a multiply that
 // is exactly zero at zero. kCurveDiv is therefore the divisor at full slider.
 static const float kCurveDiv = 1.6;

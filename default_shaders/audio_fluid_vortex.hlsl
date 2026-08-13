@@ -164,8 +164,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
                            float3(1.00, 1.00, 1.00),
                            float3(0.00, 0.15, 0.35));
 
-    // Dye density drives brightness. Left unbounded on purpose — the tonemap decides
-    // where the highlights roll, not a saturate().
+    // Dye density drives brightness. Left unbounded on purpose, so the tonemap decides
+    // where the highlights roll rather than a saturate().
     col *= specVal * brightness;
 
     // Vorticity picks out the shear filaments as extra energy rather than as a hue
@@ -185,7 +185,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
     col *= spVignette(uv, VignetteAmt, 0.8);
     col *= Exposure;
 
-    // No procedural step edges here — every boundary is a smooth field — so there is
+    // No procedural step edges here (every boundary is a smooth field), so there is
     // nothing for spAAStep to band-limit; the aliasing risk is all in the texture
     // fetches, which the SampleLevel note above covers.
 

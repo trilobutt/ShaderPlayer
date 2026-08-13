@@ -13,8 +13,8 @@
 
 // Zebra Exposure Checker
 // Overlays diagonal stripes on highlights and optionally shadows.
-//   Yellow stripes — luminance >= UpperThreshold  (overexposure risk)
-//   Blue stripes   — luminance <= LowerThreshold  (only when ShowShadows enabled)
+//   Yellow stripes: luminance >= UpperThreshold  (overexposure risk)
+//   Blue stripes:   luminance <= LowerThreshold  (only when ShowShadows enabled)
 // StripeWidth is relative to frame height so stripe scale is resolution-independent.
 
 Texture2D    videoTexture : register(t0);
@@ -44,10 +44,10 @@ float4 main(PS_INPUT input) : SV_TARGET {
     bool   bright = frac((px.x + px.y) / period) > 0.5;
 
     if (luma >= UpperThreshold) {
-        // Yellow / black — highlight overexposure warning
+        // Yellow / black: highlight overexposure warning
         col.rgb = bright ? float3(1.0, 1.0, 0.0) : float3(0.0, 0.0, 0.0);
     } else if (ShowShadows && luma <= LowerThreshold) {
-        // Blue / black — shadow underexposure warning
+        // Blue / black: shadow underexposure warning
         col.rgb = bright ? float3(0.2, 0.5, 1.0) : float3(0.0, 0.0, 0.0);
     }
 

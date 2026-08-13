@@ -105,7 +105,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
         float2 sp  = seedPos(i, speed, orbitScale);
         sp.x      *= resolution.x / resolution.y;
         float2 dv  = uvA - sp;
-        float  d   = dot(dv, dv);  // squared distance — avoids sqrt for comparison
+        float  d   = dot(dv, dv);  // squared distance, avoids sqrt for comparison
         if (d < d1) { d2 = d1; d1 = d; near2 = near; near = i; }
         else if (d < d2) { d2 = d; near2 = i; }
     }
