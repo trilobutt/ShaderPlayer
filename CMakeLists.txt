@@ -8,7 +8,27 @@ cmake_policy(SET CMP0169 OLD)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets Gui Core)
+
+# CMakePresets.json points CMAKE_PREFIX_PATH at the conventional Qt install path, but a
+# clone lands wherever that machine put Qt, and a REQUIRED find_package turns any other
+# location into a hard failure before anything else has been checked. Try the configured
+# path first, then the environment, then the standard Windows install root.
+find_package(Qt6 6.9 QUIET COMPONENTS Widgets Gui Core)
+if(NOT Qt6_FOUND)
+    set(_SP_QT_CANDIDATES "$ENV{QT_ROOT_DIR}" "$ENV{QTDIR}" "$ENV{Qt6_DIR}")
+    file(GLOB _SP_QT_INSTALLS "$ENV{SystemDrive}/Qt/6.*/msvc*_64" "C:/Qt/6.*/msvc*_64")
+    list(REMOVE_DUPLICATES _SP_QT_INSTALLS)
+    list(SORT _SP_QT_INSTALLS COMPARE NATURAL ORDER DESCENDING)  # newest Qt first
+    list(APPEND _SP_QT_CANDIDATES ${_SP_QT_INSTALLS})
+    foreach(_SP_QT_DIR IN LISTS _SP_QT_CANDIDATES)
+        if(_SP_QT_DIR AND EXISTS "${_SP_QT_DIR}/lib/cmake/Qt6/Qt6Config.cmake")
+            message(STATUS "Qt6: discovered at ${_SP_QT_DIR}")
+            list(APPEND CMAKE_PREFIX_PATH "${_SP_QT_DIR}")
+            break()
+        endif()
+    endforeach()
+    find_package(Qt6 6.9 REQUIRED COMPONENTS Widgets Gui Core)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -121,6 +141,37 @@ endif()
 set(ECM_DIR "${_ECM_PREFIX}/share/ECM/cmake")
 
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+
+# KSyntaxHighlighting does find_package(Perl REQUIRED) to auto-generate its PHP syntax
+# definitions, and Windows ships no Perl. Git for Windows carries one at usr/bin/perl.exe,
+# but only Git's cmd/ directory goes on PATH, so FindPerl misses it and the configure dies
+# here, long after Qt and FFmpeg have been found, which makes it read like a Qt problem.
+# Resolve it ourselves, and fail with an actionable message rather than FindPerl's.
+if(NOT PERL_EXECUTABLE)
+    find_program(PERL_EXECUTABLE NAMES perl)
+endif()
+if(NOT PERL_EXECUTABLE AND WIN32)
+    find_program(_SP_GIT NAMES git)
+    if(_SP_GIT)
+        # <root>/cmd/git.exe or <root>/bin/git.exe -> <root>
+        get_filename_component(_SP_GIT_ROOT "${_SP_GIT}" DIRECTORY)
+        get_filename_component(_SP_GIT_ROOT "${_SP_GIT_ROOT}" DIRECTORY)
+    endif()
+    find_program(PERL_EXECUTABLE NAMES perl
+        HINTS "${_SP_GIT_ROOT}/usr/bin"
+              "$ENV{ProgramFiles}/Git/usr/bin"
+              "$ENV{SystemDrive}/Strawberry/perl/bin"
+        NO_DEFAULT_PATH)
+    if(PERL_EXECUTABLE)
+        message(STATUS "Perl: discovered at ${PERL_EXECUTABLE}")
+    else()
+        message(FATAL_ERROR
+            "Perl not found, and KSyntaxHighlighting requires it to generate its syntax "
+            "definitions. Install Git for Windows (which bundles one) or Strawberry Perl, "
+            "or pass -DPERL_EXECUTABLE=<path to perl.exe> to cmake.")
+    endif()
+endif()
+
 FetchContent_Declare(ksyntaxhighlighting
     GIT_REPOSITORY https://invent.kde.org/frameworks/syntax-highlighting.git
     GIT_TAG v6.10.0 GIT_SHALLOW TRUE)

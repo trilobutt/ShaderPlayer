@@ -266,9 +266,20 @@ Every texture the pipeline creates (video, noise, spectrum, display, compositor 
 - Windows 11 (Windows 10 may work but untested)
 - Visual Studio 2022 or later (Build Tools are sufficient; MSVC only, since the build
   depends on Qt's msvc2022_64 package)
-- Qt 6.9 or later, msvc2022_64, at a path given to CMake as `CMAKE_PREFIX_PATH`
-- CMake 3.21 or later (`CMakePresets.json` is version 3)
+- Qt 6.9 or later, msvc2022_64
+- CMake 3.21 or later (`CMakePresets.json` is version 3). Visual Studio's bundled copy
+  counts; no standalone install is needed.
 - FFmpeg development libraries (headers + libs)
+- Perl, for KSyntaxHighlighting's `find_package(Perl REQUIRED)` (it generates the PHP
+  syntax definitions). Git for Windows bundles one, so a machine with Git already has it.
+
+**Qt and Perl are located by `CMakeLists.txt`, not by the developer.** `CMakePresets.json`
+names `C:/Qt/6.9.1/msvc2022_64` as `CMAKE_PREFIX_PATH`, and where Qt is elsewhere the
+configure falls back to `QT_ROOT_DIR`/`QTDIR` in the environment, then to the newest
+`%SystemDrive%/Qt/6.*/msvc*_64`. Perl is taken from `PATH`, then from Git for Windows'
+`usr/bin` (which is not on `PATH`; only Git's `cmd` is, which is why `FindPerl` misses it
+unaided), then from Strawberry Perl. Both fail with a message naming the fix rather than
+`FindPerl`'s, and `-DPERL_EXECUTABLE=` / `-DCMAKE_PREFIX_PATH=` still override.
 
 extra-cmake-modules and KSyntaxHighlighting are fetched and built by CMake; nothing to
 install. ECM is configured and installed into `build/ecm-install` at configure time (it is
@@ -311,11 +322,16 @@ the two cannot clobber each other; use it to step through code, not to give to a
 `build/CMakeCache.txt` is the single thing that decides what the build actually is, and two
 failure modes leave it lying. Both produce an exe that links and runs.
 
-**Wrong build type.** VS Code's CMake Tools configures the folder it is pointed at, which
-writes `CMAKE_BUILD_TYPE=Debug` into `build/CMakeCache.txt` and leaves it there. The
-symptom is the post-build deploy failing with `windeployqt failed (Exit code 0xc0000409):
-Broken filename passed to function` after a link that succeeded. Check with
-`grep CMAKE_BUILD_TYPE build/CMakeCache.txt` and re-run `cmake --preset windows-msvc`.
+**Wrong build type.** Any configure that bypasses the preset (a bare `cmake -B build`, an
+IDE driving its own configure) writes `CMAKE_BUILD_TYPE=Debug` into `build/CMakeCache.txt`
+and drops `CMAKE_PREFIX_PATH` with it, leaving both in the tree the preset owns. The
+symptoms are a configure that cannot find Qt, or a post-build deploy failing with
+`windeployqt failed (Exit code 0xc0000409): Broken filename passed to function` after a
+link that succeeded. Check with `grep CMAKE_BUILD_TYPE build/CMakeCache.txt` and re-run
+`cmake --preset windows-msvc`. `.vscode/settings.json` (tracked, the one file exempted from
+the `.vscode/` ignore) pins CMake Tools to `cmake.useCMakePresets: always` so the extension
+cannot do this; it prompts for a preset instead, and `windows-msvc-debug` is safe to pick
+because it targets its own `build-debug/`.
 
 **Blanked compiler flags.** `CMAKE_CXX_FLAGS` and `CMAKE_CXX_FLAGS_<CONFIG>` are
 initialised by CMake exactly once, when the cache entry is first created, and never again.
@@ -335,7 +351,12 @@ presets, keybindings and layout.
 
 Any performance number taken from `build/` is worthless until both checks pass.
 
-Configure, then build:
+`pwsh -File tools/build.ps1` is the whole build: it locates Visual Studio, CMake, Ninja and
+Qt on the machine, assembles the environment described below, configures the `windows-msvc`
+preset when `build/CMakeCache.txt` is absent, and builds. On a fresh clone it is the only
+command needed once the FFmpeg DLLs are in place.
+
+By hand, configure then build:
 
 ```
 cmake --preset windows-msvc
@@ -450,7 +471,7 @@ latency by the time the tick runs, so the call returns without blocking, and the
 is what keeps the picture tear-free.
 
 Profile it with `pwsh -File tools/measure_responsiveness.ps1` (see `FrameProfiler` in the
-component list). `tools/build.ps1` wraps the documented MSVC + Qt + CMake build line.
+component list).
 
 ### Render Loop (RenderFrame)
 

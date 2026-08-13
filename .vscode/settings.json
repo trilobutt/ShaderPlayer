@@ -1,0 +1,17 @@
+{
+  // CMake Tools defaults to "auto", which falls back to its own kit/variant path and
+  // configures the folder with `-DCMAKE_BUILD_TYPE:STRING=Debug` and no CMAKE_PREFIX_PATH.
+  // That writes Debug into build/CMakeCache.txt (the same tree the preset owns) and drops
+  // the Qt hint, so the next command-line build either fails to find Qt or silently
+  // produces a Debug binary that windeployqt cannot deploy. "always" makes the extension
+  // use CMakePresets.json and nothing else; pick the "windows-msvc" preset when prompted.
+  "cmake.useCMakePresets": "always",
+
+  // The preset already writes build/compile_commands.json; point IntelliSense at it rather
+  // than letting the C/C++ extension guess include paths from the source tree.
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+
+  "files.associations": {
+    "*.hlsli": "hlsl"
+  }
+}

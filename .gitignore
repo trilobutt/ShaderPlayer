@@ -33,7 +33,11 @@ _deps/
 # Note: *.dll above already handles third_party/ffmpeg/bin/*.dll
 
 # IDE
-.vscode/
+# .vscode/settings.json is tracked: it pins CMake Tools to CMakePresets.json, without which
+# the extension configures build/ as Debug with no Qt hint. The negation needs the /*
+# form, since git does not descend into an excluded directory to find exceptions.
+.vscode/*
+!.vscode/settings.json
 .idea/
 
 # OS
