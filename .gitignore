@@ -49,3 +49,7 @@ config_local.json
 
 # Git worktrees
 .worktrees/
+
+# Python bytecode (tools/validate_shaders.py imported by external pipelines)
+__pycache__/
+*.pyc

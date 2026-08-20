@@ -403,7 +403,52 @@ add_custom_command(TARGET ShaderPlayer POST_BUILD
             -P "${CMAKE_SOURCE_DIR}/tools/deploy_qt.cmake"
     COMMENT "Deploying Qt runtime")
 
+# ---------------------------------------------------------------------------
+# shaderfx — headless frame runner (console, no Qt, no FFmpeg, no window).
+#
+# Links exactly the three translation units that own the shader pipeline, so it
+# runs the same ISF parse, the same preamble, the same custom[] packing and the
+# same draw the app does. Anything that needs a decoder, a swap chain or a widget
+# is deliberately absent: this target must stay buildable and runnable on a
+# machine with no Qt deployment beside it.
+# ---------------------------------------------------------------------------
+add_executable(shaderfx
+    ${SHADER_COMMON_HEADER}
+    src/headless/main.cpp
+    src/D3D11Renderer.cpp
+    src/ShaderManager.cpp
+    src/KeyframeTimeline.cpp
+    src/FrameProfiler.cpp
+)
+
+# AUTOMOC scans every source for Q_OBJECT and finds none here; the moc pass is pure
+# build time on a target that links no Qt at all.
+set_target_properties(shaderfx PROPERTIES AUTOMOC OFF AUTORCC OFF)
+
+target_include_directories(shaderfx PRIVATE
+    src
+    ${CMAKE_BINARY_DIR}/generated
+)
+
+target_link_libraries(shaderfx PRIVATE
+    nlohmann_json::nlohmann_json
+    d3d11
+    d3dcompiler
+    dxgi
+    dxguid
+)
+
+# The shader library beside the exe, so a bare `--shader colour_grading` resolves in
+# a fresh build tree without SHADERPLAYER_SHADER_DIR or --shader-dir. Mirrors the
+# FFmpeg copy above: done at build time, not glob-expanded at configure time.
+add_custom_command(TARGET shaderfx POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/default_shaders"
+            "$<TARGET_FILE_DIR:shaderfx>/default_shaders"
+    COMMENT "Copying default_shaders beside shaderfx")
+
 # Install
-install(TARGETS ShaderPlayer RUNTIME DESTINATION bin)
+install(TARGETS ShaderPlayer shaderfx RUNTIME DESTINATION bin)
 install(DIRECTORY shaders/ DESTINATION bin/shaders)
+install(DIRECTORY default_shaders/ DESTINATION bin/default_shaders)
 install(FILES config.json DESTINATION bin)

@@ -14,7 +14,13 @@
     Nothing here is a fixed absolute path beyond the VS Installer's own well-known
     location: CMake and Qt are discovered on this machine, so a fresh clone builds without
     editing the script.
+
+.PARAMETER Target
+    Build one target instead of all of them. `-Target shaderfx` skips Qt, moc and the
+    windeployqt step entirely, which is the difference between a two-second edit loop
+    on the headless runner and a full application link.
 #>
+param([string]$Target)
 
 $ErrorActionPreference = 'Stop'
 
@@ -128,7 +134,8 @@ if (-not (Test-Path (Join-Path $buildDir 'CMakeCache.txt'))) {
     Write-Host "No configured build tree; running cmake --preset windows-msvc"
     $commands += 'cmake --preset windows-msvc'
 }
-$commands += 'cmake --build build'
+$targetArg = if ([string]::IsNullOrWhiteSpace($Target)) { '' } else { " --target $Target" }
+$commands += "cmake --build build$targetArg"
 
 Push-Location $repoRoot
 try {

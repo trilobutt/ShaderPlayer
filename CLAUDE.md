@@ -109,6 +109,11 @@ src/
 │                           • SetActivePreset(index) — calls
 │                             D3D11Renderer::SetActivePixelShader with
 │                             m_compiledShaders[index].Get(); null → passthrough.
+├── headless/main.cpp     - `shaderfx`, the second frontend: a console executable that
+│                           drives D3D11Renderer + ShaderManager over a raw frame
+│                           stream on stdin/stdout, with no Qt, no FFmpeg, no window
+│                           and no decoder. It reimplements nothing from the shader
+│                           pipeline — see "Headless Rendering (shaderfx)" below.
 ├── ui/                   - The Qt shell. See "Qt UI Structure" below.
 ├── ConfigManager.{cpp,h} - Load/Save config.json next to the executable
 │                           (GetDefaultConfigPath uses GetModuleFileNameA). Serialises
@@ -316,6 +321,9 @@ If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>`
 `CMakePresets.json` is the source of truth for configuration. `windows-msvc` (Ninja,
 RelWithDebInfo, `build/`) is the only supported configuration; single-config, so there is
 no `--config` flag and the output is `build/ShaderPlayer.exe`.
+
+`tools/build.ps1` wraps the documented MSVC + Qt + CMake environment. `-Target shaderfx`
+builds the headless runner alone, which skips Qt, moc and windeployqt entirely.
 
 **Never ship or hand over a Debug build.** Debug links `ucrtbased.dll`, `msvcp140d.dll` and
 friends, which `windeployqt` does not deploy and which exist only on machines with the
@@ -573,6 +581,72 @@ python tools/validate_shaders.py --dump <file>   # print the combined preamble+s
 
 Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `D3DCOMPILE_OPTIMIZATION_LEVEL3`), reports the packed `custom[]` float count per shader, and fails on budget overflow as well as on compile errors. Non-zero exit on any failure. Running fxc on a raw shader file instead is worthless — every ISF param reads as an undeclared identifier.
 
+## Headless Rendering (shaderfx)
+
+`build/shaderfx.exe` is the second frontend: the same `D3D11Renderer` and `ShaderManager`
+the app drives, with a raw frame stream in place of a decoder and a viewport. It links
+`src/headless/main.cpp`, `D3D11Renderer.cpp`, `ShaderManager.cpp`, `KeyframeTimeline.cpp`
+and `FrameProfiler.cpp` and nothing else — no Qt, no FFmpeg, no Spout — so it runs from a
+bare directory with only `default_shaders/` beside it.
+
+**Nothing about the shader pipeline is reimplemented in it.** The ISF parse, the `#define`
+preamble, `ShaderCommon.hlsli`, the `custom[]` packing, the noise texture, the b0/b1/t0/t1/t3
+bindings and the fullscreen-triangle draw all come from the same objects the editor uses, so
+a shader renders the same pixels either way. Any change to the pipeline that would need a
+matching edit here is the wrong change: put it in the shared class.
+
+### Invocation
+
+```
+shaderfx --shader colour_grading --size 1920x1080 --set saturation=1.8 < in.rgb > out.rgb
+shaderfx --shader plasma --size 1920x1080 --frames 300 --generative --out gen.rgb
+shaderfx --shader kaleidoscope --list-params        # ISF metadata as JSON, no GPU touched
+shaderfx --list-shaders
+```
+
+Frames are raw interleaved 8-bit, `rgb24` by default or `rgba` under `--pix`. A raw stream
+carries no geometry, so `--size` is mandatory. Input ends at EOF unless `--frames N` caps it;
+a run that asked for N and got fewer exits non-zero, because a truncated input is otherwise
+silent corruption in a render pipeline. `--help` lists every flag.
+
+- `--start T` sets the `time` uniform on the first frame. Use it to place a segment inside a
+  longer piece so an animated shader stays continuous across a cut rather than restarting.
+- `--set Name=v` is checked against the shader's actual parameters; an unknown name is an
+  error, not a warning, since a typo that silently does nothing costs a full render to spot.
+  A `point2d` or `color` takes a comma-separated list. `--params <file.json>` does the same
+  from a JSON object.
+- `--blend MODE:AMOUNT` runs a generative shader over the input frames through the same
+  compositor path as the app's blend modes.
+- `--audio k=v,...` fixes the `b1` audio uniforms for the whole run. The `t3` spectrum
+  texture stays zeroed; there is no analyser here.
+
+### Keyframe JSON
+
+`--keyframes <file>` animates parameters through the app's own `KeyframeTimeline`, so the
+interpolation matches what the Keyframe Detail panel draws:
+
+```json
+{
+  "Strength": {
+    "mode": "easeinout",
+    "keys": [ { "t": 0.0, "v": 0.01 },
+              { "t": 1.2, "v": 0.06, "handles": [0.33, 0.0, 0.67, 1.0] } ]
+  }
+}
+```
+
+`mode` is `linear`, `easeinout` or `bezier` (`handles` is `[outX, outY, inX, inY]`, used by
+`bezier` only). `v` is a number or an array for `point2d`/`color`. **`t` is absolute time in
+seconds on the same clock as `--start`**, not an offset into this invocation, so a keyframe
+file describes a position in the finished piece and a segment rendered out of order still
+lands on the right values.
+
+### Shader directory resolution
+
+`--shader-dir`, then `$SHADERPLAYER_SHADER_DIR`, then the first non-empty of `./shaders`,
+`<exe>/shaders`, `<exe>/default_shaders`. The build copies `default_shaders/` beside the
+executable, so a bare name resolves in a fresh build tree with no configuration.
+
 ## Live Capture (Webcam / RTSP)
 
 - **libavdevice must be registered, and is deliberately not linked.** avformat's static init does not register device demuxers, so without `avdevice_register_all()` `av_find_input_format("dshow")` returns null and every webcam open fails silently before touching the device. `VideoDecoder::EnsureDevicesRegistered()` calls it once, resolving the DLL through `LoadLibrary` (name composed from `LIBAVDEVICE_VERSION_MAJOR`) plus `GetProcAddress` rather than an import: `avdevice-*.dll` is the most expensive FFmpeg DLL to map (~25 ms) and nothing but capture ever needs it, so linking it taxed every startup. It returns false when the DLL is missing, which disables capture and leaves the rest of the player working. `avdevice` is therefore absent from `FFMPEG_LIBRARIES`, while `tools/copy_ffmpeg.cmake` still copies its DLL.
@@ -686,6 +760,10 @@ Reproduces the injected preamble exactly, compiles with fxc at `/O3` (matching `
 - `SetActivePreset` is called from `Application.cpp`, `ui/LibraryPanel.cpp`, `ui/MainWindow.cpp` and `ui/dialogs/NewShaderDialog.cpp` — every new call site owes `OnParamChanged()` and `MainWindow::RefreshParameters()`, plus `RefreshLibrary()` if it also added or renamed a preset (see "The refresh contract")
 - `GetActivePresetIndex()` returns `int` (−1 = passthrough); `GetActivePreset()` returns `ShaderPreset*` (null when passthrough). Never guess `GetActiveIndex` — it doesn't exist.
 - `LoadShaderMetadataFromFile` is `static` and reads only its arguments, which is what lets the startup path run it on a worker thread. Keep it that way: making it touch `m_presets` or `m_renderer` would introduce a data race with `D3D11CreateDevice` running concurrently on the GUI thread.
+- `PackParamValues(preset, out[32])` is a static: it flattens a preset's values into the
+  shader-visible `custom[]` block and touches no renderer state. It lives here rather than
+  on `Application` because `shaderfx` needs it and must not link Qt. Both frontends call
+  this one implementation; a second copy would be a second set of alignment bugs.
 - `CheckForChanges()` is called every frame but does real work at most every 500 ms
   (`m_lastWatchCheck`). Without the throttle it runs `exists` + `last_write_time` on all 45
   presets per frame, which measured 1.7 ms of every frame. Do not remove it to make hot

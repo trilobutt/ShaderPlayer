@@ -583,6 +583,31 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
     return params;
 }
 
+/*static*/ void ShaderManager::PackParamValues(const ShaderPreset& preset, float out[kCustomFloats]) {
+    std::fill(out, out + kCustomFloats, 0.0f);
+    for (const auto& p : preset.params) {
+        if (p.type == ShaderParamType::AudioBand) continue;  // Lives in b1, not custom[]
+        const int off = p.cbufferOffset;
+        switch (p.type) {
+        case ShaderParamType::Float:
+        case ShaderParamType::Bool:
+        case ShaderParamType::Long:
+        case ShaderParamType::Event:
+            if (off < kCustomFloats)       out[off] = p.values[0];
+            break;
+        case ShaderParamType::Point2D:
+            if (off + 1 < kCustomFloats) { out[off] = p.values[0]; out[off + 1] = p.values[1]; }
+            break;
+        case ShaderParamType::Color:
+            if (off + 3 < kCustomFloats) {
+                out[off] = p.values[0]; out[off + 1] = p.values[1];
+                out[off + 2] = p.values[2]; out[off + 3] = p.values[3];
+            }
+            break;
+        }
+    }
+}
+
 std::string ShaderManager::BuildDefinesPreamble(const std::vector<ShaderParam>& params,
                                                 const std::string& sourceName) {
     static constexpr char comp[] = "xyzw";

@@ -60,6 +60,13 @@ public:
     // Get default shader template
     static std::string GetShaderTemplate();
 
+    // Flatten a preset's parameter values into the shader-visible custom[] block,
+    // honouring the alignment ParseISFParams assigned. AudioBand params are skipped:
+    // they alias AudioConstants (b1) and consume no custom[] slot. Static and free of
+    // renderer state so both frontends (the Qt app and the headless runner) pack
+    // identically — a second implementation is a second set of alignment bugs.
+    static void PackParamValues(const ShaderPreset& preset, float out[kCustomFloats]);
+
 private:
     D3D11Renderer& m_renderer;
     std::vector<ShaderPreset> m_presets;

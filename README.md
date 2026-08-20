@@ -91,6 +91,15 @@ Parameter values are saved in `config.json` and restored on next launch. See `do
 - One frame captured per decoded video frame — framerate matches source
 - F9 or the Record button toggles recording; output path and codec configurable in the Recording panel
 
+### Headless Rendering (`shaderfx`)
+- `build/shaderfx.exe` runs any shader over a raw frame stream from stdin, with no window, no Qt and no FFmpeg
+- Same `D3D11Renderer` and `ShaderManager` as the app, so a shader renders identically in a batch pipeline and in the editor
+- `--set Name=value` overrides ISF parameters by name; `--keyframes file.json` animates them through the same interpolation the Keyframe panel draws
+- `--list-params` prints a shader's ISF metadata as JSON without creating a D3D device
+- `--start T` places a segment inside a longer piece so animated shaders stay continuous across a cut
+- Built for scripted work: `ffmpeg -i in.mp4 -f rawvideo -pix_fmt rgb24 - | shaderfx --shader kaleidoscope --size 1920x1080 | ffmpeg -f rawvideo -pix_fmt rgb24 -s 1920x1080 -i - out.mp4`
+- Run `shaderfx --help` for the full flag list
+
 ### Workspace Presets
 - Save and restore the full ImGui panel layout as `.ini` files in the `layouts/` directory
 - Assign keyboard shortcuts to workspace presets for instant recall
@@ -221,6 +230,12 @@ cmake -B build
 ```
 
 Output: `build/Release/ShaderPlayer.exe` with FFmpeg DLLs copied alongside it.
+
+The headless runner is a separate target and links none of Qt:
+```
+cmake --build build --target shaderfx
+```
+Output: `build/shaderfx.exe`, with `default_shaders/` copied beside it so bare shader names resolve.
 
 ### Running
 

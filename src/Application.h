@@ -136,7 +136,6 @@ public:
     void HandleKeyboardShortcuts(UINT vkCode);
 
 private:
-    static void PackParamValues(const ShaderPreset& preset, float out[32]);
     void EvaluateKeyframes();
 
     // Frame processing
