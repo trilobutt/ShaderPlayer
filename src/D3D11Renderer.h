@@ -16,7 +16,7 @@ public:
     // Initialization. The renderer owns no window and no swap chain: every surface it
     // draws to is either an offscreen texture or an RTV handed in by a caller that owns
     // its own swap chain (ViewportWidget, VideoOutputWindow).
-    bool Initialize(int width, int height);
+    bool Initialize(int width, int height, DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM);
     void Shutdown();
     bool IsInitialized() const { return m_device != nullptr; }
 
@@ -123,9 +123,20 @@ private:
     bool CreatePassthroughShader();
     bool CreateCompositorShader();
 
+    // Bytes per pixel for a format this renderer creates textures in
+    // (DXGI_FORMAT_R8G8B8A8_UNORM or DXGI_FORMAT_R16G16B16A16_FLOAT only —
+    // the two formats m_format is ever set to).
+    static UINT BytesPerPixel(DXGI_FORMAT format);
+
     // Device
     ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_context;
+
+    // Backing pixel format for the video, render-to-texture, staging and
+    // display/compositor-source textures. Set once by Initialize(); the noise
+    // texture (t1) is unaffected — it is always CPU-generated 8-bit RGBA
+    // regardless of this format.
+    DXGI_FORMAT m_format = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     // Video texture
     ComPtr<ID3D11Texture2D> m_videoTexture;

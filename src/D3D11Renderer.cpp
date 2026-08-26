@@ -130,9 +130,47 @@ D3D11Renderer::~D3D11Renderer() {
     Shutdown();
 }
 
-bool D3D11Renderer::Initialize(int width, int height) {
+UINT D3D11Renderer::BytesPerPixel(DXGI_FORMAT format) {
+    return format == DXGI_FORMAT_R16G16B16A16_FLOAT ? 8 : 4;
+}
+
+bool D3D11Renderer::Initialize(int width, int height, DXGI_FORMAT format) {
     m_width = width;
     m_height = height;
+    m_format = format;
+
+    // Calling Initialize() again (a format switch on an already-initialised
+    // renderer) creates a new device via CreateDevice() below. Every texture
+    // below is tied to whichever device was current when it was created and
+    // is never touched by CreateShaderResources()/CreatePassthroughShader()/
+    // CreateCompositorShader(), so a stale ComPtr plus its cached width/height
+    // would otherwise survive the switch: CreateVideoTexture (and the display/
+    // compositor-src equivalents) skip recreating a texture whenever the
+    // requested size matches what's cached, with no way to know the cached
+    // one belongs to a device that no longer exists. Resetting them here
+    // makes every call to Initialize() — first or repeat — leave the renderer
+    // with no resource older than the device it is currently bound to.
+    m_videoTexture.Reset();
+    m_videoSRV.Reset();
+    m_videoWidth = 0;
+    m_videoHeight = 0;
+    m_renderTexture.Reset();
+    m_renderTextureRTV.Reset();
+    m_stagingTexture.Reset();
+    m_renderTextureWidth = 0;
+    m_renderTextureHeight = 0;
+    m_displayTexture.Reset();
+    m_displayRTV.Reset();
+    m_displaySRV.Reset();
+    m_displayWidth = 0;
+    m_displayHeight = 0;
+    m_compositorSrcTexture.Reset();
+    m_compositorSrcRTV.Reset();
+    m_compositorSrcSRV.Reset();
+    m_compositorSrcWidth = 0;
+    m_compositorSrcHeight = 0;
+    m_noiseTexture.Reset();
+    m_noiseSRV.Reset();
 
     if (!CreateDevice()) {
         return false;
@@ -417,7 +455,7 @@ bool D3D11Renderer::CreateCompositorSrcTexture(int width, int height) {
     texDesc.Height    = static_cast<UINT>(height);
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format    = m_format;
     texDesc.SampleDesc.Count = 1;
     texDesc.Usage     = D3D11_USAGE_DEFAULT;
     texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
@@ -454,7 +492,7 @@ bool D3D11Renderer::CreateVideoTexture(int width, int height) {
     texDesc.Height = height;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format = m_format;
     texDesc.SampleDesc.Count = 1;
     texDesc.Usage = D3D11_USAGE_DYNAMIC;
     texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -494,7 +532,7 @@ bool D3D11Renderer::CreateRenderToTexture(int width, int height) {
     texDesc.Height = height;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format = m_format;
     texDesc.SampleDesc.Count = 1;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
     texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
@@ -530,7 +568,7 @@ bool D3D11Renderer::CreateDisplayTexture(int width, int height) {
     texDesc.Height = height;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
-    texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texDesc.Format = m_format;
     texDesc.SampleDesc.Count = 1;
     texDesc.Usage = D3D11_USAGE_DEFAULT;
     // Must be both RTV (rendered into) and SRV (sampled when blitted out)
@@ -687,7 +725,7 @@ bool D3D11Renderer::UploadVideoFrame(const VideoFrame& frame) {
     uint8_t* dst = static_cast<uint8_t*>(mapped.pData);
     int srcPitch = frame.linesize[0];
     int dstPitch = static_cast<int>(mapped.RowPitch);
-    int rowBytes = frame.width * 4;  // RGBA
+    int rowBytes = frame.width * static_cast<int>(BytesPerPixel(m_format));
 
     for (int y = 0; y < frame.height; ++y) {
         memcpy(dst + y * dstPitch, src + y * srcPitch, rowBytes);
@@ -964,13 +1002,15 @@ bool D3D11Renderer::CopyRenderTargetToStaging(std::vector<uint8_t>& outData, int
 
     outWidth  = renderW;
     outHeight = renderH;
-    const int rowBytes = renderW * 4;
+    const int bpp = static_cast<int>(BytesPerPixel(m_format));
+    const int rowBytes = renderW * bpp;
     // swscale's 4:2:0 chroma path reads source rows in pairs, so it can read one
-    // row past the last valid row. For dimensions where width*height*4 is exactly
-    // divisible by 4096 (e.g. 1920×1080), the allocation lands page-aligned with
-    // zero slack and that extra-row read hits an unmapped page → access violation.
-    // Two rows of tail padding guarantees the read lands in committed memory.
-    outData.resize(static_cast<size_t>(renderW) * renderH * 4 + rowBytes * 2, 0);
+    // row past the last valid row. For dimensions where width*height*bpp is exactly
+    // divisible by 4096 (e.g. 1920×1080 at 4 bytes/pixel), the allocation lands
+    // page-aligned with zero slack and that extra-row read hits an unmapped page →
+    // access violation. Two rows of tail padding guarantees the read lands in
+    // committed memory.
+    outData.resize(static_cast<size_t>(renderW) * renderH * bpp + rowBytes * 2, 0);
 
     const uint8_t* src = static_cast<const uint8_t*>(mapped.pData);
     uint8_t* dst = outData.data();
