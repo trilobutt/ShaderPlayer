@@ -57,6 +57,17 @@ public:
     // but we always emit mono after SWR conversion). Returns number of floats written.
     int DrainAudioSamples(float* buf, int maxFloats);
 
+    // A second conversion of the same packets, kept separate from the analyser's mono
+    // mix: packed stereo float at the source rate, which is what the recorder muxes into
+    // the output file. Off by default, so a playback session pays nothing for it; the
+    // render turns it on for its duration. Enabling it drops whatever it was holding, so
+    // the tap always starts at the position the caller enabled it from.
+    void SetRecordingTap(bool on);
+    bool RecordingTapOn() const { return m_recordTap; }
+
+    // Drain the recording tap. maxFloats counts floats, so a stereo frame is two of them.
+    int DrainRecordingSamples(float* buf, int maxFloats);
+
     // Read ahead for audio: call av_read_frame in a loop, decode audio packets
     // eagerly, queue video packets for later consumption by DecodeNextFrame.
     // Stops when m_audioPending.size() >= targetSamples or EOF.
@@ -111,6 +122,12 @@ private:
     SwrContext*      m_swrCtx          = nullptr;
     AVFrame*         m_audioFrame      = nullptr;
     std::vector<float> m_audioPending; // accumulated mono-float samples awaiting drain
+
+    // The recording tap (see SetRecordingTap). Its resampler is built on first use and
+    // torn down with the stream, so a session that never records never allocates it.
+    bool             m_recordTap        = false;
+    SwrContext*      m_recordSwr        = nullptr;
+    std::vector<float> m_recordPending;  // packed stereo float awaiting drain
 
     // Video packet queue — populated by ReadAudioAhead(), consumed by DecodeNextFrame().
     // Entries are av_packet_clone()'d; caller must av_packet_free() on pop.

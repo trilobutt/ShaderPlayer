@@ -53,6 +53,14 @@ constexpr int kTrackHeight    = 50;
 constexpr int kVolumeSteps = 100;
 constexpr int kVolumeWidth = 116;
 
+// Said on every control a render has taken over, so whichever one the pointer lands on
+// gives the same answer.
+QString RenderLockHint()
+{
+    return TransportPanel::tr("Rendering to file. Stop the recording to take the "
+                              "transport back.");
+}
+
 // The one number the eye goes to, so it is the largest thing in the dock.
 constexpr int kClockPoints = Theme::kFontSizePanelTitle + 2;
 
@@ -878,6 +886,7 @@ void TransportPanel::SetKeyframeSelection(int paramIndex, int keyframeIndex)
 void TransportPanel::Tick()
 {
     SyncPage();
+    SyncRenderLock();
     SyncPlayButton();
     SyncAudioRow();
     SyncFollowButton();
@@ -905,7 +914,7 @@ void TransportPanel::SyncPage()
     m_page = page;
     m_stack->setCurrentIndex(page);
 
-    const bool havePicture = (page != kPageIdle);
+    const bool havePicture = (page != kPageIdle) && !m_app.IsOfflineRender();
     m_play->setEnabled(havePicture);
     m_stop->setEnabled(havePicture);
 
@@ -915,14 +924,39 @@ void TransportPanel::SyncPage()
     if (page == kPageGenerative) SyncResolution();
 }
 
+void TransportPanel::SyncRenderLock()
+{
+    // While a render is walking the file into the encoder, the transport is not what is
+    // driving playback, and Application ignores it. Greying it out says so before the user
+    // presses something that appears to do nothing.
+    const bool locked = m_app.IsOfflineRender();
+    if (locked == m_renderLocked) return;
+    m_renderLocked = locked;
+
+    m_play->setEnabled(!locked && m_page != kPageIdle);
+    m_stop->setEnabled(!locked && m_page != kPageIdle);
+    m_scrubber->setEnabled(!locked);
+
+    m_stop->setToolTip(locked ? RenderLockHint()
+                              : tr("Stop playback and return to the start."));
+    m_scrubber->setToolTip(locked ? RenderLockHint() : QString());
+    ApplyPlayButton();
+}
+
+void TransportPanel::ApplyPlayButton()
+{
+    m_play->setText(m_playing ? tr("Pause") : tr("Play"));
+    m_play->setToolTip(m_renderLocked ? RenderLockHint()
+                       : m_playing    ? tr("Pause playback (Space).")
+                                      : tr("Play (Space)."));
+}
+
 void TransportPanel::SyncPlayButton()
 {
     const bool playing = (m_app.GetPlaybackState() == PlaybackState::Playing);
     if (playing == m_playing) return;
     m_playing = playing;
-    m_play->setText(playing ? tr("Pause") : tr("Play"));
-    m_play->setToolTip(playing ? tr("Pause playback (Space).")
-                               : tr("Play (Space)."));
+    ApplyPlayButton();
 }
 
 void TransportPanel::SyncClock()

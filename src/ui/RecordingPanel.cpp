@@ -213,6 +213,7 @@ void RecordingPanel::BuildOutput(QVBoxLayout* layout)
     connect(m_path, &PathEdit::PathChanged, this, [this](const QString& path) {
         m_settings.outputPath = path.toStdString();
         SyncStatus();
+        Persist();
     });
     line->addWidget(m_path, 1);
 
@@ -247,11 +248,17 @@ void RecordingPanel::BuildEncoding(QVBoxLayout* layout)
     m_codec->addItem(tr("H.264 (MP4)"));
     m_codec->addItem(tr("ProRes (MOV)"));
     m_codec->setCurrentIndex(m_settings.codec == "prores_ks" ? 1 : 0);
+    // Each of these three seeds a widget whose range is narrower than the field it comes
+    // from, and then takes the widget's answer back. A config holding 0.5 Mbps otherwise
+    // shows the user 5 Mbps and hands the encoder 0.5, and neither number is wrong enough
+    // to look like a bug.
+    m_settings.codec = CodecId(m_codec->currentIndex());
     m_codec->setToolTip(tr("H.264 is small and plays anywhere. ProRes is far larger and "
                            "survives further editing."));
     connect(m_codec, &QComboBox::currentIndexChanged, this, [this](int index) {
         m_settings.codec = CodecId(index);
         SyncCodec();
+        Persist();
     });
     codecLine->addWidget(m_codec, 1);
     layout->addWidget(codecRow);
@@ -273,9 +280,11 @@ void RecordingPanel::BuildEncoding(QVBoxLayout* layout)
     m_bitrate->setSuffix(tr(" Mbps"));
     m_bitrate->setKeyboardTracking(false);
     m_bitrate->setValue(std::clamp(m_settings.bitrate / 1000000, kBitrateMin, kBitrateMax));
+    m_settings.bitrate = m_bitrate->value() * 1000000;   // see the codec combo
     m_bitrate->setToolTip(tr("Higher keeps more detail and costs proportionally more disk."));
     connect(m_bitrate, &QSpinBox::valueChanged, this, [this](int mbps) {
         m_settings.bitrate = mbps * 1000000;
+        Persist();
     });
     bitrateLine->addWidget(m_bitrate, 1);
     layout->addWidget(m_bitrateRow);
@@ -297,10 +306,12 @@ void RecordingPanel::BuildEncoding(QVBoxLayout* layout)
     m_profile->addItem(tr("422"));
     m_profile->addItem(tr("HQ"));
     m_profile->setCurrentIndex(std::clamp(m_settings.proresProfile, 0, 3));
+    m_settings.proresProfile = m_profile->currentIndex();   // see the codec combo
     m_profile->setToolTip(tr("Proxy is the smallest, HQ the largest. The profile sets the "
                              "rate, so ProRes ignores the bitrate above."));
     connect(m_profile, &QComboBox::currentIndexChanged, this, [this](int index) {
         m_settings.proresProfile = index;
+        Persist();
     });
     profileLine->addWidget(m_profile, 1);
     layout->addWidget(m_profileRow);
@@ -367,6 +378,13 @@ void RecordingPanel::BrowseForOutput()
     m_settings.outputPath = chosen;
     m_path->SetPath(QString::fromStdString(chosen));
     SyncStatus();
+    Persist();
+}
+
+void RecordingPanel::Persist()
+{
+    m_app.GetConfig().recordingDefaults = m_settings;
+    m_app.SaveConfig();
 }
 
 void RecordingPanel::ToggleRecording()
@@ -395,6 +413,25 @@ void RecordingPanel::Tick()
     const bool recording = m_app.GetEncoder().IsRecording();
     if (recording != m_armed) SyncArmed(recording);
     if (recording) SyncStatus();
+    else           SyncIdleAffordance();
+}
+
+void RecordingPanel::SyncIdleAffordance()
+{
+    const VideoDecoder& decoder = m_app.GetDecoder();
+    const bool fileSource = decoder.IsOpen() && !decoder.IsLiveCapture();
+    if (static_cast<int>(fileSource) == m_fileSourceApplied) return;
+    m_fileSourceApplied = static_cast<int>(fileSource);
+
+    m_toggle->setText(fileSource ? tr("Render Video to File") : tr("Start Recording"));
+    m_toggle->setToolTip(fileSource
+        ? tr("Play the open video from its first frame with the shader applied, writing "
+             "every frame to the file above. It stops itself at the end (F9).")
+        : tr("Begin writing every rendered frame to the file above (F9)."));
+    m_idleHint->setText(fileSource
+        ? tr("Renders the whole video from the start and stops at the end. "
+             "F9 starts and stops from anywhere.")
+        : tr("Not recording. F9 starts and stops from anywhere."));
 }
 
 void RecordingPanel::SyncCodec()
@@ -409,6 +446,7 @@ void RecordingPanel::SyncCodec()
 void RecordingPanel::SyncArmed(bool recording)
 {
     m_armed = recording;
+    m_rendering = recording && m_app.IsOfflineRender();
 
     if (recording && !m_since.isValid()) m_since.start();
     if (!recording) m_since.invalidate();
@@ -424,11 +462,17 @@ void RecordingPanel::SyncArmed(bool recording)
     m_statusBlock->setVisible(recording);
     m_idleHint->setVisible(!recording);
 
-    m_toggle->setText(recording ? tr("Stop Recording") : tr("Start Recording"));
     m_toggle->setMinimumHeight(recording ? kToggleArmedHeight : kToggleIdleHeight);
-    m_toggle->setToolTip(recording ? tr("End the recording and close the file (F9).")
-                                   : tr("Begin writing every rendered frame to the file "
-                                        "above (F9)."));
+    if (recording) {
+        m_toggle->setText(m_rendering ? tr("Stop Rendering") : tr("Stop Recording"));
+        m_toggle->setToolTip(m_rendering
+            ? tr("Cancel the render and close the file where it has got to (F9).")
+            : tr("End the recording and close the file (F9)."));
+    } else {
+        // The idle button is one of two different actions; SyncIdleAffordance picks it.
+        m_fileSourceApplied = -1;
+        SyncIdleAffordance();
+    }
 
     // Red is spent on the state, not on the way out of it: armed, the accent-filled toggle
     // is the obvious thing to press, and the red belongs to the badge and the border.
@@ -474,6 +518,19 @@ void RecordingPanel::SyncStatus()
         counters += QStringLiteral(", ") + tr("0 dropped");
     }
     counters += QStringLiteral(", ") + tr("%1 fps").arg(encoder.GetEncodingFPS(), 0, 'f', 1);
+
+    // A render has a known end, so say how far off it is. A live or generative recording
+    // has none, and a percentage of nothing would be a number the panel made up.
+    // IsOfflineRender rather than the cached m_rendering: the encoder thread takes a few
+    // frames to wind down after the render itself has finished and rewound, and reading the
+    // cache there would show a progress of 0% over the top of a completed file.
+    if (m_app.IsOfflineRender()) {
+        const double duration = m_app.GetDecoder().GetDuration();
+        if (duration > 0.0) {
+            const double done = std::clamp(m_app.GetPlaybackTime() / duration, 0.0, 1.0);
+            counters.prepend(tr("%1%, ").arg(done * 100.0, 0, 'f', 0));
+        }
+    }
 
     if (counters != m_countersText) {
         m_countersText = counters;

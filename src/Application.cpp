@@ -270,13 +270,10 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         if (m_mainWindow) m_mainWindow->ToggleSpoutDock();
         return;
     case VK_F9:
-        if (m_encoder.IsRecording()) {
-            StopRecording();
-        } else {
-            RecordingSettings settings;
-            settings.outputPath = "output.mp4";
-            StartRecording(settings);
-        }
+        // Through the panel, which owns the RecordingSettings the user configured. Calling
+        // StartRecording from here with a fresh struct wrote to a hardcoded output.mp4 and
+        // ignored every field in the dock.
+        if (m_mainWindow) m_mainWindow->ToggleRecording();
         return;
     case 'O':
         if (ctrl) {
@@ -398,12 +395,21 @@ void Application::ProcessFrame() {
                     m_videoUploadPending = true;
                 }
             } else {
-                // Video file mode: advance playback time from decoded frame timestamps
-                if (elapsed >= m_frameDuration) {
+                // Video file mode. Two paces, and the difference is the whole of what a
+                // record does to playback: normally a frame is decoded when its wall-clock
+                // slot arrives and the video loops at the end, but while rendering to file
+                // exactly one frame is decoded per tick and the end of stream closes the
+                // recording. A render paced off the clock would drop or repeat frames
+                // whenever the shader cost more than a frame's time, and a render that
+                // looped would write the video twice.
+                if (m_offlineRender || elapsed >= m_frameDuration) {
                     if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                         m_newVideoFrame = true;
                         m_videoUploadPending = true;
                         m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
+                    } else if (m_offlineRender) {
+                        FinishOfflineRender(true);
+                        return;   // the decoder has been rewound; nothing left to do here
                     } else {
                         // End of video, loop
                         m_decoder.SeekToTime(0.0);
@@ -419,7 +425,36 @@ void Application::ProcessFrame() {
                 // buffer never fills beyond the target — avoiding the bug where
                 // draining at 60 fps submits audio 20x faster than real time,
                 // exhausting the ring buffer capacity in < 1 second.
-                if (m_decoder.HasAudio()) {
+                if (m_decoder.HasAudio() && m_offlineRender) {
+                    // The render runs faster than real time, so there is nothing to play:
+                    // the speakers are silent and the analyser is fed from the video's own
+                    // clock instead. Feeding it per tick would let an audio-reactive shader
+                    // see bands from the wrong part of the track; deriving the count from
+                    // the frame timestamp keeps the two locked together for the whole file.
+                    const int rate = m_decoder.GetAudioSampleRate();
+                    const int64_t target =
+                        static_cast<int64_t>(static_cast<double>(m_playbackTime) * rate);
+                    int64_t need = target - m_offlineAudioFed;
+
+                    constexpr int kAudioBuf = 16384;
+                    static float audioBuf[kAudioBuf];
+
+                    if (need > 0) {
+                        m_decoder.ReadAudioAhead(
+                            static_cast<int>(std::min<int64_t>(need, kAudioBuf * 8)));
+                        while (need > 0) {
+                            int got = m_decoder.DrainAudioSamples(
+                                          audioBuf,
+                                          static_cast<int>(std::min<int64_t>(need, kAudioBuf)));
+                            if (got <= 0) break;   // audio ran out before the video did
+                            m_audioAnalyzer.FeedSamples(audioBuf, got, 1, rate);
+                            m_offlineAudioFed += got;
+                            need -= got;
+                        }
+                    }
+
+                    PumpRecordingAudio();
+                } else if (m_decoder.HasAudio()) {
                     const int rate        = m_decoder.GetAudioSampleRate();
                     const int deviceRate  = m_audioPlayer.GetDeviceSampleRate();
                     // 2-second target in device-rate samples (the unit GetBufferedSamples returns)
@@ -487,6 +522,21 @@ void Application::ProcessFrame() {
         m_playbackTime = m_generativeTime;
         m_newVideoFrame = true;
         m_lastFrameTime = now;
+    }
+}
+
+void Application::PumpRecordingAudio() {
+    if (!m_encoder.IsRecording() || !m_decoder.RecordingTapOn()) return;
+
+    // Drained to exhaustion rather than to a target: every sample the read-ahead pulled in
+    // belongs in the file, and the muxer interleaves it against the video by timestamp
+    // rather than by arrival. Holding any back would only shorten the track.
+    constexpr int kRecBuf = 16384;
+    static float recBuf[kRecBuf];
+
+    int got;
+    while ((got = m_decoder.DrainRecordingSamples(recBuf, kRecBuf)) > 0) {
+        if (!m_encoder.SubmitAudio(recBuf, got)) break;   // encoder is wedged; stop pushing
     }
 }
 
@@ -635,6 +685,7 @@ bool Application::RenderFrame() {
 }
 
 bool Application::OpenVideo(const std::string& filepath) {
+    StopRecording();   // see CloseVideo
     // Reset prior state before opening — mirrors OpenCapture and prevents stale audio,
     // playback time, and renderer video dimensions when replacing an already-open video.
     m_playbackState  = PlaybackState::Stopped;
@@ -663,6 +714,10 @@ bool Application::OpenVideo(const std::string& filepath) {
 }
 
 void Application::CloseVideo() {
+    // Before Stop(), which a running render ignores, and before the decoder goes: with no
+    // file open ProcessFrame takes the generative branch and would never reach the end of
+    // stream that closes the encoder.
+    StopRecording();
     Stop();
     m_audioPlayer.Flush();
     m_decoder.Close();
@@ -685,6 +740,7 @@ void Application::OpenVideoDialog() {
 }
 
 bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
+    StopRecording();   // see CloseVideo
     Stop();
     m_generativeTime = 0.0f;
 
@@ -712,6 +768,9 @@ void Application::Pause() {
 }
 
 void Application::Stop() {
+    // A render owns the transport until it finishes or is cancelled; a stop that only
+    // halted playback would leave the encoder open with nothing arriving at it.
+    if (m_offlineRender) return;
     m_playbackState = PlaybackState::Stopped;
     m_audioPlayer.Flush();
     if (m_decoder.IsOpen()) {
@@ -723,6 +782,7 @@ void Application::Stop() {
 }
 
 void Application::TogglePlayback() {
+    if (m_offlineRender) return;   // see Stop()
     if (m_playbackState == PlaybackState::Playing) {
         Pause();
     } else {
@@ -731,6 +791,7 @@ void Application::TogglePlayback() {
 }
 
 void Application::SeekTo(double seconds) {
+    if (m_offlineRender) return;   // see Stop()
     if (m_decoder.IsOpen()) {
         m_audioPlayer.Flush();
         m_decoder.SeekToTime(seconds);
@@ -901,6 +962,11 @@ bool Application::StartRecording(const RecordingSettings& settings) {
     int recW, recH;
     double recFPS;
 
+    // An opened file is a render, not a capture. The user asked for that video with this
+    // shader on it, which means every frame of it from the first, so the transport is
+    // driven from here rather than left for the user to start by hand.
+    const bool fileSource = m_decoder.IsOpen() && !m_decoder.IsLiveCapture();
+
     if (m_decoder.IsOpen()) {
         recW   = m_decoder.GetWidth();
         recH   = m_decoder.GetHeight();
@@ -917,22 +983,76 @@ bool Application::StartRecording(const RecordingSettings& settings) {
             Play();
     }
 
-    if (m_encoder.StartRecording(settings, recW, recH, recFPS)) {
-        Toast(m_mainWindow.get(), "Recording started: " + settings.outputPath);
-        return true;
-    } else {
+    // Only a file has audio to mux: a dshow capture device is video-only here, and a
+    // generative shader has no source at all.
+    const int audioRate = (fileSource && m_decoder.HasAudio())
+                              ? m_decoder.GetAudioSampleRate() : 0;
+
+    if (!m_encoder.StartRecording(settings, recW, recH, recFPS, audioRate)) {
         Toast(m_mainWindow.get(), "Failed to start recording");
         return false;
     }
+
+    if (fileSource) {
+        // Rewind and play. No frame is decoded here: ProcessFrame decodes the first one on
+        // the next tick, which is what puts it in front of the encoder. Decoding it now
+        // would show it and then overwrite it before the capture in RenderFrame ever saw
+        // it, and the file would start one frame late.
+        m_offlineRender   = true;
+        m_offlineAudioFed = 0;
+        // Only when the file actually got an audio stream: a codec the container refused
+        // leaves HasAudioStream false, and the tap would then decode into nothing.
+        m_decoder.SetRecordingTap(m_encoder.HasAudioStream());
+        m_audioPlayer.Flush();
+        m_audioAnalyzer.Reset();
+        m_decoder.SeekToTime(0.0);
+        m_playbackTime = 0.0f;
+        Play();
+        Toast(m_mainWindow.get(), "Rendering to " + settings.outputPath);
+    } else {
+        Toast(m_mainWindow.get(), "Recording started: " + settings.outputPath);
+    }
+    return true;
 }
 
 void Application::StopRecording() {
-    if (m_encoder.IsRecording()) {
-        // Non-blocking: signals the encoder thread to drain its queue and exit.
-        // Flush, file close, and resource free all happen on that thread.
-        m_encoder.StopRecording();
-        Toast(m_mainWindow.get(), "Recording stopped");
+    if (!m_encoder.IsRecording()) return;
+
+    if (m_offlineRender) {
+        FinishOfflineRender(false);
+        return;
     }
+
+    // Non-blocking: signals the encoder thread to drain its queue and exit.
+    // Flush, file close, and resource free all happen on that thread.
+    m_encoder.StopRecording();
+    Toast(m_mainWindow.get(), "Recording stopped");
+}
+
+void Application::FinishOfflineRender(bool completed) {
+    // Before StopRecording: the last video frame's own audio is still in the tap, and the
+    // encoder stops accepting submissions the moment it is told to drain.
+    PumpRecordingAudio();
+    m_decoder.SetRecordingTap(false);
+
+    m_offlineRender   = false;
+    m_offlineAudioFed = 0;
+
+    m_encoder.StopRecording();
+
+    // Back to the first frame with the transport idle. Leaving it playing would restart
+    // the video at real time the instant the file closed, which is the confusion this
+    // whole path exists to remove.
+    m_playbackState = PlaybackState::Stopped;
+    m_audioPlayer.Flush();
+    m_audioAnalyzer.Reset();
+    if (m_decoder.IsOpen()) {
+        m_decoder.SeekToTime(0.0);
+        if (m_decoder.DecodeNextFrame(m_currentFrame)) m_videoUploadPending = true;
+    }
+    m_playbackTime = 0.0f;
+
+    Toast(m_mainWindow.get(), completed ? "Render complete" : "Render cancelled");
 }
 
 void Application::SaveConfig() {

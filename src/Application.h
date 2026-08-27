@@ -67,6 +67,11 @@ public:
     // Recording
     bool StartRecording(const RecordingSettings& settings);
     void StopRecording();
+    // True while a recording is walking an opened video file from its first frame to its
+    // last, one frame per tick, and will stop itself at the end. Live capture and
+    // generative recording stay real-time and are stopped by hand, so this is false for
+    // both. The transport is inert while it is true (see Stop/SeekTo/TogglePlayback).
+    bool IsOfflineRender() const { return m_offlineRender; }
     // Returns the chosen path, or an empty string if the user cancelled.
     std::string OpenRecordingOutputDialog(const std::string& currentPath);
 
@@ -138,6 +143,15 @@ public:
 private:
     void EvaluateKeyframes();
 
+    // End the file render started by StartRecording: closes the encoder, rewinds, and
+    // leaves the transport stopped. Called at end of stream and by StopRecording.
+    void FinishOfflineRender(bool completed);
+
+    // Hand the decoder's recording tap to the encoder. Called every tick of a render and
+    // once more as it ends, so the audio the last video frame did not reach still lands
+    // in the file.
+    void PumpRecordingAudio();
+
     // Frame processing
     void ProcessFrame();
     bool RenderFrame();      // returns whether the viewport presented (see TickOnce)
@@ -176,6 +190,12 @@ private:
     // m_newVideoFrame, which ProcessFrame resets every tick: a frame decoded by OpenVideo,
     // Stop or SeekTo arrives between ticks and would otherwise never reach the GPU.
     bool m_videoUploadPending = false;
+
+    // Offline render (recording an opened file). m_offlineAudioFed counts the analyser
+    // samples handed over so far, so the audio fed per frame is derived from the video's
+    // own timestamp rather than accumulated per tick, which drifts.
+    bool m_offlineRender = false;
+    int64_t m_offlineAudioFed = 0;
 };
 
 } // namespace SP

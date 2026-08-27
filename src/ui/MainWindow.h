@@ -118,6 +118,10 @@ public:
     void ToggleSpoutDock();
     void ShowKeybindingsReference();
 
+    // F9. Presses the Recording dock's own toggle, so the recording uses the settings the
+    // user configured there rather than a second set held somewhere else.
+    void ToggleRecording();
+
     // restoreState() from WorkspaceManager, or ArrangeDefaultLayout(). Reached from the
     // Workspace Presets menu and from a workspace preset's own keybinding.
     void LoadWorkspacePreset(int index);
@@ -147,8 +151,6 @@ private:
     void OnOpenCapture();
 
     void OnSaveWorkspaceAs();               // prompts for a name, saveState() into WorkspaceManager
-
-    void OnToggleRecording();
 
     Application& m_app;
 

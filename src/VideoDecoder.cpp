@@ -192,6 +192,7 @@ void VideoDecoder::Close() {
     m_codecName.clear();
     m_conversionBuffer.clear();
     m_audioPending.clear();
+    m_recordPending.clear();
     m_isLiveCapture = false;
 }
 
@@ -279,6 +280,7 @@ void VideoDecoder::FlushDecoder() {
     av_frame_unref(m_audioFrame);
     av_packet_unref(m_packet);
     m_audioPending.clear();
+    m_recordPending.clear();
     m_audioEOFReached = false;
 }
 
@@ -445,6 +447,38 @@ int VideoDecoder::DrainAudioSamples(float* buf, int maxFloats) {
     return toCopy;
 }
 
+void VideoDecoder::SetRecordingTap(bool on) {
+    m_recordPending.clear();
+    if (on == m_recordTap) return;
+    m_recordTap = on;
+
+    if (!on || !m_audioCtx) return;
+
+    // Packed stereo float at the source rate. Stereo rather than the source's own layout
+    // because the encoder has to commit to one and every container and codec the recorder
+    // writes takes stereo: a mono source comes out dual-mono, a 5.1 source downmixed.
+    if (!m_recordSwr) {
+        AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+        if (swr_alloc_set_opts2(&m_recordSwr,
+                &stereo,                AV_SAMPLE_FMT_FLT, m_audioSampleRate,
+                &m_audioCtx->ch_layout, m_audioCtx->sample_fmt, m_audioSampleRate,
+                0, nullptr) < 0 || !m_recordSwr || swr_init(m_recordSwr) < 0) {
+            swr_free(&m_recordSwr);
+            m_recordTap = false;   // the render goes ahead silent rather than not at all
+        }
+    }
+}
+
+int VideoDecoder::DrainRecordingSamples(float* buf, int maxFloats) {
+    int available = static_cast<int>(m_recordPending.size());
+    int toCopy = std::min(available, maxFloats);
+    if (toCopy > 0) {
+        std::copy(m_recordPending.begin(), m_recordPending.begin() + toCopy, buf);
+        m_recordPending.erase(m_recordPending.begin(), m_recordPending.begin() + toCopy);
+    }
+    return toCopy;
+}
+
 void VideoDecoder::OpenAudioStream() {
     if (!m_formatCtx) return;
 
@@ -491,10 +525,15 @@ void VideoDecoder::CloseAudioStream() {
     if (m_audioCtx) {
         avcodec_free_context(&m_audioCtx);
     }
+    if (m_recordSwr) {
+        swr_free(&m_recordSwr);
+    }
+    m_recordTap       = false;
     m_audioStreamIdx  = -1;
     m_audioSampleRate = 0;
     m_audioChannels   = 0;
     m_audioPending.clear();
+    m_recordPending.clear();
 }
 
 void VideoDecoder::DecodeAudioPacket() {
@@ -523,6 +562,25 @@ void VideoDecoder::DecodeAudioPacket() {
         // SWR outputs mono (AV_CHANNEL_LAYOUT_MONO), so tmp holds the mono plane.
         if (converted > 0)
             m_audioPending.insert(m_audioPending.end(), tmp.begin(), tmp.begin() + converted);
+
+        // The recording tap converts the same frame again, into its own layout. Two
+        // resamplers rather than one shared one because the analyser wants a mono mix and
+        // the file wants stereo, and neither is derivable from the other without a second
+        // pass anyway.
+        if (m_recordTap && m_recordSwr) {
+            int outStereo = swr_get_out_samples(m_recordSwr, m_audioFrame->nb_samples);
+            if (outStereo > 0) {
+                std::vector<float> stereoTmp(static_cast<size_t>(outStereo) * 2);
+                uint8_t* stereoBuf = reinterpret_cast<uint8_t*>(stereoTmp.data());
+                int gotStereo = swr_convert(m_recordSwr, &stereoBuf, outStereo,
+                                            const_cast<const uint8_t**>(m_audioFrame->data),
+                                            m_audioFrame->nb_samples);
+                if (gotStereo > 0)
+                    m_recordPending.insert(m_recordPending.end(), stereoTmp.begin(),
+                                           stereoTmp.begin() + static_cast<size_t>(gotStereo) * 2);
+            }
+        }
+
         av_frame_unref(m_audioFrame);
     }
 }

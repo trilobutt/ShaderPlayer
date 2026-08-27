@@ -413,6 +413,22 @@ KSyntaxHighlighting DLL, and the Qt runtime (`tools/deploy_qt.cmake` wrapping
 
 Configuration is stored in `config.json` next to the executable (created on first run if missing).
 
+### Recording Settings
+
+`AppConfig::recordingDefaults` is the store's home: `MainWindow` seeds `m_recordingSettings`
+from it (falling back to `output.mp4` when the path is empty, which is what a config written
+before the panel ever ran holds), and every `RecordingPanel` widget that edits a setting ends
+in `Persist()`, which writes the struct back and saves. A change is therefore on disk before
+the next frame, not at exit.
+
+Two things follow from the widgets being narrower than the fields they seed from:
+
+- **Every seeded widget writes its answer back into the store** (`m_settings.bitrate =
+  m_bitrate->value() * 1000000` and the two combos likewise). A config holding 0.5 Mbps
+  otherwise shows the user 5 Mbps and hands the encoder 0.5.
+- **Connect after seeding**, as the existing widgets do. A `connect` placed before the
+  `setValue`/`setCurrentIndex` would fire `Persist()` from inside the constructor.
+
 ### Keybindings
 
 Shader shortcut keys are stored per-preset as virtual key codes (`shortcutKey`, `shortcutModifiers`). Set them via right-click → "Set Keybinding..." in the Shader Library.
@@ -517,6 +533,35 @@ is left bound**: the renderer owns no backbuffer to restore. Safe to call betwee
 `BlitDisplayToRect(rtv, x, y, w, h, clearColor)` — the same, but clears the whole RTV to
 `clearColor` and draws into a sub-rectangle. `ClearRenderTargetView` ignores the viewport,
 which is what lets the letterbox borders show the clear colour. Used by `ViewportWidget`.
+
+### Recording an Opened File
+
+Starting a recording with a video file open is a **render**, not a capture, and
+`Application::StartRecording` drives the transport itself: it rewinds to 0, calls `Play()`,
+and sets `m_offlineRender`. While that flag is set:
+
+- `ProcessFrame` decodes exactly one frame per tick instead of gating on
+  `elapsed >= m_frameDuration`, so a shader that costs more than a frame's time cannot make
+  the render drop or repeat frames. End of stream calls `FinishOfflineRender(true)` instead
+  of looping, which closes the encoder and leaves the transport stopped on frame 0.
+- Audio is fed to the analyser and to the encoder, never to `AudioPlayer` (the render runs
+  faster than real time, so there is nothing to play). The analyser's sample count comes
+  from the video frame's own timestamp against `m_offlineAudioFed`, not from a per-tick
+  accumulator, so an audio-reactive shader sees the bands belonging to the frame being
+  written. The file's copy goes through `PumpRecordingAudio`, which drains the recording tap
+  to exhaustion: the muxer interleaves by timestamp, so holding any back would only shorten
+  the track. `FinishOfflineRender` pumps once more before stopping the encoder, since the
+  last video frame's own audio is still in the tap at that point.
+- `Stop()`, `SeekTo()` and `TogglePlayback()` return immediately, and `TransportPanel`
+  greys itself out to say so (`SyncRenderLock`). A stop that only halted playback would
+  leave the encoder open with nothing arriving at it.
+- `OpenVideo`, `OpenCapture` and `CloseVideo` call `StopRecording()` first. With no file
+  open `ProcessFrame` takes the generative branch and would never reach the end of stream
+  that closes the encoder.
+
+Live capture and generative recording are unchanged: both stay real-time and are stopped by
+hand. `IsOfflineRender()` is false for both, which is what `RecordingPanel` reads to decide
+whether its button says "Render Video to File" or "Start Recording".
 
 ### Shader Compile Path
 
@@ -683,6 +728,8 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - Audio playback via miniaudio (WASAPI). Volume/mute in transport bar. `AppConfig::audioVolume`/`muteAudio` persisted in config.json.
 - ProRes support depends on FFmpeg build configuration
 - Recording framerate matches playback framerate (no arbitrary output rates)
+- A recorded file carries the source's audio only when the source is a file. Live capture
+  opens a dshow video device with no audio pin, so a webcam recording is silent.
 
 ## Qt Notes
 
@@ -754,6 +801,43 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - `RenderToTexture()` leaves the active RT as `m_renderTextureRTV`. Call `BeginFrame()` after it so the pipeline state the rest of the frame depends on is put back.
 - Recording capture must happen **after** `RenderToDisplay()` (video pipeline state active) and **before** any subsequent `BeginFrame()` that might alter the video texture or cbuffer. Gate submission on `m_newVideoFrame` so the encoder receives exactly one frame per decoded video frame — not one per display frame.
 
+### Codec selection
+
+`InitEncoder` looks the encoder up **by name** (`RecordingSettings::codec`) and falls back to
+`avcodec_find_encoder(codecId)`. For ProRes the two are different encoders: the default for
+`AV_CODEC_ID_PRORES` is `prores`, which has no `profile` option at all, so
+`av_opt_set_int(priv_data, "profile", ...)` set an option that did not exist and every
+recording came out Standard whatever the panel said. `prores_ks` is the one with the
+profile option, and its values match the combo's (0 proxy, 1 LT, 2 standard, 3 HQ).
+
+### Audio muxing
+
+`StartRecording(..., audioSampleRate)` adds an audio stream when the rate is non-zero;
+`Application` passes one only for a file render, since a dshow capture device is video-only
+here and a generative shader has no source. **AAC beside H.264 in MP4, `pcm_s16le` beside
+ProRes in MOV.** The stream is always stereo (see `VideoDecoder::SetRecordingTap`), and
+`InitAudioStream` picks the codec's own sample rate and sample format through
+`avcodec_get_supported_config`, letting the resampler cover the difference rather than
+letting `avcodec_open2` refuse the stream.
+
+Four things are load-bearing:
+
+- **`InitAudioStream` runs before `avformat_write_header`.** A stream added after it is not
+  in the file, and nothing reports an error.
+- **`SubmitAudio` waits for queue space rather than dropping.** `m_audioPts` walks over what
+  was actually encoded, so a dropped chunk does not leave a hole in the track, it pulls
+  everything after it earlier and desyncs the rest of the file. It gives up after
+  `kAudioQueueWait` and counts the loss in the dropped counter.
+- **The FIFO cuts the stream into `frame_size` pieces.** AAC fixes that at 1024 and refuses
+  anything else; PCM leaves `frame_size` at 0, so `kDefaultAudioFrameSize` stands in. Only
+  the flush pass emits a short frame, which the encoder pads itself.
+- **`DrainAudioFifo` restores `m_audioFrame->nb_samples` after a short read.**
+  `av_frame_make_writable` sizes a reallocation from `nb_samples`, so leaving it at the tail
+  length would shrink the buffer for every pass after it.
+
+`FlushAudioEncoder` flushes the resampler before the FIFO: at a converted rate swr holds a
+tail that only a null input releases, and it belongs in the file.
+
 ## ShaderManager API
 
 - `GetPreset(int)` is non-const; use `GetPresets()` (returns `const std::vector<ShaderPreset>&`) when calling from a `const` method
@@ -816,6 +900,15 @@ Adding a new config field requires three changes: default value in `Common.h` (`
 ## VideoDecoder API
 
 `VideoDecoder` exposes `GetFPS()`, `GetFrameCount()`, `GetDuration()`, `GetCurrentTime()` — sufficient for any frame-based UI without new API. `Keyframe::time` and all playback state is always stored in seconds; display layers convert via `fps`. Never store frame numbers in the data model.
+
+The decoder has **two** audio taps off the same packets, because the analyser wants a mono
+mix and the recorder wants stereo and neither is derivable from the other without a second
+pass. `DrainAudioSamples` is the analyser's (mono float, always on); `DrainRecordingSamples`
+is the recorder's (packed stereo float at the source rate), built on the first
+`SetRecordingTap(true)` and idle otherwise, so a playback session allocates nothing for it.
+Stereo rather than the source's own layout because the encoder has to commit to one: a mono
+source comes out dual-mono, a 5.1 source downmixed. Enabling the tap clears it, and so does
+every seek, so it always starts at the position it was enabled from.
 
 Audio stream support: `HasAudio()`, `GetAudioSampleRate()`, `DrainAudioSamples(buf, maxFloats)`. `OpenAudioStream()` called internally during `Open()`. Uses libswresample: `swr_alloc_set_opts2` with `AV_CHANNEL_LAYOUT_MONO` + `AV_SAMPLE_FMT_FLTP` handles all source channel counts. Decoded samples accumulate in `m_audioPending`; `DrainAudioSamples` copies and erases consumed floats. Audio packets in the decode loop call `DecodeAudioPacket()` + `continue` instead of being dropped.
 

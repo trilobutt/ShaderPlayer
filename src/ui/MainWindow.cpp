@@ -245,7 +245,12 @@ MainWindow::MainWindow(Application& app)
     resize(1600, 950);
     setMinimumSize(1024, 640);
 
-    m_recordingSettings.outputPath = "output.mp4";   // the outgoing UIManager default
+    // Seeded from AppConfig::recordingDefaults, which RecordingPanel writes back on every
+    // edit. Only the path needs a fallback: an empty one is what a config written before
+    // the panel ever ran holds, and FFmpeg cannot guess a container from it.
+    m_recordingSettings = m_app.GetConfig().recordingDefaults;
+    if (m_recordingSettings.outputPath.empty())
+        m_recordingSettings.outputPath = "output.mp4";
 
     QMainWindow::DockOptions options = QMainWindow::AllowNestedDocks
                                      | QMainWindow::AllowTabbedDocks
@@ -552,7 +557,7 @@ void MainWindow::BuildMenus()
 
     m_actRecordToggle = recordingMenu->addAction(
         MenuText(tr("Start &Recording"), QStringLiteral("F9")));
-    connect(m_actRecordToggle, &QAction::triggered, this, &MainWindow::OnToggleRecording);
+    connect(m_actRecordToggle, &QAction::triggered, this, &MainWindow::ToggleRecording);
 
     recordingMenu->addSeparator();
 
@@ -887,7 +892,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 // Menu handlers
 // ---------------------------------------------------------------------------------------
 
-void MainWindow::OnToggleRecording()
+void MainWindow::ToggleRecording()
 {
     // The panel owns the settings and the toggle; F9 and the menu are another way to press
     // its button, not a second route into the encoder.

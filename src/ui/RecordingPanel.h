@@ -101,8 +101,17 @@ private:
     void SyncCodec();                     // which encoding rows the chosen codec shows
     void SyncArmed(bool recording);       // idle <-> armed: labels, sizes, enablement, pulse
     void SyncStatus();                    // the clock and the counters
+    // Idle only: whether pressing the button renders an open file end to end or captures
+    // whatever is on screen until stopped. Two different actions behind one button, so the
+    // button has to say which one it is before it is pressed.
+    void SyncIdleAffordance();
 
     void BrowseForOutput();
+
+    // Copy the store into AppConfig::recordingDefaults and save. Every widget that edits a
+    // setting ends here: the store belongs to MainWindow and lives only as long as the
+    // window, so a change that is not written through is lost at exit.
+    void Persist();
 
     Application& m_app;
     RecordingSettings& m_settings;
@@ -131,6 +140,8 @@ private:
 
     // Last applied live state, so the per-frame sync is a compare rather than a restyle.
     bool m_armed = false;
+    int m_fileSourceApplied = -1;         // tri-state: -1 forces the idle button to re-apply
+    bool m_rendering = false;             // that render is running
     QString m_elapsedText;
     QString m_countersText;
 };
