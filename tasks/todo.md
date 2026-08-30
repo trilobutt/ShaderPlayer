@@ -300,6 +300,8 @@ done-when: `docs/marketing-plan.md` exists and is specific enough to act on this
 Nine claims in `CLAUDE.md` were found false against the code during this run. None was
 edited by a phase; all belong in the review session's fold-in. The first three are
 documentation errors, the rest are product defects the documentation had papered over.
+One of the nine (F9) was fixed upstream mid-run and is struck through below, so eight
+stand.
 
 1. § "Shader System": shipped shaders each carry an ISF description. Was false for 40 of
    45 until B0a; true now.
@@ -316,10 +318,9 @@ documentation errors, the rest are product defects the documentation had papered
    Ctrl+N is reserved by `FindBindingConflict` (`Application.cpp:1045`) and displayed in
    the F6 reference, but the dispatch `switch` has no `case 'N'`. It is unbindable and
    does nothing.
-7. F9 ignores the Recording panel: it builds a fresh `RecordingSettings` with
-   `outputPath = "output.mp4"` (`Application.cpp:276`), while the menu route uses the
-   panel's settings. The panel's hint that "F9 starts and stops from anywhere" is true for
-   stopping only.
+7. ~~F9 ignores the Recording panel.~~ **Fixed upstream** in `4292050` while this run was in
+   progress: F9 now routes through `MainWindow::ToggleRecording` and uses the panel's
+   settings. Listed here only so the count is not read as eight outstanding defects.
 8. Reserved keys swallow every modifier combination, but the binding dialog refuses only
    the unmodified form, so Shift+F1, Ctrl+F5 and a plain `O` or `S` all pass
    `FindBindingConflict` and then never fire.

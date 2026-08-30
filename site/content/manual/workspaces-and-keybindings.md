@@ -83,11 +83,9 @@ still toggles the editor and never switches the shader. In practice the keys to 
 entirely are **Space, Escape, F1 to F9, O and S**. F10, F11 and F12 are genuinely free, as is
 every other letter and digit.
 
-Two entries in the table need a footnote. **F9** starts a recording with the built-in defaults
-rather than the settings in the Recording panel, which is covered in
-[Recording](/manual/recording/). And **Ctrl+N** is reserved and printed against Shader, New
-Shader..., but the key itself is not dispatched: the menu item works, the shortcut does not.
-Use the menu, or **+ New** in the Shader Library.
+One entry in the table needs a footnote. **Ctrl+N** is reserved and printed against Shader,
+New Shader..., but the key itself is not dispatched: the menu item works, the shortcut does
+not. Use the menu, or **+ New** in the Shader Library.
 
 ## Where keys reach and where they do not
 
