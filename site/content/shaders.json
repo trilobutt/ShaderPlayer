@@ -1,0 +1,5572 @@
+{
+  "generated_from": "default_shaders",
+  "shaders": [
+    {
+      "name": "acoustic_geology",
+      "file": "acoustic_geology.hlsl",
+      "title": "Acoustic Geology",
+      "type": "audio",
+      "description": "Audio laid down as rock: every frame deposits a new sedimentary bed and the whole core scrolls upward like a drill sample being pulled out of the ground. Bass thickens the strata and folds them into anticlines, mid frequencies add fine pale laminae, and beat transients past the fault threshold tear the layers into offset blocks.",
+      "param_count": 14,
+      "custom_floats": 13,
+      "params": [
+        {
+          "name": "ScrollSpeed",
+          "label": "Scroll Speed",
+          "type": "float",
+          "default": 0.12,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "FoldStrength",
+          "label": "Fold Strength",
+          "type": "float",
+          "default": 0.08,
+          "min": 0.0,
+          "max": 0.3,
+          "step": 0.01
+        },
+        {
+          "name": "FaultThresh",
+          "label": "Fault Threshold",
+          "type": "float",
+          "default": 0.55,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ColourSat",
+          "label": "Colour Saturation",
+          "type": "float",
+          "default": 1.2,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "BedSoftness",
+          "label": "Bed Softness",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "SeamWidth",
+          "label": "Seam Width",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "MicaAmt",
+          "label": "Mica Glint",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "BaseTint",
+          "label": "Base Tint",
+          "type": "color",
+          "default": [
+            0.75,
+            0.62,
+            0.4,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassBand",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "MidBand",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "HighBand",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "arthropod_cuticle",
+      "file": "arthropod_cuticle.hlsl",
+      "title": "Arthropod Cuticle",
+      "type": "generative",
+      "description": "Meinhardt-Gierer activator-inhibitor patterning drawn as insect shell. Two noise fields at diffusion-scaled wavelengths compete, so a high activation-to-inhibition ratio gives spots, a ratio near 1 gives labyrinthine stripes, and a low one inverts to dark spots on pigment. Body Geometry warps the field onto a cylinder, carapace, wing or abdomen, and a fine third octave roughens the pigment edges into punctate cuticle grain.",
+      "param_count": 18,
+      "custom_floats": 22,
+      "params": [
+        {
+          "name": "pigmentColour",
+          "label": "Pigment Colour",
+          "type": "color",
+          "default": [
+            0.82,
+            0.38,
+            0.08,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "activatorDiff",
+          "label": "Activator Diff",
+          "type": "float",
+          "default": 0.12,
+          "min": 0.01,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "inhibitorDiff",
+          "label": "Inhibitor Diff",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.01,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "activationRate",
+          "label": "Activation Rate",
+          "type": "float",
+          "default": 1.8,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "inhibitionRate",
+          "label": "Inhibition Rate",
+          "type": "float",
+          "default": 1.2,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "bodyGeometry",
+          "label": "Body Geometry",
+          "type": "long",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Cylinder",
+            "Carapace",
+            "Wing",
+            "Abdomen"
+          ]
+        },
+        {
+          "name": "segmentCount",
+          "label": "Segments",
+          "type": "long",
+          "default": 6,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            10,
+            12
+          ],
+          "labels": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12"
+          ]
+        },
+        {
+          "name": "microTexture",
+          "label": "Micro Sculpture",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "iridescence",
+          "label": "Iridescence",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bgColour",
+          "label": "Background",
+          "type": "color",
+          "default": [
+            0.92,
+            0.88,
+            0.8,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "wingCentre",
+          "label": "Wing Centre",
+          "type": "point2d",
+          "default": [
+            0.5,
+            0.5
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "wingAngle",
+          "label": "Wing Direction",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 360.0,
+          "step": 0.01
+        },
+        {
+          "name": "exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "vignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.2,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "highIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "audio_bass_pulse",
+      "file": "audio_bass_pulse.hlsl",
+      "title": "Audio Bass Pulse",
+      "type": "audio",
+      "description": "A video treatment that punches on the low end: bass expands the frame radially from the centre, fans red and blue apart along the same radial line, and marches outward from each pixel accumulating highlight energy, so a hard hit reads as light spilling off the picture rather than the frame going flat white. Beat transients flash the image toward the chosen colour and open the vignette.",
+      "param_count": 9,
+      "custom_floats": 10,
+      "params": [
+        {
+          "name": "PulseBass",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "PulseBeat",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        },
+        {
+          "name": "PulseStrength",
+          "label": "Pulse Strength",
+          "type": "float",
+          "default": 0.06,
+          "min": 0.0,
+          "max": 0.3,
+          "step": 0.01
+        },
+        {
+          "name": "ChromaAmt",
+          "label": "Chroma Shift",
+          "type": "float",
+          "default": 0.018,
+          "min": 0.0,
+          "max": 0.12,
+          "step": 0.01
+        },
+        {
+          "name": "BeatFlash",
+          "label": "Beat Flash",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.05
+        },
+        {
+          "name": "FlashColor",
+          "label": "Flash Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BloomAmt",
+          "label": "Bass Bloom",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.2,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "audio_fluid_vortex",
+      "file": "audio_fluid_vortex.hlsl",
+      "title": "Audio Fluid Vortex",
+      "type": "audio",
+      "description": "Incompressible fluid advection driven by the spectrum. A divergence-free velocity field is taken as the curl of the noise texture and the sampling coordinate traced backward through it, so dye swirls in closed vortices instead of smearing. Bass injects the large coarse vortices, treble the fine viscous streaks, and Colour Vorticity switches the palette between local rotation and dye density.",
+      "param_count": 16,
+      "custom_floats": 20,
+      "params": [
+        {
+          "name": "bassLevel",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "trebleLevel",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "viscosity",
+          "label": "Viscosity",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.1,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "dyeDiffusion",
+          "label": "Dye Diffusion",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassInfluenceScale",
+          "label": "Bass Scale",
+          "type": "float",
+          "default": 2.0,
+          "min": 0.0,
+          "max": 5.0,
+          "step": 0.01
+        },
+        {
+          "name": "trebleScale",
+          "label": "Treble Scale",
+          "type": "float",
+          "default": 1.5,
+          "min": 0.0,
+          "max": 5.0,
+          "step": 0.01
+        },
+        {
+          "name": "injectionPoints",
+          "label": "Vortex Points",
+          "type": "long",
+          "default": 2,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "labels": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        },
+        {
+          "name": "colourByVorticity",
+          "label": "Colour Vorticity",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "spectrumSpread",
+          "label": "Spectrum Spread",
+          "type": "float",
+          "default": 3.0,
+          "min": 1.0,
+          "max": 6.0,
+          "step": 0.01
+        },
+        {
+          "name": "dyeFill",
+          "label": "Dye Fill",
+          "type": "float",
+          "default": 0.55,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "brightness",
+          "label": "Dye Density",
+          "type": "float",
+          "default": 1.2,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "TrailAmt",
+          "label": "Flow Trails",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "FluidTint",
+          "label": "Fluid Tint",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "audio_spectrum",
+      "file": "audio_spectrum.hlsl",
+      "title": "Audio Spectrum",
+      "type": "audio",
+      "description": "Segmented spectrum analyser bars driven by the 256-bin FFT texture, optionally mirrored about the centre and on a logarithmic frequency axis. Each bar carries a slow peak cap taken from its spectral neighbourhood plus a soft inverse-distance bloom above it; bass lifts the background wash and beats flash the bars white. The background and bar opacities let video through underneath when a Video Blend mode is active.",
+      "param_count": 15,
+      "custom_floats": 19,
+      "params": [
+        {
+          "name": "BarBass",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "BarBeat",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        },
+        {
+          "name": "BgColor",
+          "label": "Background",
+          "type": "color",
+          "default": [
+            0.0,
+            0.0,
+            0.06,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BarColor",
+          "label": "Bar Colour",
+          "type": "color",
+          "default": [
+            0.1,
+            0.7,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Mirror",
+          "label": "Mirror",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "BarScale",
+          "label": "Bar Scale",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "PosY",
+          "label": "Vertical Position",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BarCount",
+          "label": "Segments",
+          "type": "float",
+          "default": 128.0,
+          "min": 8.0,
+          "max": 512.0,
+          "step": 1.0
+        },
+        {
+          "name": "BarGap",
+          "label": "Segment Gap",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 0.9,
+          "step": 0.01
+        },
+        {
+          "name": "BgOpacity",
+          "label": "Background Opacity",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BarOpacity",
+          "label": "Spectrum Opacity",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "LogScale",
+          "label": "Log Frequency",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.05
+        },
+        {
+          "name": "GlowAmt",
+          "label": "Glow",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "CapWidth",
+          "label": "Peak Cap (px)",
+          "type": "float",
+          "default": 2.0,
+          "min": 0.0,
+          "max": 8.0,
+          "step": 0.1
+        }
+      ]
+    },
+    {
+      "name": "chromatic_aberration",
+      "file": "chromatic_aberration.hlsl",
+      "title": "Chromatic Aberration",
+      "type": "video",
+      "description": "Lateral chromatic dispersion: the image is resampled at a slightly different scale per wavelength, so colour fringing is nil at the optical centre and grows toward the corners. Quality sets how many wavelengths are integrated, from a hard three-way R/G/B split with three visible ghost edges to a continuous spectral fringe.",
+      "param_count": 4,
+      "custom_floats": 4,
+      "params": [
+        {
+          "name": "Strength",
+          "label": "Strength",
+          "type": "float",
+          "default": 0.015,
+          "min": 0.0,
+          "max": 0.1,
+          "step": 0.01
+        },
+        {
+          "name": "Animate",
+          "label": "Animate",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "Falloff",
+          "label": "Falloff",
+          "type": "float",
+          "default": 2.0,
+          "min": 1.0,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "Quality",
+          "label": "Quality",
+          "type": "long",
+          "default": 9,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            3,
+            9,
+            17
+          ],
+          "labels": [
+            "Fast (3 tap)",
+            "Smooth (9 tap)",
+            "Fine (17 tap)"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "colour_grading",
+      "file": "colour_grading.hlsl",
+      "title": "Colour Grading",
+      "type": "video",
+      "description": "The primary grading tool in the set. Lift, gamma and gain are applied as one Grade operator, pow(in * (gain - lift) + lift, 1/gamma), so black point, white point and the curve between them stay independent of each other, followed by contrast, saturation, hue rotation, a highlight rolloff and a vignette.",
+      "param_count": 14,
+      "custom_floats": 14,
+      "params": [
+        {
+          "name": "liftRed",
+          "label": "Lift R",
+          "type": "float",
+          "default": 0.0,
+          "min": -0.5,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "liftGreen",
+          "label": "Lift G",
+          "type": "float",
+          "default": 0.0,
+          "min": -0.5,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "liftBlue",
+          "label": "Lift B",
+          "type": "float",
+          "default": 0.0,
+          "min": -0.5,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "gammaRed",
+          "label": "Gamma R",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "gammaGreen",
+          "label": "Gamma G",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "gammaBlue",
+          "label": "Gamma B",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "gainRed",
+          "label": "Gain R",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "gainGreen",
+          "label": "Gain G",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "gainBlue",
+          "label": "Gain B",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "contrastAmt",
+          "label": "Contrast",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "saturation",
+          "label": "Saturation",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "hueRotation",
+          "label": "Hue Rotate",
+          "type": "float",
+          "default": 0.0,
+          "min": -180.0,
+          "max": 180.0,
+          "step": 0.01
+        },
+        {
+          "name": "vignetteAmount",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "hiRolloff",
+          "label": "Highlight Rolloff",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "crt_simulation",
+      "file": "crt_simulation.hlsl",
+      "title": "CRT Simulation",
+      "type": "video",
+      "description": "Composite CRT emulation: barrel tube curvature, a shadow, slot or Trinitron phosphor mask, scanlines locked to a fixed line count rather than to output resolution, phosphor bloom, defocus, and two kinds of colour misregistration (horizontal gun misconvergence and radial lens dispersion). Everything downstream of the video fetch runs in linear light, so the bloom adds like emitted light instead of clipping.",
+      "param_count": 15,
+      "custom_floats": 20,
+      "params": [
+        {
+          "name": "Curvature",
+          "label": "Curvature H/V",
+          "type": "point2d",
+          "default": [
+            0.5,
+            0.5
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Vignette",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "MaskType",
+          "label": "Mask Type",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Shadow",
+            "Slot",
+            "Trinitron"
+          ]
+        },
+        {
+          "name": "MaskScale",
+          "label": "Mask Scale",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "ScanlineStr",
+          "label": "Scanline Strength",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ScanlineCount",
+          "label": "Scanlines",
+          "type": "long",
+          "default": 480,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            240,
+            480,
+            576,
+            720
+          ],
+          "labels": [
+            "240 (arcade)",
+            "480 (NTSC)",
+            "576 (PAL)",
+            "720"
+          ]
+        },
+        {
+          "name": "ScanlineTint",
+          "label": "Scanline Tint",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BloomAmount",
+          "label": "Bloom",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BloomThreshold",
+          "label": "Bloom Threshold",
+          "type": "float",
+          "default": 0.75,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BloomRadius",
+          "label": "Bloom Radius (px)",
+          "type": "float",
+          "default": 2.0,
+          "min": 0.0,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "BleedStrength",
+          "label": "Colour Bleed",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ChromaticAberration",
+          "label": "Chromatic Aberration (px)",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "BlurAmount",
+          "label": "Defocus",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BlurRadius",
+          "label": "Defocus Radius (px)",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.6,
+          "min": 0.5,
+          "max": 4.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "datamosh_drift",
+      "file": "datamosh_drift.hlsl",
+      "title": "Datamosh Drift",
+      "type": "video",
+      "description": "The compression-failure look, built from Perlin noise standing in for P-frame motion vectors. The frame is diced into blocks that accumulate their own UV displacement over time and smear along their own motion vector, with periodic noise spikes acting as I-frame resets. Block edges stay hard on purpose, since a compression block boundary is the artefact.",
+      "param_count": 7,
+      "custom_floats": 7,
+      "params": [
+        {
+          "name": "blockSz",
+          "label": "Block Size",
+          "type": "float",
+          "default": 16.0,
+          "min": 4.0,
+          "max": 64.0,
+          "step": 0.01
+        },
+        {
+          "name": "vectorScale",
+          "label": "Vector Scale",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "refreshRate",
+          "label": "Refresh Rate",
+          "type": "float",
+          "default": 0.05,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "blendWeight",
+          "label": "Blend",
+          "type": "float",
+          "default": 0.85,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "errorDiffusion",
+          "label": "Error Diffusion",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "smearAmt",
+          "label": "Smear",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "glitchAmt",
+          "label": "Glitch Amount",
+          "type": "float",
+          "default": 0.2,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "diffusion_limited_aggregation",
+      "file": "diffusion_limited_aggregation.hlsl",
+      "title": "Diffusion-Limited Aggregation",
+      "type": "generative",
+      "description": "Diffusion-limited aggregation reproduced in a single pass: multi-scale noise thresholded against a radially decaying sticking probability gives the Hausdorff 1.71 branching morphology of a real DLA cluster, with Drift Angle adding the directional bias of the anisotropic variant. Density above the attachment threshold is carried as unbounded emission, so dense junctions overexpose and bloom while a single-walker tip stays a hairline.",
+      "param_count": 16,
+      "custom_floats": 13,
+      "params": [
+        {
+          "name": "stickingProb",
+          "label": "Sticking Prob",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.1,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "driftAngle",
+          "label": "Drift Angle",
+          "type": "float",
+          "default": 270.0,
+          "min": 0.0,
+          "max": 360.0,
+          "step": 0.01
+        },
+        {
+          "name": "driftStrength",
+          "label": "Drift Strength",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "walkerDensity",
+          "label": "Walker Density",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.1,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "colourByRadius",
+          "label": "Colour by Radius",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "branchDetail",
+          "label": "Branch Detail",
+          "type": "float",
+          "default": 4.0,
+          "min": 1.0,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "AnimSpeed",
+          "label": "Anim Speed",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "edgeSoftness",
+          "label": "Edge Softness",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Filament Glow",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "highIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "domain_warp",
+      "file": "domain_warp.hlsl",
+      "title": "Domain Warp",
+      "type": "video",
+      "description": "Fractal domain warping over the video in the Inigo Quilez fbm style: the sampling coordinate is displaced by a noise vector field, optionally one that has itself already been warped, so the picture flows and curdles while keeping its own colours. Chroma Split fans red and blue apart along the warp direction.",
+      "param_count": 6,
+      "custom_floats": 6,
+      "params": [
+        {
+          "name": "WarpStrength",
+          "label": "Warp Strength",
+          "type": "float",
+          "default": 0.12,
+          "min": 0.0,
+          "max": 0.5,
+          "step": 0.005
+        },
+        {
+          "name": "WarpLayers",
+          "label": "Warp Layers",
+          "type": "long",
+          "default": 2,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "name": "NoiseFreq",
+          "label": "Noise Frequency",
+          "type": "float",
+          "default": 2.5,
+          "min": 0.5,
+          "max": 10.0,
+          "step": 0.1
+        },
+        {
+          "name": "WarpSpeed",
+          "label": "Warp Speed",
+          "type": "float",
+          "default": 0.06,
+          "min": 0.0,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "Detail",
+          "label": "Fine Detail",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ChromaSplit",
+          "label": "Chroma Split",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 0.04,
+          "step": 0.001
+        }
+      ]
+    },
+    {
+      "name": "electromagnetic_field",
+      "file": "electromagnetic_field.hlsl",
+      "title": "Electromagnetic Field",
+      "type": "generative",
+      "description": "N point charges on a slowly rotating ring, with the E-field and the potential solved analytically at every pixel. Display selects the visualisation: LIC streamline field lines, force-vector arrow glyphs, an |E| heat map, or equipotential contours. Charges accumulate as inverse distance rather than as discs, so each core stays hot and its halo falls off across the whole frame.",
+      "param_count": 17,
+      "custom_floats": 16,
+      "params": [
+        {
+          "name": "chargeCount",
+          "label": "Charges",
+          "type": "long",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            8
+          ],
+          "labels": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "8"
+          ]
+        },
+        {
+          "name": "chargeSignMode",
+          "label": "Signs",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Alternating",
+            "+All",
+            "-All",
+            "Random"
+          ]
+        },
+        {
+          "name": "lineCount",
+          "label": "Field Density",
+          "type": "long",
+          "default": 8,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            4,
+            8,
+            16,
+            32
+          ],
+          "labels": [
+            "Low",
+            "Medium",
+            "High",
+            "Very High"
+          ]
+        },
+        {
+          "name": "integrationStep",
+          "label": "Step Size",
+          "type": "float",
+          "default": 0.006,
+          "min": 0.001,
+          "max": 0.02,
+          "step": 0.01
+        },
+        {
+          "name": "displayMode",
+          "label": "Display",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Field Lines",
+            "Force Vectors",
+            "E Heatmap",
+            "Equipotential"
+          ]
+        },
+        {
+          "name": "colourByMag",
+          "label": "Colour by |E|",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "fieldFalloff",
+          "label": "Falloff Exp",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "glowAmount",
+          "label": "Glow",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "FieldColour",
+          "label": "Field Colour",
+          "type": "color",
+          "default": [
+            0.65,
+            0.85,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "paletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "vignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "midIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "highIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "false_colour",
+      "file": "false_colour.hlsl",
+      "title": "False Colour",
+      "type": "video",
+      "description": "Exposure instrument. Luminance is quantised into named bands and painted in flat reference colours (purple clipped blacks, blue underexposed, cyan shadows, grey midtones, yellow highlights, orange overexposed, red clipped whites), so exposure can be read off the picture instead of guessed at. Exposure offsets the signal by up to three stops before analysis; Blend fades back to the untouched frame.",
+      "param_count": 2,
+      "custom_floats": 2,
+      "params": [
+        {
+          "name": "Blend",
+          "label": "Blend",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 0.0,
+          "min": -3.0,
+          "max": 3.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "focus_peaking",
+      "file": "focus_peaking.hlsl",
+      "title": "Focus Peaking",
+      "type": "video",
+      "description": "Focus assist. A Sobel edge filter runs on luminance and everything above the threshold is painted in the peak colour, so the part of the shot that lights up is the part in focus. Lower the threshold to catch soft edges across the frame, raise it to show only what is critically sharp.",
+      "param_count": 3,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "Threshold",
+          "label": "Edge Threshold",
+          "type": "float",
+          "default": 0.15,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Opacity",
+          "label": "Overlay Opacity",
+          "type": "float",
+          "default": 0.85,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "PeakColor",
+          "label": "Peak Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "fourier_crystal_growth",
+      "file": "fourier_crystal_growth.hlsl",
+      "title": "Fourier Crystal Growth",
+      "type": "audio",
+      "description": "Crystals nucleating at seed points and growing outward under enforced N-fold symmetry: polar coordinates are folded into one sector of 2 pi / N and mirrored before the lattice distance field is built, so the whole frame reads as a single crystallographic habit. Bass drives the growth radius, mid frequencies stretch the lattice spacing as though under acoustic load, and Displace Noise adds phason-like vertex jitter for a quasi-crystal look.",
+      "param_count": 13,
+      "custom_floats": 16,
+      "params": [
+        {
+          "name": "bassLevel",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "midLevel",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "symmetryOrder",
+          "label": "Symmetry",
+          "type": "long",
+          "default": 6,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            6,
+            8,
+            12
+          ],
+          "labels": [
+            "2-fold",
+            "3-fold",
+            "4-fold",
+            "6-fold (hex)",
+            "8-fold",
+            "12-fold"
+          ]
+        },
+        {
+          "name": "nucleationRate",
+          "label": "Nucleation Rate",
+          "type": "float",
+          "default": 1.5,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "growthSpeed",
+          "label": "Growth Speed",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "maxRadius",
+          "label": "Max Radius",
+          "type": "float",
+          "default": 0.45,
+          "min": 0.1,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "latticeSaturation",
+          "label": "Saturation",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "displaciveNoise",
+          "label": "Displace Noise",
+          "type": "float",
+          "default": 0.08,
+          "min": 0.0,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "CrystalTint",
+          "label": "Crystal Tint",
+          "type": "color",
+          "default": [
+            0.5,
+            0.8,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Facet Glow",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "fourier_sculpting",
+      "file": "fourier_sculpting.hlsl",
+      "title": "Fourier Sculpting",
+      "type": "video",
+      "description": "Frequency-domain sculpting of the picture, done spatially rather than by a real per-pixel FFT: low-pass is a Gaussian blur, high-pass an unsharp residual, band-pass a difference of Gaussians, directional a 1-D blur along a chosen angle, annular a ring DoG, and notch its complement. Show Spectrum swaps the output for a heat map of local high-frequency energy, so you can see what the filter is acting on.",
+      "param_count": 8,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "filterMode",
+          "label": "Filter Type",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "labels": [
+            "Low-pass",
+            "High-pass",
+            "Band-pass",
+            "Directional",
+            "Annular",
+            "Notch"
+          ]
+        },
+        {
+          "name": "cutoffFreq",
+          "label": "Cutoff",
+          "type": "float",
+          "default": 0.1,
+          "min": 0.001,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bandWidth",
+          "label": "Bandwidth",
+          "type": "float",
+          "default": 0.1,
+          "min": 0.001,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "filterAngle",
+          "label": "Angle (deg)",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 360.0,
+          "step": 0.01
+        },
+        {
+          "name": "angleWidth",
+          "label": "Angle Width",
+          "type": "float",
+          "default": 45.0,
+          "min": 1.0,
+          "max": 180.0,
+          "step": 0.01
+        },
+        {
+          "name": "magnitudeGamma",
+          "label": "Magnitude \u03b3",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "showSpectrum",
+          "label": "Show Spectrum",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "game_of_life",
+      "file": "game_of_life.hlsl",
+      "title": "Game of Life",
+      "type": "generative",
+      "description": "Conway's Life, B3/S23, with no buffer to hold the board: the generation seed comes from the clock and three rule steps are unrolled per pixel, so the grid reseeds every 1/updateHz seconds and visibly evolves. Cells are drawn as rounded anti-aliased tiles coloured by how many of the four sampled stages they survived, each carrying an inverse-square afterglow from the previous generation.",
+      "param_count": 15,
+      "custom_floats": 15,
+      "params": [
+        {
+          "name": "cellSz",
+          "label": "Cell Size (px)",
+          "type": "float",
+          "default": 8.0,
+          "min": 2.0,
+          "max": 24.0,
+          "step": 0.01
+        },
+        {
+          "name": "updateHz",
+          "label": "Update Rate Hz",
+          "type": "float",
+          "default": 2.0,
+          "min": 0.1,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "initialDensity",
+          "label": "Density",
+          "type": "float",
+          "default": 0.45,
+          "min": 0.1,
+          "max": 0.9,
+          "step": 0.01
+        },
+        {
+          "name": "ageSaturation",
+          "label": "Age Colour",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "wrapEdges",
+          "label": "Wrap Edges",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "cellGap",
+          "label": "Cell Gap",
+          "type": "float",
+          "default": 0.2,
+          "min": 0.0,
+          "max": 0.6,
+          "step": 0.01
+        },
+        {
+          "name": "cellGlow",
+          "label": "Cell Glow",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "paletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "CellTint",
+          "label": "Cell Tint",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "vignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "rmsIn",
+          "label": "Level",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "rms"
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "grayscale",
+      "file": "grayscale.hlsl",
+      "title": "Grayscale",
+      "type": "video",
+      "description": "Monochrome conversion with a choice of weighting. Linear Y linearises first and takes Rec.709 luminance, which is photometrically correct: a saturated blue and the grey of matching brightness land on the same value. Luma Y' uses Rec.601 coefficients on the gamma-encoded signal, wrong as physics but the look broadcast monochrome actually had. Contrast is a gamma about middle grey and Tint multiplies the result in linear light.",
+      "param_count": 4,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "Blend",
+          "label": "Blend",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Weighting",
+          "label": "Weighting",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1
+          ],
+          "labels": [
+            "Linear Y (Rec.709)",
+            "Luma Y' (Rec.601)"
+          ]
+        },
+        {
+          "name": "Contrast",
+          "label": "Contrast",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "Tint",
+          "label": "Tint",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "hele_shaw_fingering",
+      "file": "hele_shaw_fingering.hlsl",
+      "title": "Hele-Shaw Fingering",
+      "type": "generative",
+      "description": "Saffman-Taylor viscous fingering in a Hele-Shaw cell: a low-viscosity fluid pushed into a high-viscosity one goes unstable at every wavelength below the capillary length, and the interface breaks into fractal tip-splitting fingers. Surface Tension sets that dominant wavelength, Viscosity Ratio how violently the front breaks up, and Geometry chooses radial injection, a linear front, or a branching form.",
+      "param_count": 15,
+      "custom_floats": 16,
+      "params": [
+        {
+          "name": "viscosityRatio",
+          "label": "Viscosity Ratio",
+          "type": "float",
+          "default": 0.15,
+          "min": 0.01,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "surfaceTension",
+          "label": "Surface Tension",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.01,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "injectionRate",
+          "label": "Injection Rate",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "noiseAmplitude",
+          "label": "Noise Amplitude",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "colourByPressure",
+          "label": "Colour by Pressure",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "formulation",
+          "label": "Geometry",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Radial",
+            "Linear",
+            "Branching"
+          ]
+        },
+        {
+          "name": "animSpeed",
+          "label": "Anim Speed",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 5.0,
+          "step": 0.01
+        },
+        {
+          "name": "FluidColour",
+          "label": "Fluid Colour",
+          "type": "color",
+          "default": [
+            0.3,
+            0.7,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Interface Glow",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "highIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "hyperbolic_tiling",
+      "file": "hyperbolic_tiling.hlsl",
+      "title": "Hyperbolic Tiling",
+      "type": "generative",
+      "description": "The hyperbolic plane in the conformal Poincare disc model, tiled by any valid {p, q} Schlaefli symbol with (p-2)(q-2) > 4, so tiles shrink without limit toward the ideal boundary while every angle stays true. Animated Mobius transformations drift the tiling across the plane, cells are two-coloured by parity, and the edges are drawn as geodesics.",
+      "param_count": 15,
+      "custom_floats": 18,
+      "params": [
+        {
+          "name": "SchlaefliP",
+          "label": "p (polygon sides)",
+          "type": "long",
+          "default": 5,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "labels": [
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        },
+        {
+          "name": "SchlaefliQ",
+          "label": "q (polygons/vertex)",
+          "type": "long",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ],
+          "labels": [
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        },
+        {
+          "name": "MobiusSpeed",
+          "label": "M\u00f6bius Drift Speed",
+          "type": "float",
+          "default": 0.06,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "EdgeWidth",
+          "label": "Edge Width",
+          "type": "float",
+          "default": 0.006,
+          "min": 0.001,
+          "max": 0.03,
+          "step": 0.01
+        },
+        {
+          "name": "TileColourA",
+          "label": "Tile Colour A",
+          "type": "color",
+          "default": [
+            0.15,
+            0.35,
+            0.75,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "TileColourB",
+          "label": "Tile Colour B",
+          "type": "color",
+          "default": [
+            0.75,
+            0.18,
+            0.18,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "FillFrame",
+          "label": "Fill Frame",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "DiscScale",
+          "label": "Disc Scale",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.25,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "EdgeGlow",
+          "label": "Edge Glow",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "HighIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "julia_set",
+      "file": "julia_set.hlsl",
+      "title": "Julia Set",
+      "type": "generative",
+      "description": "Escape-time Julia set for z squared plus c, smoothly coloured and framed so the fractal is always the subject. The iteration carries the orbit derivative alongside z, which gives a Koebe distance estimate to the set and drives a filament glow that stays a genuine pixel wide at any zoom. C Real and C Imaginary pick which set is drawn; Zoom Centre picks what a deep zoom converges on.",
+      "param_count": 16,
+      "custom_floats": 21,
+      "params": [
+        {
+          "name": "CX",
+          "label": "C Real",
+          "type": "float",
+          "default": -0.7269,
+          "min": -1.0,
+          "max": 0.5,
+          "step": 0.001
+        },
+        {
+          "name": "CY",
+          "label": "C Imaginary",
+          "type": "float",
+          "default": 0.1889,
+          "min": -0.9,
+          "max": 0.9,
+          "step": 0.001
+        },
+        {
+          "name": "Zoom",
+          "label": "Zoom",
+          "type": "float",
+          "default": 1.0,
+          "min": 1.0,
+          "max": 400.0,
+          "step": 0.05
+        },
+        {
+          "name": "MaxIter",
+          "label": "Max Iterations",
+          "type": "long",
+          "default": 128,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            16,
+            32,
+            64,
+            128,
+            256,
+            512
+          ],
+          "labels": [
+            "16",
+            "32",
+            "64",
+            "128",
+            "256",
+            "512"
+          ]
+        },
+        {
+          "name": "ColourCycle",
+          "label": "Colour Cycle Speed",
+          "type": "float",
+          "default": 0.1,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "AnimateC",
+          "label": "Animate C",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "InnerColour",
+          "label": "Inner Colour",
+          "type": "color",
+          "default": [
+            0.05,
+            0.05,
+            0.35,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "OuterColour",
+          "label": "Outer Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.75,
+            0.1,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Centre",
+          "label": "Zoom Centre",
+          "type": "point2d",
+          "default": [
+            0.0,
+            0.0
+          ],
+          "min": -1.5,
+          "max": 1.5,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Filament Glow",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "HighIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "kaleidoscope",
+      "file": "kaleidoscope.hlsl",
+      "title": "Kaleidoscope",
+      "type": "video",
+      "description": "Polar mirror kaleidoscope: folds the video frame into N rotationally symmetric segments about a movable centre, mirroring at every seam so the image stays continuous across it, with the whole arrangement optionally rotating.",
+      "param_count": 5,
+      "custom_floats": 6,
+      "params": [
+        {
+          "name": "Segments",
+          "label": "Segments",
+          "type": "long",
+          "default": 6,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            12,
+            16,
+            20,
+            24
+          ],
+          "labels": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "12",
+            "16",
+            "20",
+            "24"
+          ]
+        },
+        {
+          "name": "RotSpeed",
+          "label": "Rotation Speed",
+          "type": "float",
+          "default": 0.1,
+          "min": -2.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "ZoomKaleid",
+          "label": "Zoom",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.05
+        },
+        {
+          "name": "EdgeMode",
+          "label": "Edge Mode",
+          "type": "long",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Clamp",
+            "Mirror",
+            "Wrap"
+          ]
+        },
+        {
+          "name": "Centre",
+          "label": "Centre Point",
+          "type": "point2d",
+          "default": [
+            0.5,
+            0.5
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "mandelbulb",
+      "file": "mandelbulb.hlsl",
+      "title": "Mandelbulb",
+      "type": "generative",
+      "description": "Ray-marched 3D Mandelbulb, lit rather than tinted: a distance-field normal, one key light with soft shadows marched through the same estimator, four-tap ambient occlusion and a Fresnel rim. Every march step deposits energy inversely with its distance to the surface, so rays that graze the bulb without hitting it build a real halo around the silhouette and light the gaps between lobes. Bulb Power sets how many lobes the surface folds into.",
+      "param_count": 12,
+      "custom_floats": 12,
+      "params": [
+        {
+          "name": "BulbPower",
+          "label": "Bulb Power",
+          "type": "float",
+          "default": 8.0,
+          "min": 2.0,
+          "max": 16.0,
+          "step": 0.1
+        },
+        {
+          "name": "DEIter",
+          "label": "DE Iterations",
+          "type": "long",
+          "default": 10,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            4,
+            6,
+            8,
+            10,
+            12,
+            16
+          ],
+          "labels": [
+            "4",
+            "6",
+            "8",
+            "10",
+            "12",
+            "16"
+          ]
+        },
+        {
+          "name": "OrbitSpeed",
+          "label": "Orbit Speed",
+          "type": "float",
+          "default": 0.08,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowColour",
+          "label": "Glow Colour",
+          "type": "color",
+          "default": [
+            0.2,
+            0.5,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Volumetric Glow",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "MidIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "newton_fractal",
+      "file": "newton_fractal.hlsl",
+      "title": "Newton Fractal",
+      "type": "generative",
+      "description": "Newton's method for f(z) = z^n - 1 iterated per pixel and coloured by which of the n roots it converges to, with an explicit colour per basin and an orbit-trap glow along the boundaries. Those boundaries are the Julia set of the Newton map and contain points of every basin at every scale, which is what gives the interlocking petal structure.",
+      "param_count": 17,
+      "custom_floats": 32,
+      "params": [
+        {
+          "name": "RootColour1",
+          "label": "Root 1 Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.28,
+            0.24,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RootColour2",
+          "label": "Root 2 Colour",
+          "type": "color",
+          "default": [
+            0.24,
+            0.86,
+            0.42,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RootColour3",
+          "label": "Root 3 Colour",
+          "type": "color",
+          "default": [
+            0.26,
+            0.52,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RootColour4",
+          "label": "Root 4 Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.82,
+            0.2,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RootColour5",
+          "label": "Root 5 Colour",
+          "type": "color",
+          "default": [
+            0.82,
+            0.32,
+            0.95,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RootColour6",
+          "label": "Root 6 Colour",
+          "type": "color",
+          "default": [
+            0.2,
+            0.9,
+            0.9,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Degree",
+          "label": "Polynomial Degree",
+          "type": "long",
+          "default": 3,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "labels": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ]
+        },
+        {
+          "name": "ZoomN",
+          "label": "Zoom",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 5.0,
+          "step": 0.05
+        },
+        {
+          "name": "Damping",
+          "label": "Relaxation",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 2.0,
+          "step": 0.05
+        },
+        {
+          "name": "MaxIterN",
+          "label": "Max Iterations",
+          "type": "long",
+          "default": 48,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            8,
+            16,
+            32,
+            48,
+            64,
+            128
+          ],
+          "labels": [
+            "8",
+            "16",
+            "32",
+            "48",
+            "64",
+            "128"
+          ]
+        },
+        {
+          "name": "AnimSpeedN",
+          "label": "Animate Speed",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 0.5,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "MidIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "non_euclidean_lens",
+      "file": "non_euclidean_lens.hlsl",
+      "title": "Non-Euclidean Lens",
+      "type": "video",
+      "description": "Warps live video through a non-Euclidean metric. Spherical (k > 0) is a stereographic conformal sphere projection, compressing objects toward an antipodal boundary and inverting them past it; hyperbolic (k < 0) stretches the edges exponentially, the Escher Circle Limit applied to footage; toroidal identifies opposite edges with a twist for a flat torus wrap. The optical centre drifts along a great-circle geodesic.",
+      "param_count": 7,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "curvatureAmt",
+          "label": "Curvature",
+          "type": "float",
+          "default": 0.5,
+          "min": -2.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "driftSpeed",
+          "label": "Drift Speed",
+          "type": "float",
+          "default": 0.2,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "opticalCentre",
+          "label": "Optical Centre",
+          "type": "point2d",
+          "default": [
+            0.5,
+            0.5
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "driftAngle",
+          "label": "Drift Angle",
+          "type": "float",
+          "default": 45.0,
+          "min": 0.0,
+          "max": 360.0,
+          "step": 0.01
+        },
+        {
+          "name": "metricType",
+          "label": "Metric",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Spherical",
+            "Hyperbolic",
+            "Toroidal"
+          ]
+        },
+        {
+          "name": "samplingMode",
+          "label": "Edge Mode",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Clamp",
+            "Mirror",
+            "Wrap"
+          ]
+        },
+        {
+          "name": "animateCurvature",
+          "label": "Animate K",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        }
+      ]
+    },
+    {
+      "name": "oil_paint_filter",
+      "file": "oil_paint_filter.hlsl",
+      "title": "Oil Paint Filter",
+      "type": "video",
+      "description": "Generalised Kuwahara filter. Each pixel takes a weighted mean of overlapping neighbourhood sectors, weighted against each sector's own variance, so a pixel near an edge is filled from whichever side of that edge is flatter and the edge itself stays sharp while flat areas turn into brushstrokes. Edge Selectivity is the exponent on that weighting, running from a plain box blur to the classic blocky hard-minimum Kuwahara; Detail Scales blends several radii for a coarse-over-fine paint build.",
+      "param_count": 7,
+      "custom_floats": 7,
+      "params": [
+        {
+          "name": "smoothRadius",
+          "label": "Radius",
+          "type": "float",
+          "default": 6.0,
+          "min": 1.0,
+          "max": 16.0,
+          "step": 0.01
+        },
+        {
+          "name": "orientSigma",
+          "label": "Edge Selectivity",
+          "type": "float",
+          "default": 1.5,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "sectorCount",
+          "label": "Sectors",
+          "type": "long",
+          "default": 8,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            4,
+            8
+          ],
+          "labels": [
+            "4 (fast)",
+            "8 (quality)"
+          ]
+        },
+        {
+          "name": "sharpStrength",
+          "label": "Sharpness",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "satBoost",
+          "label": "Saturation +",
+          "type": "float",
+          "default": 1.2,
+          "min": 0.5,
+          "max": 2.5,
+          "step": 0.01
+        },
+        {
+          "name": "iterCount",
+          "label": "Detail Scales",
+          "type": "long",
+          "default": 1,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "1 (broad)",
+            "2",
+            "3 (fine)"
+          ]
+        },
+        {
+          "name": "bristleAmt",
+          "label": "Bristle",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "perlin_flow_field",
+      "file": "perlin_flow_field.hlsl",
+      "title": "Perlin Flow Field",
+      "type": "generative",
+      "description": "Line integral convolution over a Perlin curl flow field: the flow angle at each pixel is read from fbm-summed noise, the sample point is advected backward along it, and a band-limited grating is integrated along that path, which is what produces the fibrous streamline fabric. Colour by Angle tints each streamline by its local flow direction.",
+      "param_count": 17,
+      "custom_floats": 17,
+      "params": [
+        {
+          "name": "noiseFreq",
+          "label": "Noise Scale",
+          "type": "float",
+          "default": 3.0,
+          "min": 0.5,
+          "max": 12.0,
+          "step": 0.01
+        },
+        {
+          "name": "octaveCount",
+          "label": "Octaves",
+          "type": "long",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "labels": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6"
+          ]
+        },
+        {
+          "name": "persistence",
+          "label": "Persistence",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.1,
+          "max": 0.9,
+          "step": 0.01
+        },
+        {
+          "name": "lacunarity",
+          "label": "Lacunarity",
+          "type": "float",
+          "default": 2.0,
+          "min": 1.2,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "trailFade",
+          "label": "Trail Length",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "stepSz",
+          "label": "Step Size",
+          "type": "float",
+          "default": 2.0,
+          "min": 0.5,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "colourByAngle",
+          "label": "Colour By Angle",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "fibreDetail",
+          "label": "Fibre Detail",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "FlowTint",
+          "label": "Flow Tint",
+          "type": "color",
+          "default": [
+            0.6,
+            0.9,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "paletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "glowAmount",
+          "label": "Glow",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "vignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "midIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "physarum_slime_mould",
+      "file": "physarum_slime_mould.hlsl",
+      "title": "Physarum Slime Mould",
+      "type": "generative",
+      "description": "The transport network of Physarum polycephalum, built from a Voronoi ridge distance field: trail tubes are drawn along the boundaries between cells seeded at food sources, with sensor and rotation angles perturbing the metric to give the branching curvature real slime mould shows. Brightness pulses travel outward from each node, matching the chemoattractant pulsing reported by Tero et al.",
+      "param_count": 15,
+      "custom_floats": 17,
+      "params": [
+        {
+          "name": "sensorAngleDeg",
+          "label": "Sensor Angle",
+          "type": "float",
+          "default": 30.0,
+          "min": 5.0,
+          "max": 90.0,
+          "step": 0.01
+        },
+        {
+          "name": "sensorDist",
+          "label": "Sensor Dist",
+          "type": "float",
+          "default": 0.06,
+          "min": 0.01,
+          "max": 0.2,
+          "step": 0.01
+        },
+        {
+          "name": "rotAngle",
+          "label": "Turn Angle",
+          "type": "float",
+          "default": 25.0,
+          "min": 5.0,
+          "max": 90.0,
+          "step": 0.01
+        },
+        {
+          "name": "decayRate",
+          "label": "Decay Rate",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "diffRadius",
+          "label": "Diffuse Radius",
+          "type": "float",
+          "default": 0.01,
+          "min": 0.001,
+          "max": 0.05,
+          "step": 0.01
+        },
+        {
+          "name": "attractorCount",
+          "label": "Attractors",
+          "type": "long",
+          "default": 12,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            4,
+            8,
+            12,
+            16,
+            24,
+            32
+          ],
+          "labels": [
+            "4",
+            "8",
+            "12",
+            "16",
+            "24",
+            "32"
+          ]
+        },
+        {
+          "name": "TrailColour",
+          "label": "Trail Colour",
+          "type": "color",
+          "default": [
+            0.7,
+            1.0,
+            0.4,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "audioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmount",
+          "label": "Glow",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Granularity",
+          "label": "Granularity",
+          "type": "float",
+          "default": 0.45,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "bassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "highIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "beatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "pixel_sort",
+      "file": "pixel_sort.hlsl",
+      "title": "Pixel Sort",
+      "type": "video",
+      "description": "Threshold-based pixel sorting. Any pixel whose luminance falls inside the threshold band is replaced by the brightest in-band pixel further along the sort axis, which drags bright material into long streaks. Run length is noise-modulated and the taps are jittered per pixel, so the streaks read as grain rather than as a repeating staircase. A single-pass approximation, not a true per-run re-ordering.",
+      "param_count": 6,
+      "custom_floats": 6,
+      "params": [
+        {
+          "name": "SortAxis",
+          "label": "Axis",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1
+          ],
+          "labels": [
+            "Horizontal",
+            "Vertical"
+          ]
+        },
+        {
+          "name": "ThresholdLow",
+          "label": "Threshold Low",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ThresholdHigh",
+          "label": "Threshold High",
+          "type": "float",
+          "default": 0.85,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Softness",
+          "label": "Edge Softness",
+          "type": "float",
+          "default": 0.04,
+          "min": 0.0,
+          "max": 0.3,
+          "step": 0.01
+        },
+        {
+          "name": "MaxRunLen",
+          "label": "Max Run Length",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.01,
+          "max": 0.8,
+          "step": 0.01
+        },
+        {
+          "name": "SortDirection",
+          "label": "Direction",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1
+          ],
+          "labels": [
+            "Forward",
+            "Backward"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "plasma",
+      "file": "plasma.hlsl",
+      "title": "Plasma",
+      "type": "generative",
+      "description": "The classic demoscene plasma: several plane and radial sinusoids summed at two octaves into a scalar field, which indexes a cyclic three-stop colour ramp evaluated in linear light and tonemapped, so the stops stay recognisable while highlights roll off instead of clipping per channel. Mid frequencies drive the wave speed, bass swells the spatial scale and beats punch the contrast.",
+      "param_count": 14,
+      "custom_floats": 23,
+      "params": [
+        {
+          "name": "ColourA",
+          "label": "Colour A",
+          "type": "color",
+          "default": [
+            1.0,
+            0.25,
+            0.35,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ColourB",
+          "label": "Colour B",
+          "type": "color",
+          "default": [
+            0.2,
+            0.85,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ColourC",
+          "label": "Colour C",
+          "type": "color",
+          "default": [
+            1.0,
+            0.9,
+            0.3,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Tint",
+          "label": "Tint",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Speed",
+          "label": "Speed",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 4.0,
+          "step": 0.05
+        },
+        {
+          "name": "Scale",
+          "label": "Scale",
+          "type": "float",
+          "default": 3.0,
+          "min": 0.5,
+          "max": 10.0,
+          "step": 0.1
+        },
+        {
+          "name": "Contrast",
+          "label": "Contrast",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 3.0,
+          "step": 0.05
+        },
+        {
+          "name": "Detail",
+          "label": "Detail",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.05
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "MidIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "psychoacoustic_topography",
+      "file": "psychoacoustic_topography.hlsl",
+      "title": "Psychoacoustic Topography",
+      "type": "audio",
+      "description": "The spectrum rendered as landscape. FFT bins become terrain height across a stack of depth layers drawn far to near, with haze between them and a directional light raking the ridges. Bass raises the whole range, treble sharpens the fine relief on the upper slopes, and peaks past the eruption threshold vent glowing plumes in the eruption colour.",
+      "param_count": 16,
+      "custom_floats": 20,
+      "params": [
+        {
+          "name": "bassLevel",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "highLevel",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "TerrainTint",
+          "label": "Terrain Tint",
+          "type": "color",
+          "default": [
+            0.35,
+            0.42,
+            0.55,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "EruptionColor",
+          "label": "Eruption Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.6,
+            0.2,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "meshResolution",
+          "label": "Depth Layers",
+          "type": "long",
+          "default": 32,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            16,
+            32,
+            48,
+            64
+          ],
+          "labels": [
+            "16 (fast)",
+            "32",
+            "48",
+            "64 (quality)"
+          ]
+        },
+        {
+          "name": "heightScale",
+          "label": "Height Scale",
+          "type": "float",
+          "default": 2.5,
+          "min": 0.1,
+          "max": 20.0,
+          "step": 0.01
+        },
+        {
+          "name": "erosionRate",
+          "label": "Depth Fade",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "orbitSpeed",
+          "label": "Orbit Speed",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "lightAzimuth",
+          "label": "Light Azimuth",
+          "type": "float",
+          "default": 45.0,
+          "min": 0.0,
+          "max": 360.0,
+          "step": 0.01
+        },
+        {
+          "name": "eruptionThreshold",
+          "label": "Eruption Thresh",
+          "type": "float",
+          "default": 0.75,
+          "min": 0.3,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "showWireframe",
+          "label": "Wireframe",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "BgOpacity",
+          "label": "Sky Opacity",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmt",
+          "label": "Eruption Glow",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Relief",
+          "label": "Fine Relief",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "radial_burst",
+      "file": "radial_burst.hlsl",
+      "title": "Radial Burst",
+      "type": "audio",
+      "description": "FFT bins mapped onto polar coordinates with N-fold rotational symmetry, so the spectrum reads as a rotating mandala. Bass expands the luminous core, treble extends the fine radial spokes and adds an inner ring, and the spokes fade out toward the centre where one pixel spans the whole sector.",
+      "param_count": 15,
+      "custom_floats": 19,
+      "params": [
+        {
+          "name": "SymmetryOrder",
+          "label": "Symmetry",
+          "type": "long",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            12
+          ],
+          "labels": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "8",
+            "12"
+          ]
+        },
+        {
+          "name": "InnerRadius",
+          "label": "Inner Radius",
+          "type": "float",
+          "default": 0.08,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RotSpeed",
+          "label": "Rotation Speed",
+          "type": "float",
+          "default": 0.2,
+          "min": -2.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowWidth",
+          "label": "Glow Width",
+          "type": "float",
+          "default": 3.0,
+          "min": 0.5,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "CoreColour",
+          "label": "Core Colour",
+          "type": "color",
+          "default": [
+            0.2,
+            0.5,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "OuterColour",
+          "label": "Outer Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.25,
+            0.05,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "CoreSize",
+          "label": "Core Size",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "RingRadius",
+          "label": "Ring Radius",
+          "type": "float",
+          "default": 0.42,
+          "min": 0.1,
+          "max": 1.5,
+          "step": 0.01
+        },
+        {
+          "name": "SpokeAmt",
+          "label": "Spokes",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "SpokeCount",
+          "label": "Spoke Count",
+          "type": "float",
+          "default": 14.0,
+          "min": 2.0,
+          "max": 48.0,
+          "step": 1.0
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioBassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "AudioHighIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        }
+      ]
+    },
+    {
+      "name": "reaction_diffusion",
+      "file": "reaction_diffusion.hlsl",
+      "title": "Reaction Diffusion",
+      "type": "generative",
+      "description": "Turing instability patterns approximated by multi-scale difference of Gaussians over an animated Perlin field rather than by a true Gray-Scott integration. Feed Rate and Kill Rate select morphology the way they do in the real system: maze and labyrinth around F 0.02 / k 0.05, stripes near 0.04 / 0.06, spots and coral near 0.06 / 0.062, scattered dots beyond that. Four named colour ramps, eased between linear-light stops.",
+      "param_count": 8,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "FeedRate",
+          "label": "Feed Rate (F)",
+          "type": "float",
+          "default": 0.055,
+          "min": 0.01,
+          "max": 0.1,
+          "step": 0.01
+        },
+        {
+          "name": "KillRate",
+          "label": "Kill Rate (k)",
+          "type": "float",
+          "default": 0.062,
+          "min": 0.04,
+          "max": 0.07,
+          "step": 0.01
+        },
+        {
+          "name": "AnimSpeed",
+          "label": "Anim Speed",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "ColourMap",
+          "label": "Colour Map",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Blue",
+            "Fire",
+            "Mint",
+            "Grey"
+          ]
+        },
+        {
+          "name": "Detail",
+          "label": "Detail",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "RidgeGlow",
+          "label": "Ridge Glow",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "rgb_parade",
+      "file": "rgb_parade.hlsl",
+      "title": "RGB Parade",
+      "type": "video",
+      "description": "Broadcast RGB parade: three waveform monitors side by side, one per channel, each plotting that channel's distribution across the full frame width against 0 to 100 IRE with a graticule every 10 IRE. Read it for colour cast and channel imbalance, visible as the three traces sitting at different heights over the same part of the picture, and for per-channel clipping at the rails.",
+      "param_count": 3,
+      "custom_floats": 3,
+      "params": [
+        {
+          "name": "NumSamples",
+          "label": "Sample Rows",
+          "type": "float",
+          "default": 128.0,
+          "min": 32.0,
+          "max": 256.0,
+          "step": 1.0
+        },
+        {
+          "name": "Brightness",
+          "label": "Brightness",
+          "type": "float",
+          "default": 6.0,
+          "min": 1.0,
+          "max": 20.0,
+          "step": 0.01
+        },
+        {
+          "name": "BlendVideo",
+          "label": "Video Blend",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "safe_areas",
+      "file": "safe_areas.hlsl",
+      "title": "Safe Areas",
+      "type": "video",
+      "description": "Framing guides for delivery. Draws centred action-safe and title-safe rectangles plus an aspect crop box showing what survives a re-crop to another ratio, with title safe then measured inside that crop rather than inside the full frame. Presets cover EBU R95, the legacy SMPTE 4:3 guide, generous live and IMAG margins, and a square social crop. Use it to check nothing load-bearing sits where a broadcaster, a projector edge mask or a vertical re-frame will take it.",
+      "param_count": 8,
+      "custom_floats": 14,
+      "params": [
+        {
+          "name": "LineColor",
+          "label": "Line Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "CropColor",
+          "label": "Crop Colour",
+          "type": "color",
+          "default": [
+            1.0,
+            0.85,
+            0.2,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Preset",
+          "label": "Preset",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "labels": [
+            "Custom",
+            "EBU R95 (broadcast)",
+            "SMPTE 4:3 legacy",
+            "Live / IMAG",
+            "Social 1:1",
+            "Social 4:5",
+            "Social 9:16",
+            "Social 9:16 + UI"
+          ]
+        },
+        {
+          "name": "ActionArea",
+          "label": "Action Safe %",
+          "type": "float",
+          "default": 0.9,
+          "min": 0.5,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "TitleArea",
+          "label": "Title Safe %",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.5,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Opacity",
+          "label": "Opacity",
+          "type": "float",
+          "default": 0.7,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "LineWidth",
+          "label": "Line Width (px)",
+          "type": "float",
+          "default": 2.0,
+          "min": 1.0,
+          "max": 8.0,
+          "step": 0.01
+        },
+        {
+          "name": "ShowCenter",
+          "label": "Show Centre Mark",
+          "type": "bool",
+          "default": true,
+          "min": null,
+          "max": null,
+          "step": null
+        }
+      ]
+    },
+    {
+      "name": "sharpen",
+      "file": "sharpen.hlsl",
+      "title": "Sharpen",
+      "type": "video",
+      "description": "Unsharp mask: a Gaussian blur is subtracted from the image and the high-pass residual added back, with the difference taken in linear light so a shadow edge and an identical highlight edge are weighted the same. Radius picks what size of structure is sharpened, and Threshold leaves local contrast below it alone so film grain and sensor noise are not amplified along with the detail.",
+      "param_count": 3,
+      "custom_floats": 3,
+      "params": [
+        {
+          "name": "Strength",
+          "label": "Strength",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Radius",
+          "label": "Radius",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "Threshold",
+          "label": "Threshold",
+          "type": "float",
+          "default": 0.01,
+          "min": 0.0,
+          "max": 0.2,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "slit_scan",
+      "file": "slit_scan.hlsl",
+      "title": "Slit Scan",
+      "type": "video",
+      "description": "Slit-scan streak photography approximated with no frame history: each column or row is displaced to a different phase of a temporal ramp, so the axis perpendicular to the scan direction reads as time while the scan axis stays spatial and anything moving in the shot stretches into a smear. Slice Width sets how wide the clean, undisplaced band is.",
+      "param_count": 7,
+      "custom_floats": 7,
+      "params": [
+        {
+          "name": "sliceWidth",
+          "label": "Slice Width",
+          "type": "float",
+          "default": 0.01,
+          "min": 0.001,
+          "max": 0.1,
+          "step": 0.01
+        },
+        {
+          "name": "slicePos",
+          "label": "Slice Position",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "scrollAxis",
+          "label": "Scroll Axis",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1
+          ],
+          "labels": [
+            "Vertical",
+            "Horizontal"
+          ]
+        },
+        {
+          "name": "temporalSpread",
+          "label": "Temporal Spread",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "blendWeight",
+          "label": "Blend",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "colourPalette",
+          "label": "Colour Map",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Original",
+            "Heat",
+            "Monochrome"
+          ]
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "strange_attractor",
+      "file": "strange_attractor.hlsl",
+      "title": "Strange Attractor",
+      "type": "generative",
+      "description": "Chaotic ODE trajectories integrated per pixel and accumulated as density: each pixel is seeded at the phase-space position matching its screen coordinate, the trajectory is marched forward, and the pixel collects emission from every trajectory point passing near it. Lorenz (the xz butterfly), Rossler, Thomas and Halvorsen are selectable. Accumulation is unbounded, so a dense fold blows past white and blooms under the tonemap, and colour adds where a fast branch crosses a slow one.",
+      "param_count": 14,
+      "custom_floats": 11,
+      "params": [
+        {
+          "name": "AttractorType",
+          "label": "Attractor",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Lorenz",
+            "R\u00f6ssler",
+            "Thomas",
+            "Halvorsen"
+          ]
+        },
+        {
+          "name": "IterCount",
+          "label": "Iterations",
+          "type": "long",
+          "default": 180,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            60,
+            120,
+            180,
+            240,
+            300,
+            400
+          ],
+          "labels": [
+            "60",
+            "120",
+            "180",
+            "240",
+            "300",
+            "400"
+          ]
+        },
+        {
+          "name": "ViewScale",
+          "label": "View Scale",
+          "type": "float",
+          "default": 0.024,
+          "min": 0.005,
+          "max": 0.08,
+          "step": 0.01
+        },
+        {
+          "name": "PointBright",
+          "label": "Point Brightness",
+          "type": "float",
+          "default": 2.5,
+          "min": 0.2,
+          "max": 6.0,
+          "step": 0.01
+        },
+        {
+          "name": "PointRadius",
+          "label": "Point Radius (px)",
+          "type": "float",
+          "default": 5.0,
+          "min": 0.5,
+          "max": 24.0,
+          "step": 0.01
+        },
+        {
+          "name": "RotationSpeed",
+          "label": "Rotation Speed",
+          "type": "float",
+          "default": 0.1,
+          "min": 0.0,
+          "max": 5.0,
+          "step": 0.01
+        },
+        {
+          "name": "ColourMode",
+          "label": "Colour Mode",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Velocity",
+            "Time",
+            "Depth"
+          ]
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "MidIn",
+          "label": "Mid",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "mid"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "synaptic_fire_network",
+      "file": "synaptic_fire_network.hlsl",
+      "title": "Synaptic Fire Network",
+      "type": "audio",
+      "description": "A firing neural network drawn as nodes and axons. Nodes are placed by a deterministic hash and wired to their k nearest neighbours in a ring topology approximating Watts-Strogatz. Each node fires at its own spontaneous rate and additionally whenever audio RMS crosses the firing threshold, sending an action potential that travels the axon over the propagation delay before the node falls refractory.",
+      "param_count": 14,
+      "custom_floats": 19,
+      "params": [
+        {
+          "name": "ampLevel",
+          "label": "Amplitude",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "rms"
+        },
+        {
+          "name": "AxonColour",
+          "label": "Axon Colour",
+          "type": "color",
+          "default": [
+            0.2,
+            0.7,
+            0.3,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "NodeColour",
+          "label": "Node Colour",
+          "type": "color",
+          "default": [
+            0.4,
+            0.9,
+            0.5,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "nodeCount",
+          "label": "Node Count",
+          "type": "long",
+          "default": 16,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            8,
+            16,
+            24,
+            32
+          ],
+          "labels": [
+            "8",
+            "16",
+            "24",
+            "32"
+          ]
+        },
+        {
+          "name": "kNeighbours",
+          "label": "k Neighbours",
+          "type": "long",
+          "default": 4,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            4,
+            6,
+            8
+          ],
+          "labels": [
+            "2",
+            "4",
+            "6",
+            "8"
+          ]
+        },
+        {
+          "name": "firingThreshold",
+          "label": "Fire Threshold",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.1,
+          "max": 0.95,
+          "step": 0.01
+        },
+        {
+          "name": "refractoryPeriod",
+          "label": "Refractory (s)",
+          "type": "float",
+          "default": 0.3,
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "propagationDelay",
+          "label": "Propagation (s)",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.05,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "spontaneousRate",
+          "label": "Spontaneous Hz",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "networkScale",
+          "label": "Network Scale",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.2,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "nodeSize",
+          "label": "Node Size (px)",
+          "type": "float",
+          "default": 6.0,
+          "min": 1.0,
+          "max": 40.0,
+          "step": 0.01
+        },
+        {
+          "name": "GlowAmt",
+          "label": "Glow",
+          "type": "float",
+          "default": 0.8,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.35,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "thermal_false_colour",
+      "file": "thermal_false_colour.hlsl",
+      "title": "Thermal False Colour",
+      "type": "video",
+      "description": "Maps video luminance to a thermographic palette over an adjustable level window, with optional isothermal contour lines. Inferno is the default because it is the only one of the four that is monotone in lightness, so brighter genuinely means hotter; Ironbow is the traditional thermal-camera ramp, Turbo a rainbow with no lightness reversals in it, and Greyscale the monochrome medical look.",
+      "param_count": 6,
+      "custom_floats": 6,
+      "params": [
+        {
+          "name": "PalettePreset",
+          "label": "Palette",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "labels": [
+            "Inferno",
+            "Ironbow",
+            "Turbo",
+            "Greyscale"
+          ]
+        },
+        {
+          "name": "LevelLow",
+          "label": "Level Low",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 0.9,
+          "step": 0.01
+        },
+        {
+          "name": "LevelHigh",
+          "label": "Level High",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ContrastBoost",
+          "label": "Contrast Boost",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.5,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "ShowContours",
+          "label": "Show Isothermal Contours",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        },
+        {
+          "name": "ContourInterval",
+          "label": "Contour Interval",
+          "type": "float",
+          "default": 0.1,
+          "min": 0.02,
+          "max": 0.5,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "vectorscope",
+      "file": "vectorscope.hlsl",
+      "title": "Vectorscope",
+      "type": "video",
+      "description": "Chrominance scope. The frame is sampled on a grid and plotted as CbCr, blue to yellow across and red to cyan up, with neutral grey at the centre and maximum saturation at the outer circle; each plotted point takes the average colour of the video samples that landed there, so the trace annotates itself. Judge white balance by how far the cloud sits off centre, overall saturation by its extent, and skin tone by whether faces fall along the marked line. The 75% colour-bar primaries are marked as targets.",
+      "param_count": 4,
+      "custom_floats": 4,
+      "params": [
+        {
+          "name": "GridSize",
+          "label": "Sample Grid",
+          "type": "float",
+          "default": 16.0,
+          "min": 8.0,
+          "max": 32.0,
+          "step": 1.0
+        },
+        {
+          "name": "Brightness",
+          "label": "Brightness",
+          "type": "float",
+          "default": 12.0,
+          "min": 1.0,
+          "max": 30.0,
+          "step": 0.01
+        },
+        {
+          "name": "BlendVideo",
+          "label": "Video Blend",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Sigma",
+          "label": "Spread",
+          "type": "float",
+          "default": 0.035,
+          "min": 0.005,
+          "max": 0.1,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "vignette",
+      "file": "vignette.hlsl",
+      "title": "Vignette",
+      "type": "video",
+      "description": "Darkens or tints the frame toward its edges. Intensity is how far the corners are pushed toward the vignette colour, Softness the width of the falloff from a hard ring just inside the corners to a gradient starting at the centre, and Roundness runs from a shape that follows the frame to a circle in screen space, which is what a real lens gives and which leaves the left and right edges darker than the top and bottom.",
+      "param_count": 4,
+      "custom_floats": 8,
+      "params": [
+        {
+          "name": "Intensity",
+          "label": "Intensity",
+          "type": "float",
+          "default": 0.5,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Softness",
+          "label": "Softness",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "Roundness",
+          "label": "Roundness",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteColor",
+          "label": "Colour",
+          "type": "color",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        }
+      ]
+    },
+    {
+      "name": "voronoi_cells",
+      "file": "voronoi_cells.hlsl",
+      "title": "Voronoi Cells",
+      "type": "generative",
+      "description": "Animated Voronoi diagram whose seeds each follow their own sinusoidal orbit, so cells continually swap neighbours and their shared boundaries slide. Renders as cell fill coloured by seed, borders alone, or fill with borders composited on top. Colours come from a cosine palette indexed by a per-seed hash, so the set of cell colours is a coherent ramp rather than an arbitrary rainbow.",
+      "param_count": 14,
+      "custom_floats": 14,
+      "params": [
+        {
+          "name": "CellCount",
+          "label": "Cell Count",
+          "type": "long",
+          "default": 8,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            10,
+            12,
+            16,
+            20
+          ],
+          "labels": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "8",
+            "10",
+            "12",
+            "16",
+            "20"
+          ]
+        },
+        {
+          "name": "BorderWidth",
+          "label": "Border Width",
+          "type": "float",
+          "default": 0.006,
+          "min": 0.0,
+          "max": 0.04,
+          "step": 0.01
+        },
+        {
+          "name": "MotionSpeed",
+          "label": "Motion Speed",
+          "type": "float",
+          "default": 0.4,
+          "min": 0.0,
+          "max": 2.0,
+          "step": 0.01
+        },
+        {
+          "name": "RenderMode",
+          "label": "Render Mode",
+          "type": "long",
+          "default": 0,
+          "min": null,
+          "max": null,
+          "step": null,
+          "values": [
+            0,
+            1,
+            2
+          ],
+          "labels": [
+            "Fill",
+            "Border",
+            "Both"
+          ]
+        },
+        {
+          "name": "BorderColour",
+          "label": "Border Colour",
+          "type": "color",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "CellSoftness",
+          "label": "Cell Softness",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "PaletteShift",
+          "label": "Palette Shift",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "SeedGlow",
+          "label": "Seed Glow",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 3.0,
+          "step": 0.01
+        },
+        {
+          "name": "Exposure",
+          "label": "Exposure",
+          "type": "float",
+          "default": 1.0,
+          "min": 0.1,
+          "max": 4.0,
+          "step": 0.01
+        },
+        {
+          "name": "VignetteAmt",
+          "label": "Vignette",
+          "type": "float",
+          "default": 0.25,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "AudioAmount",
+          "label": "Audio Amount",
+          "type": "float",
+          "default": 0.6,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "BassIn",
+          "label": "Bass",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "bass"
+        },
+        {
+          "name": "HighIn",
+          "label": "Treble",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "high"
+        },
+        {
+          "name": "BeatIn",
+          "label": "Beat",
+          "type": "audio",
+          "default": null,
+          "min": null,
+          "max": null,
+          "step": null,
+          "band": "beat"
+        }
+      ]
+    },
+    {
+      "name": "waveform",
+      "file": "waveform.hlsl",
+      "title": "Waveform",
+      "type": "video",
+      "description": "Luma waveform monitor: horizontal position across the frame on the X axis against luminance from 0 to 100 IRE up, reconstructed by sampling many rows per output column, with a graticule every 10 IRE. Read exposure, contrast and black level straight off the trace, and check it clears 0 and 100 IRE to confirm nothing is crushed or clipped. Show RGB overlays the three channel waveforms in place of the white luma trace.",
+      "param_count": 4,
+      "custom_floats": 4,
+      "params": [
+        {
+          "name": "NumSamples",
+          "label": "Sample Rows",
+          "type": "float",
+          "default": 128.0,
+          "min": 32.0,
+          "max": 256.0,
+          "step": 1.0
+        },
+        {
+          "name": "Brightness",
+          "label": "Brightness",
+          "type": "float",
+          "default": 6.0,
+          "min": 1.0,
+          "max": 20.0,
+          "step": 0.01
+        },
+        {
+          "name": "BlendVideo",
+          "label": "Video Blend",
+          "type": "float",
+          "default": 0.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "ShowRGB",
+          "label": "Show RGB",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        }
+      ]
+    },
+    {
+      "name": "zebra",
+      "file": "zebra.hlsl",
+      "title": "Zebra",
+      "type": "video",
+      "description": "Exposure warning stripes. Diagonal yellow stripes cover everything at or above the upper luminance threshold, marking what is about to clip, and blue stripes optionally mark everything at or below the lower threshold. Stripe width is relative to frame height, so the pattern reads the same at any output resolution.",
+      "param_count": 4,
+      "custom_floats": 4,
+      "params": [
+        {
+          "name": "UpperThreshold",
+          "label": "Highlights Threshold",
+          "type": "float",
+          "default": 0.9,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "LowerThreshold",
+          "label": "Shadows Threshold",
+          "type": "float",
+          "default": 0.05,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 0.01
+        },
+        {
+          "name": "StripeWidth",
+          "label": "Stripe Width",
+          "type": "float",
+          "default": 0.025,
+          "min": 0.005,
+          "max": 0.1,
+          "step": 0.01
+        },
+        {
+          "name": "ShowShadows",
+          "label": "Show Shadow Zebra",
+          "type": "bool",
+          "default": false,
+          "min": null,
+          "max": null,
+          "step": null
+        }
+      ]
+    }
+  ]
+}

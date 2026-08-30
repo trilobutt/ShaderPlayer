@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="search-page panel">
+  <h1>Search</h1>
+  <p class="search-page__lede">Titles are weighted above section names, and those above body
+    text. Every word has to land somewhere for a page to be listed.</p>
+  <p class="search-count" id="search-count" aria-live="polite"></p>
+  <div id="search-results"></div>
+  <noscript>
+    <p class="empty-note">Search needs JavaScript. Use the contents rail instead.</p>
+  </noscript>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="{{ static_prefix }}js/search.js" defer></script>
+{% endblock %}

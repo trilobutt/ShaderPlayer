@@ -53,3 +53,7 @@ config_local.json
 # Python bytecode (tools/validate_shaders.py imported by external pipelines)
 __pycache__/
 *.pyc
+
+# Site generator (site/build.py)
+site/.venv/
+site/dist/

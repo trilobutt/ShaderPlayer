@@ -1,0 +1,5 @@
+# Build-time only: site/build.py runs these to produce static HTML in
+# site/dist/. Nothing here ever reaches the deployed site.
+markdown==3.10.3
+jinja2==3.1.6
+pygments==2.21.0

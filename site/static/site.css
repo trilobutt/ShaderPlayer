@@ -1,0 +1,1659 @@
+/* ShaderPlayer documentation site.
+ *
+ * The tokens below are the product's own, lifted from src/ui/Theme.h so the site
+ * and the application cannot drift apart: same canvas, same anchor, same accent
+ * set, same region hues, same spacing step, radii, durations and easing. Where a
+ * value differs it is because the web is a different surface, and the comment
+ * says why. Dark only, deliberately: the product has no light mode and a docs
+ * site that flips to white is a second identity.
+ */
+
+/* ===================================================================
+   Tokens
+   =================================================================== */
+
+:root {
+  /* Ground. The canvas is the majority of every screen; the anchor is the far
+     end of the canvas gradient and the base of the atmospheric glow. */
+  --canvas: #0b0b0b;
+  --anchor: #160b2a;
+
+  /* Glass. Alpha is 0-1 here rather than QSS's 0-255, same values. */
+  --panel-fill: rgba(255, 255, 255, 0.06);
+  --panel-fill-raised: rgba(255, 255, 255, 0.1);
+  --panel-border: rgba(255, 255, 255, 0.15);
+  --panel-border-soft: rgba(255, 255, 255, 0.09);
+  --input-fill: rgba(0, 0, 0, 0.43);
+  --panel-blur: 16px;
+
+  /* Elevation. Level 1 is a panel on the canvas, level 2 anything that floats
+     over a panel (the header, the mobile nav drawer). */
+  --lift-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 28px rgba(0, 0, 0, 0.38);
+  --lift-2: 0 2px 6px rgba(0, 0, 0, 0.55), 0 22px 54px rgba(0, 0, 0, 0.5);
+  --edge-top: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+
+  /* Text. Only these two colours carry text on a dark ground; there is
+     deliberately no mid-grey tier, which is a legibility failure on black. */
+  --text-primary: #ececec;
+  --text-secondary: #b8bcc4;
+  --text-on-accent: #06181b;
+
+  /* Accents. Cyan is reserved for global interactive state (links, focus,
+     primary action, current page) and no section may claim it. */
+  --accent-primary: #3de0f0;
+  --accent-secondary: #5aa8ff;
+  --accent-tertiary: #a3f04a;
+  --accent-quaternary: #ff5fd2;
+  --state-warning: #ffb63d;
+  --state-error: #ff5a52;
+
+  /* Region hues, one per dock in the application. */
+  --region-library: #5aa8ff;
+  --region-editor: #a97cff;
+  --region-params: #a3f04a;
+  --region-transport: #ffb63d;
+  --region-recording: #ff5a52;
+  --region-audio: #ff5fd2;
+  --region-noise: #2fd9a8;
+  --region-spout: #ff7a9c;
+
+  /* The same idea applied to documentation sections. Each shader group takes
+     the hue of the dock it belongs to in the product: audio-reactive shaders
+     from the Audio panel, generative from the Noise generator, video effects
+     from the Transport. A reader learns the colour before the label. */
+  --group-audio-reactive: var(--region-audio);
+  --group-generative: var(--region-noise);
+  --group-video-effects: var(--region-transport);
+
+  /* Whatever hue the current region owns. Sections override it; anything that
+     has not claimed one falls back to the global interactive accent. */
+  --region: var(--accent-primary);
+
+  /* Form. Spacing step and radii are the product's. */
+  --space: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
+  --space-8: 64px;
+  --panel-gap: 24px;
+  --radius-panel: 10px;
+  --radius-control: 6px;
+  --radius-dialog: 14px;
+  --rail: 288px;
+  /* canvas + 6% panel glass + the table container's own wash, flattened. */
+  --table-ground: #151515;
+  --measure: 72ch;
+
+  /* Type. Tahoma is the product's UI font and it is on every Windows machine,
+     which is the only platform the application runs on, so it leads. Verdana
+     is Matthew Carter's wider sibling of the same design and covers macOS;
+     DejaVu Sans covers Linux with the same large x-height and open apertures.
+     No webfont, so no request, no flash and no dependency. */
+  --font-ui: Tahoma, Verdana, "DejaVu Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: Consolas, "Cascadia Mono", "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+
+  /* Motion. Durations and easing straight from Theme.h; OutCubic written out
+     as its bezier. */
+  --motion-hover: 140ms;
+  --motion-base: 220ms;
+  --motion-celebrate: 600ms;
+  --ease-standard: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-entrance: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* ===================================================================
+   Reset and base
+   =================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* An anchored heading must not land under the sticky header. */
+  scroll-padding-top: 96px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--canvas);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  /* 16px, not the application's 10pt: this is a reading surface, not a
+     control-dense tool window. */
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* The atmosphere. One gradient per surface: the canvas runs to the anchor at
+   the top of the viewport and is flat black by the time real content arrives,
+   so glow never sits behind a parameter table. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(140% 78% at 50% -18%, rgba(22, 11, 42, 0.98) 0%, rgba(11, 11, 11, 0) 64%),
+    var(--canvas);
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.4rem;
+  margin-top: var(--space-6);
+}
+
+h3 {
+  font-size: 1.125rem;
+  margin-top: var(--space-4);
+}
+
+p,
+ul,
+ol,
+table {
+  margin: 0 0 var(--space-2);
+}
+
+a {
+  color: var(--accent-primary);
+  text-decoration-color: rgba(61, 224, 240, 0.4);
+  text-underline-offset: 3px;
+  transition: color var(--motion-hover) var(--ease-standard),
+              text-decoration-color var(--motion-hover) var(--ease-standard);
+}
+
+a:hover {
+  color: #7febf7;
+  text-decoration-color: currentColor;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.9375em;
+}
+
+:not(pre) > code {
+  padding: 0.12em 0.4em;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+hr {
+  height: 1px;
+  margin: var(--space-4) 0;
+  border: 0;
+  background: var(--panel-border);
+}
+
+/* ===================================================================
+   Accessibility
+   =================================================================== */
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  z-index: 100;
+  padding: var(--space) var(--space-2);
+  border-radius: 0 0 var(--radius-control) 0;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Keyboard focus is never suppressed, and it is the same ring everywhere so a
+   keyboard user learns one shape. Cyan on every ground the site produces
+   clears the contrast floor by a wide margin. */
+/* The outline already follows each element's own radius, so this rule must
+   not set one: doing so squares off a pill-shaped chip the moment it takes
+   focus. */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(61, 224, 240, 0.18);
+}
+
+/* Every transition and animation collapses; the end state still lands, so no
+   information is carried by movement alone. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Traditional scrollbars: always visible, wide enough to grab. */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(255, 255, 255, 0.22) rgba(0, 0, 0, 0.4);
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  background-clip: content-box;
+}
+
+/* ===================================================================
+   Header
+   =================================================================== */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space) var(--panel-gap);
+  background: rgba(11, 11, 11, 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--panel-border-soft);
+  box-shadow: var(--edge-top), 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+/* The chrome's accent underglow, the one place the site pushes the glass
+   harder than a plain divider would. */
+.site-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+      rgba(61, 224, 240, 0) 0%,
+      rgba(61, 224, 240, 0.55) 22%,
+      rgba(169, 124, 255, 0.5) 55%,
+      rgba(255, 95, 210, 0) 92%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  padding: 4px;
+  color: var(--text-primary);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.brand__mark {
+  display: flex;
+  filter: drop-shadow(0 0 10px rgba(61, 224, 240, 0.4));
+  transition: transform var(--motion-hover) var(--ease-standard),
+              filter var(--motion-hover) var(--ease-standard);
+}
+
+.brand:hover .brand__mark {
+  transform: translateY(-2px) scale(1.04);
+  filter: drop-shadow(0 0 16px rgba(61, 224, 240, 0.6));
+}
+
+.brand__suffix {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+/* ===================================================================
+   Search field
+   =================================================================== */
+
+.site-search {
+  margin: 0;
+}
+
+.site-search__field {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space);
+}
+
+.site-search__input {
+  width: 15rem;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  /* Recessed: darker than the surface hosting it, so the field reads as cut
+     into the chrome rather than floating on it. */
+  background: var(--input-fill);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  transition: border-color var(--motion-hover) var(--ease-standard),
+              box-shadow var(--motion-hover) var(--ease-standard),
+              background-color var(--motion-hover) var(--ease-standard);
+}
+
+.site-search__input::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.site-search__input:hover {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.site-search__input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 3px rgba(61, 224, 240, 0.22), 0 0 22px rgba(61, 224, 240, 0.28);
+}
+
+/* ===================================================================
+   Buttons
+   =================================================================== */
+
+.button,
+.site-search__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space);
+  padding: 9px 18px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--panel-fill);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform var(--motion-hover) var(--ease-standard),
+              background-color var(--motion-hover) var(--ease-standard),
+              border-color var(--motion-hover) var(--ease-standard),
+              box-shadow var(--motion-hover) var(--ease-standard),
+              color var(--motion-hover) var(--ease-standard);
+}
+
+.button:hover,
+.site-search__submit:hover {
+  transform: translateY(-2px);
+  border-color: rgba(61, 224, 240, 0.55);
+  background: var(--panel-fill-raised);
+  color: var(--text-primary);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45), 0 0 26px rgba(61, 224, 240, 0.22);
+}
+
+.button:active,
+.site-search__submit:active {
+  transform: translateY(0);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.button--primary,
+.site-search__submit {
+  border-color: transparent;
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  box-shadow: 0 0 24px rgba(61, 224, 240, 0.3);
+}
+
+.button--primary:hover,
+.site-search__submit:hover {
+  background: #62e8f5;
+  color: var(--text-on-accent);
+  border-color: transparent;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45), 0 0 34px rgba(61, 224, 240, 0.45);
+}
+
+.button[aria-disabled="true"],
+button:disabled {
+  transform: none;
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ===================================================================
+   Mobile contents toggle
+   =================================================================== */
+
+.nav-toggle {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--panel-fill);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color var(--motion-hover) var(--ease-standard),
+              background-color var(--motion-hover) var(--ease-standard);
+}
+
+.nav-toggle:hover {
+  border-color: rgba(61, 224, 240, 0.55);
+  background: var(--panel-fill-raised);
+}
+
+.nav-toggle__bars {
+  display: grid;
+  gap: 3px;
+  width: 16px;
+}
+
+.nav-toggle__bars i {
+  display: block;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  transition: transform var(--motion-base) var(--ease-standard),
+              opacity var(--motion-base) var(--ease-standard);
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle__bars i:nth-child(1) {
+  transform: translateY(5px) rotate(45deg);
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle__bars i:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle__bars i:nth-child(3) {
+  transform: translateY(-5px) rotate(-45deg);
+}
+
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.nav-scrim[hidden] {
+  display: none;
+}
+
+/* ===================================================================
+   Shell and contents rail
+   =================================================================== */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--panel-gap);
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--panel-gap);
+}
+
+.has-sidebar .shell {
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+}
+
+.content {
+  min-width: 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: calc(56px + var(--panel-gap));
+  align-self: start;
+  min-width: 0;
+  max-height: calc(100vh - 56px - var(--panel-gap) * 2);
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-fill);
+  backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  box-shadow: var(--edge-top), var(--lift-1);
+}
+
+.sidebar__title {
+  margin: 0 0 var(--space-2);
+  padding-bottom: var(--space);
+  border-bottom: 1px solid var(--panel-border-soft);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nav__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav__list--d1 {
+  margin-bottom: var(--space-3);
+}
+
+.nav__list--d2 {
+  margin: 4px 0 var(--space) 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--panel-border-soft);
+}
+
+/* One hue per documentation section, carried by the label and its rule, the
+   same device the application's dock titles use. */
+.nav__section {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  margin: var(--space-3) 0 var(--space);
+  color: var(--region);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nav__section::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, currentColor, rgba(255, 255, 255, 0));
+  opacity: 0.5;
+}
+
+.nav__section--manual {
+  --region: var(--region-library);
+}
+
+.nav__section--reference {
+  --region: var(--region-params);
+}
+
+.nav__group--audio-reactive {
+  --region: var(--group-audio-reactive);
+}
+
+.nav__group--generative {
+  --region: var(--group-generative);
+}
+
+.nav__group--video-effects {
+  --region: var(--group-video-effects);
+}
+
+.nav__link {
+  display: block;
+  padding: 6px 10px;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition: background-color var(--motion-hover) var(--ease-standard),
+              border-color var(--motion-hover) var(--ease-standard),
+              color var(--motion-hover) var(--ease-standard),
+              transform var(--motion-hover) var(--ease-standard);
+}
+
+.nav__link:hover {
+  transform: translateX(2px);
+  border-left-color: var(--region);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+/* The current page is marked in colour and in weight, so the mark survives
+   with colour vision differences and under a monochrome display. */
+.nav__link.is-current {
+  border-left-color: var(--accent-primary);
+  background: rgba(61, 224, 240, 0.14);
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+
+.nav__group {
+  margin-bottom: 2px;
+}
+
+.nav__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  transition: background-color var(--motion-hover) var(--ease-standard),
+              color var(--motion-hover) var(--ease-standard);
+}
+
+.nav__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The disclosure triangle, drawn rather than borrowed from the platform so it
+   can carry the section hue. */
+.nav__summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--region);
+  transition: transform var(--motion-base) var(--ease-standard);
+}
+
+.nav__group[open] > .nav__summary::before {
+  transform: rotate(90deg);
+}
+
+.nav__summary:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.nav__summary-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav__count {
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--region) 50%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--region);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+/* ===================================================================
+   Panels and prose
+   =================================================================== */
+
+.panel {
+  position: relative;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-fill);
+  backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  box-shadow: var(--edge-top), var(--lift-1);
+}
+
+/* The region hairline: the product paints one above every dock body, and it
+   is the cheapest way to tell two panels apart at a glance. */
+.panel::before {
+  content: "";
+  position: absolute;
+  left: var(--radius-panel);
+  right: var(--radius-panel);
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg,
+      color-mix(in srgb, var(--region) 90%, transparent),
+      color-mix(in srgb, var(--region) 10%, transparent));
+}
+
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.panel__head h2 {
+  margin: 0;
+}
+
+.page > :first-child,
+.search-page > :first-child {
+  margin-top: 0;
+}
+
+.page > :last-child,
+.search-page > :last-child {
+  margin-bottom: 0;
+}
+
+.page {
+  max-width: none;
+}
+
+/* Prose stays on a readable measure even when its panel is wide. */
+.page > p,
+.page > ul,
+.page > ol,
+.page > blockquote,
+.search-page__lede {
+  max-width: var(--measure);
+}
+
+.page h2 {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--panel-border-soft);
+}
+
+blockquote {
+  margin: var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--region);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-primary);
+}
+
+pre {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2);
+  overflow-x: auto;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: var(--radius-control);
+  /* Recessed, like the application's editor: darker than its host panel. */
+  background: rgba(0, 0, 0, 0.42);
+  line-height: 1.55;
+}
+
+.empty-note {
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text-secondary);
+}
+
+.section-title {
+  margin: 0 0 var(--space-3);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ===================================================================
+   Hero
+   =================================================================== */
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+  margin-bottom: var(--space-6);
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-dialog);
+  background:
+    linear-gradient(160deg, rgba(22, 11, 42, 0.9) 0%, rgba(11, 11, 11, 0.35) 62%),
+    var(--panel-fill);
+  backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  box-shadow: var(--edge-top), var(--lift-2);
+}
+
+/* The wide accent glow. Diffuse and low-opacity: atmosphere, never a ring,
+   and it sits only on the landing surface where there is no data to compete
+   with. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(54% 64% at 80% 2%, rgba(255, 95, 210, 0.36) 0%, rgba(255, 95, 210, 0) 66%),
+    radial-gradient(44% 56% at 16% -8%, rgba(61, 224, 240, 0.34) 0%, rgba(61, 224, 240, 0) 62%),
+    radial-gradient(46% 62% at 99% 82%, rgba(90, 168, 255, 0.26) 0%, rgba(90, 168, 255, 0) 64%),
+    radial-gradient(64% 72% at 46% 116%, rgba(163, 240, 74, 0.2) 0%, rgba(163, 240, 74, 0) 58%);
+}
+
+/* The eight region hues in a single run, closing the hero on the same rule
+   each card below it opens with. It is the product's palette, stated once. */
+.hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+      #5aa8ff 0%, #a97cff 15%, #ff5fd2 30%, #ff7a9c 44%,
+      #ff5a52 58%, #ffb63d 72%, #a3f04a 86%, #2fd9a8 100%);
+}
+
+.hero__inner {
+  max-width: 62ch;
+}
+
+.hero__inner > h1 {
+  margin-bottom: var(--space-3);
+  font-size: clamp(2.25rem, 1.2rem + 5vw, 4.25rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.hero__inner > p {
+  font-size: 1.0625rem;
+}
+
+.hero__inner > p:first-of-type {
+  font-size: clamp(1.0625rem, 1rem + 0.5vw, 1.3125rem);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+}
+
+/* ===================================================================
+   Landing index: one card per documentation group
+   =================================================================== */
+
+.library {
+  margin-bottom: var(--space-6);
+}
+
+.index-grid {
+  display: grid;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--panel-gap);
+}
+
+.index-card {
+  position: relative;
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-fill);
+  backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  box-shadow: var(--edge-top), var(--lift-1);
+  transition: transform var(--motion-base) var(--ease-standard),
+              border-color var(--motion-base) var(--ease-standard),
+              box-shadow var(--motion-base) var(--ease-standard);
+}
+
+/* The region hue is on unconditionally, as a rule and a heading colour, so it
+   is not a hover-only signal. Hover deepens it and lifts the card. */
+.index-card::before {
+  content: "";
+  position: absolute;
+  left: var(--radius-panel);
+  right: var(--radius-panel);
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg,
+      var(--region),
+      color-mix(in srgb, var(--region) 12%, transparent));
+}
+
+.index-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--region) 45%, var(--panel-border));
+  box-shadow: var(--edge-top), var(--lift-2),
+              0 0 40px color-mix(in srgb, var(--region) 22%, transparent);
+}
+
+.index-card--manual {
+  --region: var(--region-library);
+}
+
+.index-card--reference {
+  --region: var(--region-params);
+}
+
+.index-card--audio-reactive {
+  --region: var(--group-audio-reactive);
+}
+
+.index-card--generative {
+  --region: var(--group-generative);
+}
+
+.index-card--video-effects {
+  --region: var(--group-video-effects);
+}
+
+.index-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.index-card__title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: var(--region);
+  font-size: 1.0625rem;
+}
+
+.index-card__count {
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--region) 50%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--region);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-block;
+  padding: 5px 11px;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: transform var(--motion-hover) var(--ease-standard),
+              background-color var(--motion-hover) var(--ease-standard),
+              border-color var(--motion-hover) var(--ease-standard),
+              color var(--motion-hover) var(--ease-standard);
+}
+
+.chip:hover {
+  transform: translateY(-2px);
+  border-color: var(--region);
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--region);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45),
+              0 0 18px color-mix(in srgb, var(--region) 30%, transparent);
+}
+
+/* ===================================================================
+   Shader reference page
+   =================================================================== */
+
+.shader-page,
+.content > .page,
+.content > .search-page {
+  max-width: 1040px;
+}
+
+.shader-page--audio-reactive {
+  --region: var(--group-audio-reactive);
+}
+
+.shader-page--generative {
+  --region: var(--group-generative);
+}
+
+.shader-page--video-effects {
+  --region: var(--group-video-effects);
+}
+
+.breadcrumb {
+  margin-bottom: var(--space-2);
+  font-size: 0.875rem;
+}
+
+.breadcrumb a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.breadcrumb a::before {
+  content: "\2190";
+  color: var(--region);
+  transition: transform var(--motion-hover) var(--ease-standard);
+}
+
+.breadcrumb a:hover {
+  color: var(--text-primary);
+}
+
+.breadcrumb a:hover::before {
+  transform: translateX(-3px);
+}
+
+.shader-head {
+  position: relative;
+  isolation: isolate;
+  margin-bottom: var(--panel-gap);
+  padding: var(--space-4);
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-dialog);
+  background:
+    linear-gradient(150deg,
+      color-mix(in srgb, var(--region) 10%, rgba(22, 11, 42, 0.7)) 0%,
+      rgba(11, 11, 11, 0.3) 64%),
+    var(--panel-fill);
+  backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--panel-blur)) saturate(140%);
+  box-shadow: var(--edge-top), var(--lift-1);
+}
+
+/* The page's group hue as a wide, soft wash. It stays on the title block; the
+   parameter table below it sits on plain glass. */
+.shader-head::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background:
+    radial-gradient(38% 56% at 86% 4%,
+      color-mix(in srgb, var(--region) 18%, transparent) 0%, transparent 68%),
+    radial-gradient(34% 50% at 6% 96%,
+      color-mix(in srgb, var(--region) 10%, transparent) 0%, transparent 66%);
+}
+
+.shader-head::after {
+  content: "";
+  position: absolute;
+  left: var(--radius-panel);
+  right: var(--radius-panel);
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg,
+      var(--region),
+      color-mix(in srgb, var(--region) 10%, transparent));
+}
+
+.shader-head h1 {
+  margin-bottom: var(--space-2);
+  font-size: clamp(1.875rem, 1.3rem + 2.4vw, 2.75rem);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.shader-description {
+  max-width: var(--measure);
+  margin: 0;
+  font-size: 1.0625rem;
+  color: var(--text-primary);
+}
+
+.type-badge {
+  display: inline-block;
+  margin-bottom: var(--space-2);
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--region) 60%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--region);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.budget {
+  padding: 3px 10px;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+/* ===================================================================
+   Parameter table
+   =================================================================== */
+
+/* Seven columns of it. The container scrolls, never the page, and the edge
+   shadows say there is more to the side. */
+.table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: var(--radius-control);
+  /* Four layers: two shadows pinned to the container's edges, and two opaque
+     covers that travel with the content and mask them. At rest the left cover
+     sits over the left edge and only the right one shows; scroll to the end
+     and it reverses. So a lit edge means "there is more this way" rather than
+     being on permanently. The cue is light rather than a drop shadow, because
+     a black shadow on a black table signals nothing. --table-ground is canvas
+     + panel glass + this container's wash, flattened, so a cover can match
+     exactly what it covers. */
+  background:
+    linear-gradient(90deg, var(--table-ground) 72%, rgba(21, 21, 21, 0)) left / 34px 100% no-repeat local,
+    linear-gradient(270deg, var(--table-ground) 72%, rgba(21, 21, 21, 0)) right / 34px 100% no-repeat local,
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--region) 26%, transparent), transparent) left / 24px 100% no-repeat scroll,
+    linear-gradient(270deg,
+      color-mix(in srgb, var(--region) 26%, transparent), transparent) right / 24px 100% no-repeat scroll,
+    var(--table-ground);
+}
+
+.param-table {
+  width: 100%;
+  min-width: 660px;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.9375rem;
+}
+
+.param-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--region) 40%, var(--panel-border));
+  background: #191919;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.param-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  vertical-align: top;
+}
+
+.param-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.param-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.param-table td:first-child {
+  font-weight: 700;
+}
+
+/* The container scrolls, so an identifier keeps its own width rather than
+   being broken across lines to fit a column. */
+.param-table code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.cell-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cell-note {
+  color: var(--text-secondary);
+}
+
+.param-type {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.param-values-row td {
+  padding-top: 0;
+}
+
+.param-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.param-values code {
+  border-color: color-mix(in srgb, var(--region) 35%, transparent);
+  background: color-mix(in srgb, var(--region) 10%, rgba(0, 0, 0, 0.32));
+}
+
+/* ===================================================================
+   Search page
+   =================================================================== */
+
+.search-page__lede {
+  color: var(--text-secondary);
+}
+
+.search-count {
+  margin: var(--space-3) 0 var(--space-2);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.search-results-list {
+  display: grid;
+  gap: var(--space);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space);
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border-soft);
+  border-radius: var(--radius-control);
+  background: rgba(0, 0, 0, 0.22);
+  transition: transform var(--motion-hover) var(--ease-standard),
+              border-color var(--motion-hover) var(--ease-standard),
+              background-color var(--motion-hover) var(--ease-standard);
+}
+
+.search-result:hover {
+  transform: translateX(3px);
+  border-color: color-mix(in srgb, var(--region) 55%, transparent);
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--region) 20%, transparent);
+}
+
+/* The hit's group, in that group's colour. search.js derives the modifier
+   from the section name the index already carries. */
+.search-result--audio-reactive {
+  --region: var(--group-audio-reactive);
+}
+
+.search-result--generative {
+  --region: var(--group-generative);
+}
+
+.search-result--video-effects {
+  --region: var(--group-video-effects);
+}
+
+.search-result--manual {
+  --region: var(--region-library);
+}
+
+.search-result--reference,
+.search-result--home {
+  --region: var(--region-params);
+}
+
+.search-result a {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.search-result__section {
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--region) 45%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--region);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* No results is a designed state, not a blank page: a drawn mark, the query
+   quoted back, and a way onward. */
+.search__empty {
+  margin: 0;
+  padding: var(--space-6) var(--space-3);
+  border: 1px dashed var(--panel-border);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(58% 90% at 50% 6%, rgba(255, 182, 61, 0.16), transparent 68%),
+    rgba(0, 0, 0, 0.28);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.search__empty-mark {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto var(--space-3);
+}
+
+.search__empty-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0 13px 13px 0;
+  border: 3px solid var(--state-warning);
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(255, 182, 61, 0.45),
+              inset 0 0 12px rgba(255, 182, 61, 0.25);
+}
+
+.search__empty-mark::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 17px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--state-warning);
+  transform: rotate(45deg);
+  transform-origin: right center;
+  box-shadow: 0 0 12px rgba(255, 182, 61, 0.5);
+}
+
+.search__empty-line {
+  margin: 0 0 var(--space);
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.search__empty-hint {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* ===================================================================
+   Footer
+   =================================================================== */
+
+.site-footer {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--panel-gap) var(--space-6);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.site-footer p {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--panel-border-soft);
+}
+
+/* ===================================================================
+   Syntax highlighting
+   =================================================================== */
+
+/* build.py emits pygments.css from a light style, which loads first. These
+   rules re-tint the tokens that actually appear in HLSL and shell samples for
+   the dark canvas; every colour here is from the accent set. */
+.highlight {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.highlight pre {
+  margin: 0;
+}
+
+.highlight .c, .highlight .c1, .highlight .cm, .highlight .cs, .highlight .cp,
+.highlight .cpf, .highlight .ch {
+  color: #8ee0c4;
+  font-style: italic;
+}
+
+.highlight .k, .highlight .kd, .highlight .kn, .highlight .kr, .highlight .kt,
+.highlight .kc, .highlight .kp {
+  color: var(--accent-quaternary);
+  font-weight: 700;
+}
+
+.highlight .s, .highlight .s1, .highlight .s2, .highlight .sb, .highlight .sc,
+.highlight .sd, .highlight .se, .highlight .sh, .highlight .si, .highlight .sx,
+.highlight .sr, .highlight .ss {
+  color: var(--accent-tertiary);
+}
+
+.highlight .m, .highlight .mf, .highlight .mh, .highlight .mi, .highlight .mo,
+.highlight .il, .highlight .mb {
+  color: var(--state-warning);
+}
+
+.highlight .nf, .highlight .fm {
+  color: var(--accent-primary);
+}
+
+.highlight .nc, .highlight .nn, .highlight .nt {
+  color: var(--accent-secondary);
+}
+
+.highlight .nv, .highlight .vc, .highlight .vg, .highlight .vi, .highlight .na {
+  color: var(--text-primary);
+}
+
+.highlight .o, .highlight .ow, .highlight .p {
+  color: var(--text-secondary);
+}
+
+.highlight .err {
+  color: var(--state-error);
+  background: transparent;
+  border: 0;
+}
+
+.highlight .gd {
+  color: var(--state-error);
+}
+
+.highlight .gi {
+  color: var(--accent-tertiary);
+}
+
+/* ===================================================================
+   Responsive
+   =================================================================== */
+
+@media (max-width: 1023px) {
+  .has-sidebar .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nav-toggle {
+    display: inline-flex;
+  }
+
+  /* The rail becomes a drawer over the content, at the raised elevation. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 26;
+    width: min(320px, 86vw);
+    max-height: none;
+    padding: var(--space-3) var(--space-2);
+    border-radius: 0 var(--radius-dialog) var(--radius-dialog) 0;
+    background: rgba(14, 12, 22, 0.94);
+    box-shadow: var(--edge-top), var(--lift-2);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform var(--motion-base) var(--ease-standard),
+                visibility var(--motion-base) var(--ease-standard);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --panel-gap: 16px;
+  }
+
+  .site-header {
+    padding: var(--space) var(--space-2);
+    row-gap: var(--space);
+  }
+
+  .brand {
+    font-size: 1rem;
+  }
+
+  .brand__suffix {
+    display: none;
+  }
+
+  .site-search {
+    flex: 1 1 100%;
+  }
+
+  .site-search__field {
+    width: 100%;
+  }
+
+  .site-search__input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  .shell {
+    padding: var(--space-2);
+  }
+
+  .hero {
+    padding: var(--space-6) var(--space-3) var(--space-4);
+  }
+
+  .hero__actions .button {
+    flex: 1 1 100%;
+  }
+
+  .panel,
+  .shader-head {
+    padding: var(--space-3) var(--space-2);
+  }
+
+
+
+  .index-card {
+    padding: var(--space-2);
+  }
+
+  .site-footer {
+    padding: var(--space-3) var(--space-2) var(--space-4);
+  }
+}
+
+@media (max-width: 400px) {
+  body {
+    font-size: 15px;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+}

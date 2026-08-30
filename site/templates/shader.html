@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<article class="shader-page shader-page--{{ group_slug }}">
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/reference/#{{ group_slug }}">Back to {{ group_title }}</a>
+  </nav>
+
+  <header class="shader-head">
+    <span class="type-badge">{{ group_title }}</span>
+    <h1>{{ shader.title }}</h1>
+    <p class="shader-description">{{ shader.description }}</p>
+  </header>
+
+  <section class="panel" aria-labelledby="parameters">
+    <div class="panel__head">
+      <h2 id="parameters">Parameters</h2>
+      <span class="budget" title="cbuffer usage against the 32-float budget">{{ budget_line }}</span>
+    </div>
+
+    {% if params %}
+    {# The table is seven columns wide and scrolls inside its own container so
+       the page itself never scrolls sideways. tabindex makes that scroll
+       reachable from the keyboard. #}
+    <div class="table-scroll" tabindex="0" role="group" aria-labelledby="parameters">
+      <table class="param-table">
+        <thead>
+          <tr>
+            <th scope="col">Label</th>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Default</th>
+            <th scope="col">Min</th>
+            <th scope="col">Max</th>
+            <th scope="col">Step</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in params %}
+          <tr>
+            <td>{{ p.label }}</td>
+            <td><code>{{ p.name }}</code></td>
+            <td><span class="param-type">{{ p.type }}</span></td>
+            {# Three shapes fill the remaining four columns: an audio band has no
+               stored value at all, an unranged control has a default but no range,
+               and everything else fills every column. #}
+            {% if p.is_audio %}
+            <td class="cell-note" colspan="4">read live from the audio analyser, band: <code>{{ p.band }}</code></td>
+            {% elif p.unranged_note %}
+            <td class="cell-num">{{ p.default }}</td>
+            <td class="cell-note" colspan="3">{{ p.unranged_note }}</td>
+            {% else %}
+            <td class="cell-num">{{ p.default }}</td>
+            <td class="cell-num">{{ p.min }}</td>
+            <td class="cell-num">{{ p.max }}</td>
+            <td class="cell-num">{{ p.step }}</td>
+            {% endif %}
+          </tr>
+          {% if p.value_labels %}
+          <tr class="param-values-row">
+            <td colspan="7">
+              <ul class="param-values">
+                {% for entry in p.value_labels %}
+                <li><code>{{ entry }}</code></li>
+                {% endfor %}
+              </ul>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-note">This shader has no configurable parameters. It draws the same
+      image every time, so there is nothing to set.</p>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}

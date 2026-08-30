@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+{% if url == "/" %}
+{# The landing surface. The rendered Markdown supplies its own <h1> and lede,
+   so the hero styles the first heading and paragraph rather than printing a
+   second copy of the title above them. #}
+<section class="hero">
+  <div class="hero__inner">
+    {{ body | safe }}
+    <p class="hero__actions">
+      <a class="button button--primary" href="#library">Browse the shader reference</a>
+      <a class="button" href="/search/">Search the documentation</a>
+    </p>
+  </div>
+</section>
+
+{# One card per navigable group, read straight off the nav tree, so a section
+   added to site/content/ later appears here without touching this template. #}
+{% set ns = namespace(cards=[]) %}
+{% for top in nav %}
+{% if top.children %}
+{% set pages = top.children | selectattr('url') | list %}
+{% if pages %}
+{% set ns.cards = ns.cards + [{'title': top.title, 'entries': pages}] %}
+{% endif %}
+{% for sub in top.children %}
+{% if sub.children %}
+{% set ns.cards = ns.cards + [{'title': sub.title, 'entries': sub.children}] %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+{% if ns.cards %}
+<section class="library" id="library" aria-labelledby="library-title">
+  <h2 class="section-title" id="library-title">Browse the documentation</h2>
+  <div class="index-grid">
+    {% for card in ns.cards %}
+    <article class="index-card index-card--{{ card.title | lower | replace(' ', '-') }}">
+      <header class="index-card__head">
+        <h3 class="index-card__title">{{ card.title }}</h3>
+        <span class="index-card__count">{{ card.entries | length }}</span>
+      </header>
+      <ul class="chip-list">
+        {% for entry in card.entries %}
+        <li><a class="chip" href="{{ entry.url }}">{{ entry.title }}</a></li>
+        {% endfor %}
+      </ul>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% else %}
+<article class="page panel">
+  {# Markdown pages carry their own top-level heading; only print the
+     frontmatter title when the body has not already said it. #}
+  {% if '<h1' not in body %}
+  <h1>{{ title }}</h1>
+  {% endif %}
+  {{ body | safe }}
+</article>
+{% endif %}
+{% endblock %}
