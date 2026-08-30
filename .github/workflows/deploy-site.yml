@@ -1,0 +1,134 @@
+name: Deploy site
+
+# Builds site/ and publishes it to shaderplayer.marcsplained.com.
+#
+# Deliberately narrow, because this is a public repository holding a deploy
+# credential:
+#
+#   - Only `push` to master and a manual run. There is no `pull_request` or
+#     `pull_request_target` trigger, so a fork can never reach the secret.
+#   - `permissions: contents: read`, so the job's GITHUB_TOKEN cannot write to
+#     the repository even if a step is compromised.
+#   - Actions are pinned to commit SHAs, not moving tags.
+#   - The SSH key is not a shell credential. On the server it is bound to a
+#     forced command that ignores whatever the client asks for and only ever
+#     rsyncs an uploaded tree into the one app directory (see site/deploy.sh
+#     for the full note). A leak cannot reach the other apps on that account.
+#
+# The site stays noindex until launch. An automatic deploy always builds with
+# the noindex default, so no ordinary push can publish it to search engines
+# early; going live is a manual run with `live` set to true.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "site/**"
+      - "default_shaders/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+    inputs:
+      live:
+        description: "Build indexable (drops noindex and the disallow-all robots.txt). Only at launch."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: site/requirements.txt
+
+      - name: Install build dependencies
+        run: pip install -r site/requirements.txt
+
+      - name: Build
+        run: |
+          if [ "${{ inputs.live }}" = "true" ]; then
+            echo "::warning::Building INDEXABLE. This publishes the site to search engines."
+            python site/build.py --no-noindex
+          else
+            python site/build.py
+          fi
+
+      - name: Check the build is publishable
+        run: |
+          test -f site/dist/index.html || { echo "no index.html in build output"; exit 1; }
+          pages=$(find site/dist -name '*.html' | wc -l)
+          echo "built $pages pages"
+          [ "$pages" -ge 50 ] || { echo "only $pages pages, expected at least 50; refusing to publish a partial build"; exit 1; }
+
+      - name: Check every internal link resolves
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          dist = pathlib.Path("site/dist")
+          bad = []
+          for f in dist.rglob("*.html"):
+              for h in set(re.findall(r'href="(/[^"#]*)', f.read_text(encoding="utf-8"))):
+                  if re.search(r"[.](css|js|json|xml|txt)$", h):
+                      target = dist / h.lstrip("/")
+                  elif h == "/":
+                      target = dist / "index.html"
+                  else:
+                      target = dist / h.strip("/") / "index.html"
+                  if not target.exists():
+                      bad.append((f.relative_to(dist).as_posix(), h))
+          if bad:
+              for page, href in bad[:20]:
+                  print(f"broken: {page} -> {href}")
+              sys.exit(f"{len(bad)} broken internal links")
+          print("internal links: all resolve")
+          PY
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.OPALSTACK_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.OPALSTACK_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Publish
+        env:
+          OPALSTACK_USER: ${{ secrets.OPALSTACK_USER }}
+          OPALSTACK_HOST: ${{ secrets.OPALSTACK_HOST }}
+        run: |
+          # The server's forced command decides the destination, so nothing here
+          # names a path. It reads this tar stream, refuses a tree with no
+          # index.html, and rsyncs into the app directory with --delete.
+          tar -czf - -C site/dist . \
+            | ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 \
+                  "$OPALSTACK_USER@$OPALSTACK_HOST"
+
+      - name: Verify the live site
+        run: |
+          base=https://shaderplayer.marcsplained.com
+          for path in / /manual/ /reference/ /reference/shaders/plasma/ /static/site.css; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$base$path")
+            echo "$code  $path"
+            [ "$code" = "200" ] || exit 1
+          done
+          echo "--- robots.txt ---"
+          curl -s --max-time 25 "$base/robots.txt"
+
+      - name: Clean up the key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
