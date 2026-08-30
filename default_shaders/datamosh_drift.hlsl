@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "The compression-failure look, built from Perlin noise standing in for P-frame motion vectors. The frame is diced into blocks that accumulate their own UV displacement over time and smear along their own motion vector, with periodic noise spikes acting as I-frame resets. Block edges stay hard on purpose, since a compression block boundary is the artefact.",
     "INPUTS": [
         {"NAME": "blockSz",       "LABEL": "Block Size",    "TYPE": "float", "MIN": 4.0,  "MAX": 64.0, "DEFAULT": 16.0},
         {"NAME": "vectorScale",   "LABEL": "Vector Scale",  "TYPE": "float", "MIN": 0.0,  "MAX": 2.0,  "DEFAULT": 0.5},

@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "Line integral convolution over a Perlin curl flow field: the flow angle at each pixel is read from fbm-summed noise, the sample point is advected backward along it, and a band-limited grating is integrated along that path, which is what produces the fibrous streamline fabric. Colour by Angle tints each streamline by its local flow direction.",
     "INPUTS": [
         {"NAME": "noiseFreq",      "LABEL": "Noise Scale",   "TYPE": "float", "MIN": 0.5,  "MAX": 12.0, "DEFAULT": 3.0},
         {"NAME": "octaveCount",    "LABEL": "Octaves",       "TYPE": "long",

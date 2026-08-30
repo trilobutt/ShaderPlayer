@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "The primary grading tool in the set. Lift, gamma and gain are applied as one Grade operator, pow(in * (gain - lift) + lift, 1/gamma), so black point, white point and the curve between them stay independent of each other, followed by contrast, saturation, hue rotation, a highlight rolloff and a vignette.",
     "INPUTS": [
         {"NAME": "liftRed",       "LABEL": "Lift R",     "TYPE": "float", "MIN": -0.5,   "MAX": 0.5,   "DEFAULT": 0.0},
         {"NAME": "liftGreen",     "LABEL": "Lift G",     "TYPE": "float", "MIN": -0.5,   "MAX": 0.5,   "DEFAULT": 0.0},

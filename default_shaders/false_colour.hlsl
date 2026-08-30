@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Exposure instrument. Luminance is quantised into named bands and painted in flat reference colours (purple clipped blacks, blue underexposed, cyan shadows, grey midtones, yellow highlights, orange overexposed, red clipped whites), so exposure can be read off the picture instead of guessed at. Exposure offsets the signal by up to three stops before analysis; Blend fades back to the untouched frame.",
     "INPUTS": [
         {"NAME": "Blend",    "LABEL": "Blend",    "TYPE": "float",
          "MIN": 0.0, "MAX": 1.0, "DEFAULT": 1.0},

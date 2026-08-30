@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "Meinhardt-Gierer activator-inhibitor patterning drawn as insect shell. Two noise fields at diffusion-scaled wavelengths compete, so a high activation-to-inhibition ratio gives spots, a ratio near 1 gives labyrinthine stripes, and a low one inverts to dark spots on pigment. Body Geometry warps the field onto a cylinder, carapace, wing or abdomen, and a fine third octave roughens the pigment edges into punctate cuticle grain.",
     "INPUTS": [
         {"NAME": "pigmentColour",  "LABEL": "Pigment Colour",  "TYPE": "color",  "DEFAULT": [0.82, 0.38, 0.08, 1.0]},
         {"NAME": "activatorDiff",  "LABEL": "Activator Diff",  "TYPE": "float",  "MIN": 0.01, "MAX": 1.0,  "DEFAULT": 0.12},

@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Focus assist. A Sobel edge filter runs on luminance and everything above the threshold is painted in the peak colour, so the part of the shot that lights up is the part in focus. Lower the threshold to catch soft edges across the frame, raise it to show only what is critically sharp.",
     "INPUTS": [
         {"NAME": "Threshold",  "LABEL": "Edge Threshold", "TYPE": "float",
          "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.15},

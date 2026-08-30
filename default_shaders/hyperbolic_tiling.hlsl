@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "generative",
+  "DESCRIPTION": "The hyperbolic plane in the conformal Poincare disc model, tiled by any valid {p, q} Schlaefli symbol with (p-2)(q-2) > 4, so tiles shrink without limit toward the ideal boundary while every angle stays true. Animated Mobius transformations drift the tiling across the plane, cells are two-coloured by parity, and the edges are drawn as geodesics.",
   "INPUTS": [
     { "NAME": "SchlaefliP",  "TYPE": "long",  "VALUES": [3,4,5,6,7,8], "LABELS": ["3","4","5","6","7","8"], "DEFAULT": 5, "LABEL": "p (polygon sides)" },
     { "NAME": "SchlaefliQ",  "TYPE": "long",  "VALUES": [3,4,5,6,7,8], "LABELS": ["3","4","5","6","7","8"], "DEFAULT": 4, "LABEL": "q (polygons/vertex)" },

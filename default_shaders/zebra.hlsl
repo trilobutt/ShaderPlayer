@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Exposure warning stripes. Diagonal yellow stripes cover everything at or above the upper luminance threshold, marking what is about to clip, and blue stripes optionally mark everything at or below the lower threshold. Stripe width is relative to frame height, so the pattern reads the same at any output resolution.",
     "INPUTS": [
         {"NAME": "UpperThreshold", "LABEL": "Highlights Threshold", "TYPE": "float",
          "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.9},

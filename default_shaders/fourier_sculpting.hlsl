@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Frequency-domain sculpting of the picture, done spatially rather than by a real per-pixel FFT: low-pass is a Gaussian blur, high-pass an unsharp residual, band-pass a difference of Gaussians, directional a 1-D blur along a chosen angle, annular a ring DoG, and notch its complement. Show Spectrum swaps the output for a heat map of local high-frequency energy, so you can see what the filter is acting on.",
     "INPUTS": [
         {"NAME": "filterMode",     "LABEL": "Filter Type",   "TYPE": "long",
          "VALUES": [0,1,2,3,4,5], "LABELS": ["Low-pass","High-pass","Band-pass","Directional","Annular","Notch"], "DEFAULT": 0},

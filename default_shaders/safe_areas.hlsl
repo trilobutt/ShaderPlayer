@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Framing guides for delivery. Draws centred action-safe and title-safe rectangles plus an aspect crop box showing what survives a re-crop to another ratio, with title safe then measured inside that crop rather than inside the full frame. Presets cover EBU R95, the legacy SMPTE 4:3 guide, generous live and IMAG margins, and a square social crop. Use it to check nothing load-bearing sits where a broadcaster, a projector edge mask or a vertical re-frame will take it.",
     "INPUTS": [
         {"NAME": "LineColor",   "LABEL": "Line Colour",    "TYPE": "color",
          "DEFAULT": [1.0, 1.0, 1.0, 1.0]},

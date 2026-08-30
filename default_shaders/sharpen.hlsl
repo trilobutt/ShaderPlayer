@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Unsharp mask: a Gaussian blur is subtracted from the image and the high-pass residual added back, with the difference taken in linear light so a shadow edge and an identical highlight edge are weighted the same. Radius picks what size of structure is sharpened, and Threshold leaves local contrast below it alone so film grain and sensor noise are not amplified along with the detail.",
     "INPUTS": [
         {"NAME": "Strength", "LABEL": "Strength", "TYPE": "float",
          "MIN": 0.0, "MAX": 3.0, "DEFAULT": 1.0},

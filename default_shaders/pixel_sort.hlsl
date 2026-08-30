@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "video",
+  "DESCRIPTION": "Threshold-based pixel sorting. Any pixel whose luminance falls inside the threshold band is replaced by the brightest in-band pixel further along the sort axis, which drags bright material into long streaks. Run length is noise-modulated and the taps are jittered per pixel, so the streaks read as grain rather than as a repeating staircase. A single-pass approximation, not a true per-run re-ordering.",
   "INPUTS": [
     { "NAME": "SortAxis",     "TYPE": "long",  "VALUES": [0,1], "LABELS": ["Horizontal","Vertical"], "DEFAULT": 0, "LABEL": "Axis" },
     { "NAME": "ThresholdLow", "TYPE": "float", "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.25,"LABEL": "Threshold Low" },

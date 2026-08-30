@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "Saffman-Taylor viscous fingering in a Hele-Shaw cell: a low-viscosity fluid pushed into a high-viscosity one goes unstable at every wavelength below the capillary length, and the interface breaks into fractal tip-splitting fingers. Surface Tension sets that dominant wavelength, Viscosity Ratio how violently the front breaks up, and Geometry chooses radial injection, a linear front, or a branching form.",
     "INPUTS": [
         {"NAME": "viscosityRatio",  "LABEL": "Viscosity Ratio",  "TYPE": "float", "MIN": 0.01, "MAX": 1.0,  "DEFAULT": 0.15},
         {"NAME": "surfaceTension",  "LABEL": "Surface Tension",  "TYPE": "float", "MIN": 0.01, "MAX": 1.0,  "DEFAULT": 0.25},

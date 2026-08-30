@@ -1,5 +1,5 @@
 /*{
-    "DESCRIPTION": "Newton's method fractal for f(z) = z^n - 1, with a selectable colour per convergence basin",
+    "DESCRIPTION": "Newton's method for f(z) = z^n - 1 iterated per pixel and coloured by which of the n roots it converges to, with an explicit colour per basin and an orbit-trap glow along the boundaries. Those boundaries are the Julia set of the Newton map and contain points of every basin at every scale, which is what gives the interlocking petal structure.",
     "SHADER_TYPE": "generative",
     "INPUTS": [
         { "NAME": "RootColour1", "LABEL": "Root 1 Colour",     "TYPE": "color", "DEFAULT": [1.00,0.28,0.24,1.0] },

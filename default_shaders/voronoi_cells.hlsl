@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "generative",
+  "DESCRIPTION": "Animated Voronoi diagram whose seeds each follow their own sinusoidal orbit, so cells continually swap neighbours and their shared boundaries slide. Renders as cell fill coloured by seed, borders alone, or fill with borders composited on top. Colours come from a cosine palette indexed by a per-seed hash, so the set of cell colours is a coherent ramp rather than an arbitrary rainbow.",
   "INPUTS": [
     { "NAME": "CellCount",   "TYPE": "long",  "VALUES": [2,3,4,5,6,8,10,12,16,20], "LABELS": ["2","3","4","5","6","8","10","12","16","20"], "DEFAULT": 8, "LABEL": "Cell Count" },
     { "NAME": "BorderWidth", "TYPE": "float", "MIN": 0.0,  "MAX": 0.04, "DEFAULT": 0.006,         "LABEL": "Border Width" },

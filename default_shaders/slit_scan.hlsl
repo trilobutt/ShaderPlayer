@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Slit-scan streak photography approximated with no frame history: each column or row is displaced to a different phase of a temporal ramp, so the axis perpendicular to the scan direction reads as time while the scan axis stays spatial and anything moving in the shot stretches into a smear. Slice Width sets how wide the clean, undisplaced band is.",
     "INPUTS": [
         {"NAME": "sliceWidth",         "LABEL": "Slice Width",    "TYPE": "float", "MIN": 0.001, "MAX": 0.1,  "DEFAULT": 0.01},
         {"NAME": "slicePos",           "LABEL": "Slice Position", "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.5},

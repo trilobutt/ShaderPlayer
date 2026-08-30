@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "N point charges on a slowly rotating ring, with the E-field and the potential solved analytically at every pixel. Display selects the visualisation: LIC streamline field lines, force-vector arrow glyphs, an |E| heat map, or equipotential contours. Charges accumulate as inverse distance rather than as discs, so each core stays hot and its halo falls off across the whole frame.",
     "INPUTS": [
         {"NAME": "chargeCount",   "LABEL": "Charges",       "TYPE": "long",
          "VALUES": [2,3,4,5,6,8], "LABELS": ["2","3","4","5","6","8"], "DEFAULT": 4},

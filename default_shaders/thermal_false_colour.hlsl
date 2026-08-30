@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "video",
+  "DESCRIPTION": "Maps video luminance to a thermographic palette over an adjustable level window, with optional isothermal contour lines. Inferno is the default because it is the only one of the four that is monotone in lightness, so brighter genuinely means hotter; Ironbow is the traditional thermal-camera ramp, Turbo a rainbow with no lightness reversals in it, and Greyscale the monochrome medical look.",
   "INPUTS": [
     { "NAME": "PalettePreset",   "TYPE": "long",  "VALUES": [0,1,2,3], "LABELS": ["Inferno","Ironbow","Turbo","Greyscale"], "DEFAULT": 0, "LABEL": "Palette" },
     { "NAME": "LevelLow",        "TYPE": "float", "MIN": 0.0, "MAX": 0.9, "DEFAULT": 0.0,"LABEL": "Level Low" },

@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "Conway's Life, B3/S23, with no buffer to hold the board: the generation seed comes from the clock and three rule steps are unrolled per pixel, so the grid reseeds every 1/updateHz seconds and visibly evolves. Cells are drawn as rounded anti-aliased tiles coloured by how many of the four sampled stages they survived, each carrying an inverse-square afterglow from the previous generation.",
     "INPUTS": [
         {"NAME": "cellSz",         "LABEL": "Cell Size (px)", "TYPE": "float", "MIN": 2.0,  "MAX": 24.0, "DEFAULT": 8.0},
         {"NAME": "updateHz",       "LABEL": "Update Rate Hz", "TYPE": "float", "MIN": 0.1,  "MAX": 8.0,  "DEFAULT": 2.0},

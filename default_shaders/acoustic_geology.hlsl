@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "audio",
+  "DESCRIPTION": "Audio laid down as rock: every frame deposits a new sedimentary bed and the whole core scrolls upward like a drill sample being pulled out of the ground. Bass thickens the strata and folds them into anticlines, mid frequencies add fine pale laminae, and beat transients past the fault threshold tear the layers into offset blocks.",
   "INPUTS": [
     { "NAME": "ScrollSpeed",  "TYPE": "float", "MIN": 0.0, "MAX": 1.0,  "DEFAULT": 0.12, "LABEL": "Scroll Speed" },
     { "NAME": "FoldStrength", "TYPE": "float", "MIN": 0.0, "MAX": 0.3,  "DEFAULT": 0.08, "LABEL": "Fold Strength" },

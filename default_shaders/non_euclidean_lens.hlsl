@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Warps live video through a non-Euclidean metric. Spherical (k > 0) is a stereographic conformal sphere projection, compressing objects toward an antipodal boundary and inverting them past it; hyperbolic (k < 0) stretches the edges exponentially, the Escher Circle Limit applied to footage; toroidal identifies opposite edges with a twist for a flat torus wrap. The optical centre drifts along a great-circle geodesic.",
     "INPUTS": [
         {"NAME": "curvatureAmt",    "LABEL": "Curvature",     "TYPE": "float",  "MIN": -2.0, "MAX": 2.0,   "DEFAULT": 0.5},
         {"NAME": "driftSpeed",      "LABEL": "Drift Speed",   "TYPE": "float",  "MIN": 0.0,  "MAX": 2.0,   "DEFAULT": 0.2},

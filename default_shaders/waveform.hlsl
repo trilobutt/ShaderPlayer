@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Luma waveform monitor: horizontal position across the frame on the X axis against luminance from 0 to 100 IRE up, reconstructed by sampling many rows per output column, with a graticule every 10 IRE. Read exposure, contrast and black level straight off the trace, and check it clears 0 and 100 IRE to confirm nothing is crushed or clipped. Show RGB overlays the three channel waveforms in place of the white luma trace.",
     "INPUTS": [
         {"NAME": "NumSamples", "LABEL": "Sample Rows",  "TYPE": "float",
          "MIN": 32.0, "MAX": 256.0, "DEFAULT": 128.0, "STEP": 1.0},

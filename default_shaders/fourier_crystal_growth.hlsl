@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "audio",
+    "DESCRIPTION": "Crystals nucleating at seed points and growing outward under enforced N-fold symmetry: polar coordinates are folded into one sector of 2 pi / N and mirrored before the lattice distance field is built, so the whole frame reads as a single crystallographic habit. Bass drives the growth radius, mid frequencies stretch the lattice spacing as though under acoustic load, and Displace Noise adds phason-like vertex jitter for a quasi-crystal look.",
     "INPUTS": [
         {"NAME": "bassLevel",       "LABEL": "Bass",           "TYPE": "audio",  "BAND": "bass"},
         {"NAME": "midLevel",        "LABEL": "Mid",            "TYPE": "audio",  "BAND": "mid"},

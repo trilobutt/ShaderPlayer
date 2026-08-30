@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "audio",
+  "DESCRIPTION": "A video treatment that punches on the low end: bass expands the frame radially from the centre, fans red and blue apart along the same radial line, and marches outward from each pixel accumulating highlight energy, so a hard hit reads as light spilling off the picture rather than the frame going flat white. Beat transients flash the image toward the chosen colour and open the vignette.",
   "INPUTS": [
     { "NAME": "PulseBass",     "TYPE": "audio", "BAND": "bass",  "LABEL": "Bass" },
     { "NAME": "PulseBeat",     "TYPE": "audio", "BAND": "beat",  "LABEL": "Beat" },

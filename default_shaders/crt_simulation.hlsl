@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "video",
+  "DESCRIPTION": "Composite CRT emulation: barrel tube curvature, a shadow, slot or Trinitron phosphor mask, scanlines locked to a fixed line count rather than to output resolution, phosphor bloom, defocus, and two kinds of colour misregistration (horizontal gun misconvergence and radial lens dispersion). Everything downstream of the video fetch runs in linear light, so the bloom adds like emitted light instead of clipping.",
   "INPUTS": [
     { "NAME": "Curvature",           "TYPE": "point2d", "MIN": 0.0, "MAX": 1.0, "DEFAULT": [0.5, 0.5], "LABEL": "Curvature H/V" },
     { "NAME": "Vignette",            "TYPE": "float", "MIN": 0.0,  "MAX": 1.0,  "DEFAULT": 0.5,   "LABEL": "Vignette" },

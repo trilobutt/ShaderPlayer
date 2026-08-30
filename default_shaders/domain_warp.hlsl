@@ -1,5 +1,5 @@
 /*{
-    "DESCRIPTION": "Fractal domain warping (Inigo Quilez fbm style) applied to video, with optional chromatic aberration",
+    "DESCRIPTION": "Fractal domain warping over the video in the Inigo Quilez fbm style: the sampling coordinate is displaced by a noise vector field, optionally one that has itself already been warped, so the picture flows and curdles while keeping its own colours. Chroma Split fans red and blue apart along the warp direction.",
     "INPUTS": [
         { "NAME": "WarpStrength", "LABEL": "Warp Strength",  "TYPE": "float", "DEFAULT": 0.12, "MIN": 0.0, "MAX": 0.5,  "STEP": 0.005 },
         { "NAME": "WarpLayers",   "LABEL": "Warp Layers",    "TYPE": "long",  "VALUES": [1,2,3], "LABELS": ["1","2","3"], "DEFAULT": 2 },

@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "audio",
+    "DESCRIPTION": "The spectrum rendered as landscape. FFT bins become terrain height across a stack of depth layers drawn far to near, with haze between them and a directional light raking the ridges. Bass raises the whole range, treble sharpens the fine relief on the upper slopes, and peaks past the eruption threshold vent glowing plumes in the eruption colour.",
     "INPUTS": [
         {"NAME": "bassLevel",        "LABEL": "Bass",            "TYPE": "audio",  "BAND": "bass"},
         {"NAME": "highLevel",        "LABEL": "Treble",          "TYPE": "audio",  "BAND": "high"},

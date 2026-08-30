@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "The classic demoscene plasma: several plane and radial sinusoids summed at two octaves into a scalar field, which indexes a cyclic three-stop colour ramp evaluated in linear light and tonemapped, so the stops stay recognisable while highlights roll off instead of clipping per channel. Mid frequencies drive the wave speed, bass swells the spatial scale and beats punch the contrast.",
     "INPUTS": [
         { "NAME": "ColourA",     "LABEL": "Colour A",     "TYPE": "color", "DEFAULT": [1.0, 0.25, 0.35, 1.0] },
         { "NAME": "ColourB",     "LABEL": "Colour B",     "TYPE": "color", "DEFAULT": [0.2, 0.85, 1.0,  1.0] },

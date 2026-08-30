@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "generative",
+  "DESCRIPTION": "Turing instability patterns approximated by multi-scale difference of Gaussians over an animated Perlin field rather than by a true Gray-Scott integration. Feed Rate and Kill Rate select morphology the way they do in the real system: maze and labyrinth around F 0.02 / k 0.05, stripes near 0.04 / 0.06, spots and coral near 0.06 / 0.062, scattered dots beyond that. Four named colour ramps, eased between linear-light stops.",
   "INPUTS": [
     { "NAME": "FeedRate",    "TYPE": "float", "MIN": 0.01, "MAX": 0.1,  "DEFAULT": 0.055, "LABEL": "Feed Rate (F)" },
     { "NAME": "KillRate",    "TYPE": "float", "MIN": 0.04, "MAX": 0.07, "DEFAULT": 0.062, "LABEL": "Kill Rate (k)" },

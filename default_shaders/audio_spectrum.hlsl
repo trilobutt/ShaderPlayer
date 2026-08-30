@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "audio",
+  "DESCRIPTION": "Segmented spectrum analyser bars driven by the 256-bin FFT texture, optionally mirrored about the centre and on a logarithmic frequency axis. Each bar carries a slow peak cap taken from its spectral neighbourhood plus a soft inverse-distance bloom above it; bass lifts the background wash and beats flash the bars white. The background and bar opacities let video through underneath when a Video Blend mode is active.",
   "INPUTS": [
     { "NAME": "BarBass",     "TYPE": "audio", "BAND": "bass",  "LABEL": "Bass" },
     { "NAME": "BarBeat",     "TYPE": "audio", "BAND": "beat",  "LABEL": "Beat" },

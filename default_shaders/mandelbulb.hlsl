@@ -1,5 +1,5 @@
 /*{
-    "DESCRIPTION": "Ray-marched 3D Mandelbulb fractal with orbit-trap colouring and ambient occlusion",
+    "DESCRIPTION": "Ray-marched 3D Mandelbulb, lit rather than tinted: a distance-field normal, one key light with soft shadows marched through the same estimator, four-tap ambient occlusion and a Fresnel rim. Every march step deposits energy inversely with its distance to the surface, so rays that graze the bulb without hitting it build a real halo around the silhouette and light the gaps between lobes. Bulb Power sets how many lobes the surface folds into.",
     "SHADER_TYPE": "generative",
     "INPUTS": [
         { "NAME": "BulbPower",   "LABEL": "Bulb Power",    "TYPE": "float", "DEFAULT": 8.0, "MIN": 2.0,  "MAX": 16.0, "STEP": 0.1 },

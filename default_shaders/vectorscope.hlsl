@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Chrominance scope. The frame is sampled on a grid and plotted as CbCr, blue to yellow across and red to cyan up, with neutral grey at the centre and maximum saturation at the outer circle; each plotted point takes the average colour of the video samples that landed there, so the trace annotates itself. Judge white balance by how far the cloud sits off centre, overall saturation by its extent, and skin tone by whether faces fall along the marked line. The 75% colour-bar primaries are marked as targets.",
     "INPUTS": [
         {"NAME": "GridSize",   "LABEL": "Sample Grid",  "TYPE": "float",
          "MIN": 8.0, "MAX": 32.0, "DEFAULT": 16.0, "STEP": 1.0},

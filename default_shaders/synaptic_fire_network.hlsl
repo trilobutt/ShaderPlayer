@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "audio",
+    "DESCRIPTION": "A firing neural network drawn as nodes and axons. Nodes are placed by a deterministic hash and wired to their k nearest neighbours in a ring topology approximating Watts-Strogatz. Each node fires at its own spontaneous rate and additionally whenever audio RMS crosses the firing threshold, sending an action potential that travels the axon over the propagation delay before the node falls refractory.",
     "INPUTS": [
         {"NAME": "ampLevel",         "LABEL": "Amplitude",      "TYPE": "audio",  "BAND": "rms"},
         {"NAME": "AxonColour",       "LABEL": "Axon Colour",    "TYPE": "color",  "DEFAULT": [0.2,0.7,0.3,1.0]},

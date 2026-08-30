@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Lateral chromatic dispersion: the image is resampled at a slightly different scale per wavelength, so colour fringing is nil at the optical centre and grows toward the corners. Quality sets how many wavelengths are integrated, from a hard three-way R/G/B split with three visible ghost edges to a continuous spectral fringe.",
     "INPUTS": [
         {"NAME": "Strength", "LABEL": "Strength", "TYPE": "float",
          "MIN": 0.0, "MAX": 0.1, "DEFAULT": 0.015},

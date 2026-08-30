@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Monochrome conversion with a choice of weighting. Linear Y linearises first and takes Rec.709 luminance, which is photometrically correct: a saturated blue and the grey of matching brightness land on the same value. Luma Y' uses Rec.601 coefficients on the gamma-encoded signal, wrong as physics but the look broadcast monochrome actually had. Contrast is a gamma about middle grey and Tint multiplies the result in linear light.",
     "INPUTS": [
         {"NAME": "Blend",  "LABEL": "Blend",  "TYPE": "float",
          "MIN": 0.0, "MAX": 1.0, "DEFAULT": 1.0},

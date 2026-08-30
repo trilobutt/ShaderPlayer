@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "The transport network of Physarum polycephalum, built from a Voronoi ridge distance field: trail tubes are drawn along the boundaries between cells seeded at food sources, with sensor and rotation angles perturbing the metric to give the branching curvature real slime mould shows. Brightness pulses travel outward from each node, matching the chemoattractant pulsing reported by Tero et al.",
     "INPUTS": [
         {"NAME": "sensorAngleDeg", "LABEL": "Sensor Angle",  "TYPE": "float", "MIN": 5.0,  "MAX": 90.0, "DEFAULT": 30.0},
         {"NAME": "sensorDist",     "LABEL": "Sensor Dist",   "TYPE": "float", "MIN": 0.01, "MAX": 0.2,  "DEFAULT": 0.06},

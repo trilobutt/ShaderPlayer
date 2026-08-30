@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "audio",
+    "DESCRIPTION": "Incompressible fluid advection driven by the spectrum. A divergence-free velocity field is taken as the curl of the noise texture and the sampling coordinate traced backward through it, so dye swirls in closed vortices instead of smearing. Bass injects the large coarse vortices, treble the fine viscous streaks, and Colour Vorticity switches the palette between local rotation and dye density.",
     "INPUTS": [
         {"NAME": "bassLevel",          "LABEL": "Bass",            "TYPE": "audio", "BAND": "bass"},
         {"NAME": "trebleLevel",        "LABEL": "Treble",          "TYPE": "audio", "BAND": "high"},

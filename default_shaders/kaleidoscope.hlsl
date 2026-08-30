@@ -1,5 +1,5 @@
 /*{
-    "DESCRIPTION": "Polar mirror kaleidoscope: folds the video frame into N rotationally symmetric segments",
+    "DESCRIPTION": "Polar mirror kaleidoscope: folds the video frame into N rotationally symmetric segments about a movable centre, mirroring at every seam so the image stays continuous across it, with the whole arrangement optionally rotating.",
     "SHADER_TYPE": "video",
     "INPUTS": [
         { "NAME": "Segments",   "LABEL": "Segments",       "TYPE": "long",    "VALUES": [2,3,4,5,6,7,8,9,10,12,16,20,24], "LABELS": ["2","3","4","5","6","7","8","9","10","12","16","20","24"], "DEFAULT": 6 },

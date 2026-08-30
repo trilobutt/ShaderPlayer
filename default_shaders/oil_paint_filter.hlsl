@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Generalised Kuwahara filter. Each pixel takes a weighted mean of overlapping neighbourhood sectors, weighted against each sector's own variance, so a pixel near an edge is filled from whichever side of that edge is flatter and the edge itself stays sharp while flat areas turn into brushstrokes. Edge Selectivity is the exponent on that weighting, running from a plain box blur to the classic blocky hard-minimum Kuwahara; Detail Scales blends several radii for a coarse-over-fine paint build.",
     "INPUTS": [
         {"NAME": "smoothRadius",  "LABEL": "Radius",          "TYPE": "float", "MIN": 1.0, "MAX": 16.0, "DEFAULT": 6.0},
         {"NAME": "orientSigma",   "LABEL": "Edge Selectivity","TYPE": "float", "MIN": 0.1, "MAX": 4.0,  "DEFAULT": 1.5},

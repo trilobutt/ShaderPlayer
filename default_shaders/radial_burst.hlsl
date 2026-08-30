@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "audio",
+  "DESCRIPTION": "FFT bins mapped onto polar coordinates with N-fold rotational symmetry, so the spectrum reads as a rotating mandala. Bass expands the luminous core, treble extends the fine radial spokes and adds an inner ring, and the spokes fade out toward the centre where one pixel spans the whole sector.",
   "INPUTS": [
     { "NAME": "SymmetryOrder", "TYPE": "long",
       "VALUES": [1,2,3,4,5,6,8,12], "LABELS": ["1","2","3","4","5","6","8","12"],

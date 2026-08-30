@@ -1,5 +1,6 @@
 /*{
   "SHADER_TYPE": "generative",
+  "DESCRIPTION": "Chaotic ODE trajectories integrated per pixel and accumulated as density: each pixel is seeded at the phase-space position matching its screen coordinate, the trajectory is marched forward, and the pixel collects emission from every trajectory point passing near it. Lorenz (the xz butterfly), Rossler, Thomas and Halvorsen are selectable. Accumulation is unbounded, so a dense fold blows past white and blooms under the tonemap, and colour adds where a fast branch crosses a slow one.",
   "INPUTS": [
     { "NAME": "AttractorType", "TYPE": "long",
       "VALUES": [0,1,2,3], "LABELS": ["Lorenz","Rössler","Thomas","Halvorsen"], "DEFAULT": 0, "LABEL": "Attractor" },

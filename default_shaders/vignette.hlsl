@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "video",
+    "DESCRIPTION": "Darkens or tints the frame toward its edges. Intensity is how far the corners are pushed toward the vignette colour, Softness the width of the falloff from a hard ring just inside the corners to a gradient starting at the centre, and Roundness runs from a shape that follows the frame to a circle in screen space, which is what a real lens gives and which leaves the left and right edges darker than the top and bottom.",
     "INPUTS": [
         {"NAME": "Intensity",      "LABEL": "Intensity",   "TYPE": "float",
          "MIN": 0.0, "MAX": 1.0, "DEFAULT": 0.5},

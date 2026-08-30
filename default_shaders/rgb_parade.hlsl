@@ -1,4 +1,5 @@
 /*{
+    "DESCRIPTION": "Broadcast RGB parade: three waveform monitors side by side, one per channel, each plotting that channel's distribution across the full frame width against 0 to 100 IRE with a graticule every 10 IRE. Read it for colour cast and channel imbalance, visible as the three traces sitting at different heights over the same part of the picture, and for per-channel clipping at the rails.",
     "INPUTS": [
         {"NAME": "NumSamples", "LABEL": "Sample Rows", "TYPE": "float",
          "MIN": 32.0, "MAX": 256.0, "DEFAULT": 128.0, "STEP": 1.0},

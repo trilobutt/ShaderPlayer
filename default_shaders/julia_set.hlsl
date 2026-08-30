@@ -1,5 +1,5 @@
 /*{
-    "DESCRIPTION": "Julia set fractal with smooth colouring and optional animation of the C parameter",
+    "DESCRIPTION": "Escape-time Julia set for z squared plus c, smoothly coloured and framed so the fractal is always the subject. The iteration carries the orbit derivative alongside z, which gives a Koebe distance estimate to the set and drives a filament glow that stays a genuine pixel wide at any zoom. C Real and C Imaginary pick which set is drawn; Zoom Centre picks what a deep zoom converges on.",
     "SHADER_TYPE": "generative",
     "INPUTS": [
         { "NAME": "CX",          "LABEL": "C Real",            "TYPE": "float", "DEFAULT": -0.7269, "MIN": -1.0, "MAX": 0.5,   "STEP": 0.001 },

@@ -1,5 +1,6 @@
 /*{
     "SHADER_TYPE": "generative",
+    "DESCRIPTION": "Diffusion-limited aggregation reproduced in a single pass: multi-scale noise thresholded against a radially decaying sticking probability gives the Hausdorff 1.71 branching morphology of a real DLA cluster, with Drift Angle adding the directional bias of the anisotropic variant. Density above the attachment threshold is carried as unbounded emission, so dense junctions overexpose and bloom while a single-walker tip stays a hairline.",
     "INPUTS": [
         {"NAME": "stickingProb",  "LABEL": "Sticking Prob",  "TYPE": "float", "MIN": 0.1,  "MAX": 1.0,   "DEFAULT": 0.7},
         {"NAME": "driftAngle",    "LABEL": "Drift Angle",    "TYPE": "float", "MIN": 0.0,  "MAX": 360.0, "DEFAULT": 270.0},
