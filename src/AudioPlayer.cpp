@@ -49,10 +49,15 @@ bool AudioPlayer::Initialize() {
         (void)in;
         auto* self = static_cast<AudioPlayer*>(dev->pUserData);
 
-        // Flush request: consumer resets rPos to wPos (SPSC — consumer owns rPos).
+        // Flush request: the consumer owns rPos, so the producer records how far the
+        // buffer had been written when it asked and the consumer skips to exactly there.
+        // Jumping to a freshly-read wPos instead threw away whatever had been submitted
+        // between the Flush() call and this callback, which after a seek is the first
+        // audio of the new position.
         if (self->m_flush.load(std::memory_order_acquire)) {
-            self->m_rPos.store(self->m_wPos.load(std::memory_order_relaxed),
-                               std::memory_order_release);
+            const uint64_t target = self->m_flushTo.load(std::memory_order_acquire);
+            const uint64_t rNow   = self->m_rPos.load(std::memory_order_relaxed);
+            if (rNow < target) self->m_rPos.store(target, std::memory_order_release);
             self->m_flush.store(false, std::memory_order_release);
             std::memset(out, 0, fc * sizeof(float));
             return;
@@ -178,9 +183,10 @@ void AudioPlayer::Submit(const float* mono, int count, int sampleRate) {
 }
 
 void AudioPlayer::Flush() {
-    // Signal the callback thread to discard the ring buffer contents.
-    // The callback resets rPos to wPos on the next invocation, then outputs silence
-    // until Submit() provides new samples from the post-seek decode position.
+    // Everything written up to this point is stale; everything written after it is the
+    // caller's new position and has to survive. Recording the boundary here, rather than
+    // letting the callback read wPos whenever it happens to run, is what separates them.
+    m_flushTo.store(m_wPos.load(std::memory_order_relaxed), std::memory_order_release);
     m_flush.store(true, std::memory_order_release);
 }
 

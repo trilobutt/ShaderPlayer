@@ -44,6 +44,12 @@ static bool EnsureDevicesRegistered() {
     return registered;
 }
 
+// A frame rate is usable only when both halves are positive. av_q2d on 0/1 returns 0,
+// which passes every den != 0 test in sight and then divides into infinity.
+static double RateOrZero(AVRational r) {
+    return (r.num > 0 && r.den > 0) ? av_q2d(r) : 0.0;
+}
+
 VideoDecoder::VideoDecoder() {
     m_frame      = av_frame_alloc();
     m_hwFrame    = av_frame_alloc();
@@ -122,14 +128,13 @@ bool VideoDecoder::Open(const std::string& filepath) {
     m_pixelFormat = m_codecCtx->pix_fmt;
     m_codecName = codec->name;
 
-    // Calculate FPS
-    if (videoStream->avg_frame_rate.den != 0) {
-        m_fps = av_q2d(videoStream->avg_frame_rate);
-    } else if (videoStream->r_frame_rate.den != 0) {
-        m_fps = av_q2d(videoStream->r_frame_rate);
-    } else {
-        m_fps = 25.0;  // Fallback
-    }
+    // Calculate FPS. A rate is usable only when both halves are positive: FFmpeg writes
+    // 0/0 for "unknown", but 0/1 also occurs, and it passes a den != 0 test while giving
+    // 0 fps. That is a divisor downstream (Application's m_frameDuration becomes infinity
+    // and the video never advances a frame) and it is the encoder's time_base.
+    m_fps = RateOrZero(videoStream->avg_frame_rate);
+    if (m_fps <= 0.0) m_fps = RateOrZero(videoStream->r_frame_rate);
+    if (m_fps <= 0.0) m_fps = 25.0;  // Fallback
 
     // Calculate duration
     if (m_formatCtx->duration != AV_NOPTS_VALUE) {
@@ -145,8 +150,7 @@ bool VideoDecoder::Open(const std::string& filepath) {
     // align=1 gives the exact minimum size with no row padding. sws_scale's SIMD
     // routines (SSE/AVX) can overshoot by up to one full SIMD vector on the last row,
     // corrupting the CRT heap guard. 64 bytes of tail padding absorbs that overshoot.
-    int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
-    m_conversionBuffer.resize(bufferSize + 64);
+    if (!AllocateConversionBuffer()) { Close(); return false; }
 
     // Open audio stream (non-fatal — many videos have no audio).
     OpenAudioStream();
@@ -251,12 +255,13 @@ bool VideoDecoder::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
     m_height      = m_codecCtx->height;
     m_pixelFormat = m_codecCtx->pix_fmt;
     m_codecName   = codec->name;
-    m_fps         = (videoStream->avg_frame_rate.den != 0) ? av_q2d(videoStream->avg_frame_rate) : 30.0;
+    m_fps         = RateOrZero(videoStream->avg_frame_rate);
+    if (m_fps <= 0.0) m_fps = RateOrZero(videoStream->r_frame_rate);
+    if (m_fps <= 0.0) m_fps = 30.0;
     m_duration    = 0.0;
     m_frameCount  = 0;
 
-    int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
-    m_conversionBuffer.resize(bufferSize + 64);
+    if (!AllocateConversionBuffer()) { Close(); return false; }
 
     m_isLiveCapture = true;
     return true;
@@ -348,6 +353,17 @@ bool VideoDecoder::DecodeNextFrame(VideoFrame& outFrame) {
             av_packet_unref(m_packet);
         }
     }
+}
+
+bool VideoDecoder::AllocateConversionBuffer() {
+    // A stream that reports no dimensions, or dimensions FFmpeg refuses to size, gives a
+    // negative buffer size here. Resizing a vector with it converts to a vast size_t and
+    // throws length_error out of Open, which nothing catches.
+    if (m_width <= 0 || m_height <= 0) return false;
+    const int bufferSize = av_image_get_buffer_size(m_outputFormat, m_width, m_height, 1);
+    if (bufferSize <= 0) return false;
+    m_conversionBuffer.resize(static_cast<size_t>(bufferSize) + 64);
+    return true;
 }
 
 bool VideoDecoder::ConvertFrame(AVFrame* frame, VideoFrame& outFrame) {
@@ -590,6 +606,13 @@ void VideoDecoder::ReadAudioAhead(int targetSamples) {
 
     m_audioEOFReached = false;
     while (static_cast<int>(m_audioPending.size()) < targetSamples) {
+        // A file whose audio track ends before its video (a trimmed stream, music over a
+        // long tail, an audio codec that decodes to nothing) never satisfies the loop
+        // condition again, so without this cap the read runs to end of file and clones
+        // every remaining video packet into memory. Stopping short only leaves the caller
+        // with less audio than it asked for, which every caller already handles.
+        if (m_videoPktQueue.size() >= kMaxQueuedVideoPackets) break;
+
         int ret = av_read_frame(m_formatCtx, m_packet);
         if (ret < 0) {
             if (ret == AVERROR_EOF)
@@ -600,8 +623,11 @@ void VideoDecoder::ReadAudioAhead(int targetSamples) {
         if (m_packet->stream_index == m_audioStreamIdx) {
             DecodeAudioPacket();  // decodes + unrefs m_packet
         } else if (m_packet->stream_index == m_videoStreamIdx) {
-            // Queue the video packet for DecodeNextFrame to consume later.
-            m_videoPktQueue.push(av_packet_clone(m_packet));
+            // Queue the video packet for DecodeNextFrame to consume later. A null clone
+            // must not be queued: avcodec_send_packet reads null as the flush signal and
+            // would end the stream permanently.
+            if (AVPacket* cloned = av_packet_clone(m_packet))
+                m_videoPktQueue.push(cloned);
             av_packet_unref(m_packet);
         } else {
             av_packet_unref(m_packet);

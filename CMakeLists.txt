@@ -229,7 +229,7 @@ endif()
 FetchContent_Declare(
     miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
-    GIT_TAG        master
+    GIT_TAG        0.11.25
     GIT_SHALLOW    TRUE
 )
 FetchContent_GetProperties(miniaudio)
@@ -240,7 +240,7 @@ endif()
 FetchContent_Declare(
     spout2
     GIT_REPOSITORY https://github.com/leadedge/Spout2.git
-    GIT_TAG        master
+    GIT_TAG        2.007h
     GIT_SHALLOW    TRUE
 )
 # Use EXCLUDE_FROM_ALL / SOURCE_SUBDIR trick: declare a dummy subdir so
@@ -403,6 +403,16 @@ add_custom_command(TARGET ShaderPlayer POST_BUILD
             -P "${CMAKE_SOURCE_DIR}/tools/deploy_qt.cmake"
     COMMENT "Deploying Qt runtime")
 
+# The shipped shader set beside the application, so a fresh clone starts with a populated
+# library. AppConfig::shaderDirectory defaults to the CWD-relative "shaders", and
+# Application::InitializeQt falls back to <exe>/shaders when that does not exist; without
+# this copy neither path exists in a fresh build tree and the library opens empty.
+add_custom_command(TARGET ShaderPlayer POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/default_shaders"
+            "$<TARGET_FILE_DIR:ShaderPlayer>/shaders"
+    COMMENT "Copying default_shaders beside ShaderPlayer")
+
 # ---------------------------------------------------------------------------
 # shaderfx — headless frame runner (console, no Qt, no FFmpeg, no window).
 #
@@ -447,8 +457,8 @@ add_custom_command(TARGET shaderfx POST_BUILD
             "$<TARGET_FILE_DIR:shaderfx>/default_shaders"
     COMMENT "Copying default_shaders beside shaderfx")
 
-# Install
+# Install. `shaders/` is the user's own directory, created at runtime, and config.json is
+# written by the application on first run: neither is in the repository, and installing
+# from them failed the install outright.
 install(TARGETS ShaderPlayer shaderfx RUNTIME DESTINATION bin)
-install(DIRECTORY shaders/ DESTINATION bin/shaders)
 install(DIRECTORY default_shaders/ DESTINATION bin/default_shaders)
-install(FILES config.json DESTINATION bin)

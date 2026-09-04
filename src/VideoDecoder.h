@@ -85,6 +85,7 @@ public:
 private:
     bool InitHardwareDecoder(ID3D11Device* device);
     bool ConvertFrame(AVFrame* frame, VideoFrame& outFrame);
+    bool AllocateConversionBuffer();
     void FlushDecoder();
     void OpenAudioStream();   // Called from Open(); non-fatal if no audio stream
     void CloseAudioStream();
@@ -130,7 +131,10 @@ private:
     std::vector<float> m_recordPending;  // packed stereo float awaiting drain
 
     // Video packet queue — populated by ReadAudioAhead(), consumed by DecodeNextFrame().
-    // Entries are av_packet_clone()'d; caller must av_packet_free() on pop.
+    // Entries are av_packet_clone()'d; caller must av_packet_free() on pop. Capped: the
+    // read-ahead loop terminates on the audio it collects, and a file whose audio ends
+    // early would otherwise queue the entire rest of the video.
+    static constexpr size_t kMaxQueuedVideoPackets = 256;
     std::queue<AVPacket*> m_videoPktQueue;
 
     bool m_audioEOFReached = false;

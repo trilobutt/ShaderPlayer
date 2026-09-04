@@ -33,7 +33,9 @@ public:
     bool IsRecording() const { return m_recording.load(); }
     bool HasAudioStream() const { return m_audioStream != nullptr; }
 
-    // Frame submission (thread-safe)
+    // Frame submission (thread-safe). A frame whose geometry does not match the size the
+    // recording was opened at is counted as dropped and refused: the encoder's source
+    // frame is allocated once and would otherwise be written past.
     bool SubmitFrame(const std::vector<uint8_t>& rgbaData, int width, int height);
 
     // Packed stereo float at the rate passed to StartRecording, as VideoDecoder's

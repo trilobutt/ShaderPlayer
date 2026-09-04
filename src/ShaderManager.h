@@ -35,7 +35,6 @@ public:
     // Presets are appended in the order given, so indices are the caller's to predict.
     void AddPresets(std::vector<ShaderPreset> presets);
     void RemovePreset(int index);
-    void UpdatePreset(int index, const ShaderPreset& preset);
     ShaderPreset* GetPreset(int index);
     const std::vector<ShaderPreset>& GetPresets() const { return m_presets; }
     int GetPresetCount() const { return static_cast<int>(m_presets.size()); }
@@ -52,7 +51,9 @@ public:
 
     // Hot reload
     void EnableFileWatching(bool enable);
-    void CheckForChanges();
+    // True when at least one watched file was reloaded, so the caller can rebuild the
+    // panels bound to the parameter vector that reload replaced.
+    bool CheckForChanges();
 
     // Directory scanning
     void ScanDirectory(const std::string& directory);
@@ -78,9 +79,13 @@ private:
     std::unordered_map<std::string, std::filesystem::file_time_type> m_fileTimestamps;
     std::chrono::steady_clock::time_point m_lastWatchCheck{};
 
+    // outWarning receives a human-readable note when the cbuffer budget forced parameters
+    // to be dropped; callers prepend it to compileError so the library's error tooltip
+    // explains the undeclared identifier that follows.
     static std::vector<ShaderParam> ParseISFParams(const std::string& source,
                                                     bool* outIsGenerative = nullptr,
-                                                    bool* outIsAudio      = nullptr);
+                                                    bool* outIsAudio      = nullptr,
+                                                    std::string* outWarning = nullptr);
     // sourceName appears in the trailing `#line 1 "<name>"` directive, so fxc error
     // line numbers match the shader file on disk instead of the inflated preamble.
     static std::string BuildDefinesPreamble(const std::vector<ShaderParam>& params,

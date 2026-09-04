@@ -30,6 +30,10 @@ public:
     // must already exist), and drives TickOnce() from a zero-interval QTimer.
     bool InitializeQt();
     void Shutdown();
+    // What the unhandled-exception filter is allowed to do. Called from the crash handler
+    // in main.cpp, off the normal Shutdown() path — see the definition for why it does
+    // only this much.
+    void CrashCleanup();
     // ProcessFrame(); RenderFrame(); returns whether the viewport actually presented a
     // frame this tick — WinMain's QTimer uses it to decide its own next interval, since
     // a vsync Present already paces the common case and a zero interval must not be
@@ -59,7 +63,7 @@ public:
     float GetPlaybackTime() const { return m_playbackTime; }
 
     // Shader operations
-    bool CompileCurrentShader(const std::string& source);
+    bool CompileCurrentShader(const std::string& source, bool quiet = false);
     bool SaveCurrentShader(const std::string& source);
     void SaveShaderAsDialog(const std::string& source);
     void ScanFolderDialog();
@@ -177,6 +181,7 @@ private:
     // State
     PlaybackState m_playbackState = PlaybackState::Stopped;
     bool m_exitRequested = false;
+    bool m_shutdownDone = false;
     VideoFrame m_currentFrame;
     
     // Timing

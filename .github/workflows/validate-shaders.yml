@@ -1,0 +1,41 @@
+name: Validate shaders
+
+# The shipped shader set, compiled with the same preamble and the same fxc flags the
+# application uses. Deliberately narrow: a full build would need Qt and the FFmpeg
+# runtime, and this catches the regression that actually happens, which is a shader or a
+# ShaderCommon.hlsli edit that stops compiling.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "default_shaders/**"
+      - "src/ShaderCommon.hlsli"
+      - "tools/validate_shaders.py"
+      - ".github/workflows/validate-shaders.yml"
+  pull_request:
+    paths:
+      - "default_shaders/**"
+      - "src/ShaderCommon.hlsli"
+      - "tools/validate_shaders.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Compile every shipped shader
+        run: python tools/validate_shaders.py

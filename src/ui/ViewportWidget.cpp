@@ -100,10 +100,29 @@ void ViewportWidget::resizeEvent(QResizeEvent* event) {
     const int h = std::max(1, height());
     if (w == m_width && h == m_height) return;
 
+    // Every reference to the back buffer has to be gone before a flip-model resize, and
+    // BlitDisplayToRect deliberately leaves this RTV bound to the immediate context when
+    // it returns (see D3D11Renderer.h). Releasing the ComPtr alone left the pipeline
+    // holding it, so ResizeBuffers failed and, with its HRESULT discarded, the swap chain
+    // kept the old size while the widget reported the new one.
+    ID3D11DeviceContext* context = m_app.GetRenderer().GetContext();
+    if (context) {
+        context->OMSetRenderTargets(0, nullptr, nullptr);
+        context->Flush();
+    }
     m_rtv.Reset();
-    m_swapChain->ResizeBuffers(0, static_cast<UINT>(w), static_cast<UINT>(h),
-                                DXGI_FORMAT_UNKNOWN,
-                                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
+
+    const HRESULT hr = m_swapChain->ResizeBuffers(
+        0, static_cast<UINT>(w), static_cast<UINT>(h), DXGI_FORMAT_UNKNOWN,
+        DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
+    if (FAILED(hr)) {
+        // The old buffers are still valid; leave the recorded size matching them so the
+        // next resize event tries again rather than letterboxing against a size the swap
+        // chain does not have.
+        RebuildRTV();
+        return;
+    }
+
     m_width  = w;
     m_height = h;
     RebuildRTV();

@@ -446,6 +446,11 @@ void LibraryPanel::ShowContextMenu(const QPoint& pos)
             const bool wasActive = (manager.GetActivePresetIndex() == index);
             manager.RemovePreset(index);
             Refresh();
+            // Every removal shifts the vector, so the parameters panel and the keyframe
+            // tracks under it are left holding a ShaderPreset* into a slot that now belongs
+            // to a different preset, or past the end when the active one was last.
+            // Removing a preset that was not the active one used to emit nothing at all.
+            emit PresetsChanged();
             if (wasActive) emit PresetActivated();
         });
     }

@@ -87,6 +87,10 @@ public:
     // showing) — WinMain's timer uses this to pace itself when nothing is presenting.
     bool Tick();
 
+    // Writes the current geometry and dock state into AppConfig. Called by closeEvent and
+    // by Application::RequestExit, which is the route File > Exit takes.
+    void SaveWindowState();
+
     void ShowToast(const QString& msg, int ms = 3000);
 
     PanelVisibility GetVisibility() const;
@@ -122,6 +126,9 @@ public:
     // user configured there rather than a second set held somewhere else.
     void ToggleRecording();
 
+    // Ctrl+N. Prompts for a new shader's name and template, same as Shader > New.
+    void OnNewShader();
+
     // restoreState() from WorkspaceManager, or ArrangeDefaultLayout(). Reached from the
     // Workspace Presets menu and from a workspace preset's own keybinding.
     void LoadWorkspacePreset(int index);
@@ -146,7 +153,6 @@ private:
                          const QString& iconName,
                          const QColor& hue);
 
-    void OnNewShader();
     void OnManageWorkspaces();
     void OnOpenCapture();
 

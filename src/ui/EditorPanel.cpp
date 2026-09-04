@@ -417,7 +417,10 @@ void EditorPanel::Compile()
 {
     m_autoCompile->stop();
 
-    const bool ok = m_app.CompileCurrentShader(Source().toStdString());
+    // Quiet: this fires from the auto-compile timer half a second after the last keystroke
+    // as well as from F5, and a toast on every typing pause (success and failure both) is
+    // noise over a status line that already says the same thing.
+    const bool ok = m_app.CompileCurrentShader(Source().toStdString(), true);
 
     QString error;
     if (const ShaderPreset* preset = m_app.GetShaderManager().GetActivePreset()) {

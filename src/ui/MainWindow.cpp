@@ -452,6 +452,10 @@ void MainWindow::BuildDocks()
                                         QString::fromStdString(preset->compileError));
         }
     });
+    // A removal shifts every preset after it, and ParamsPanel and KeyframeDetail cache a
+    // ShaderPreset* into that vector. Re-seating it is all this needs: the active shader
+    // has not changed, so the editor document is deliberately left alone.
+    connect(m_library, &LibraryPanel::PresetsChanged, this, &MainWindow::RefreshParameters);
 }
 
 void MainWindow::BuildMenus()
@@ -818,7 +822,10 @@ void MainWindow::dropEvent(QDropEvent* event)
         || extension == QLatin1String("ps")) {
         ShaderManager& shaders = m_app.GetShaderManager();
         ShaderPreset preset;
-        if (!shaders.LoadShaderFromFile(utf8, preset)) return;
+        // Metadata only: AddPreset compiles, and LoadShaderFromFile compiled first into a
+        // local whose bytecode was then thrown away. A file that fails to compile is still
+        // added, carrying its error, exactly as a scanned one is.
+        if (!ShaderManager::LoadShaderMetadataFromFile(utf8, preset)) return;
         const int index = shaders.AddPreset(preset);
         shaders.SetActivePreset(index);
         m_app.OnParamChanged();
@@ -829,14 +836,22 @@ void MainWindow::dropEvent(QDropEvent* event)
     }
 }
 
+void MainWindow::SaveWindowState()
+{
+    // Called from closeEvent and from Application::RequestExit. quit() unwinds the event
+    // loop without closing widgets, so File > Exit and the menu's Alt+F4 never reach
+    // closeEvent, and every layout change made in that session was thrown away.
+    AppConfig& cfg = m_app.GetConfig();
+    cfg.windowGeometry = saveGeometry().toBase64().toStdString();
+    cfg.windowState = saveState(kWorkspaceStateVersion).toBase64().toStdString();
+}
+
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     // Application::Shutdown() calls SaveConfig() unconditionally after qApp->exec()
     // returns, and RequestExit()'s quit() is what makes exec() return — so this runs
     // and completes before that save, and the write below reaches disk.
-    AppConfig& cfg = m_app.GetConfig();
-    cfg.windowGeometry = saveGeometry().toBase64().toStdString();
-    cfg.windowState = saveState(kWorkspaceStateVersion).toBase64().toStdString();
+    SaveWindowState();
 
     m_app.RequestExit();
     event->accept();

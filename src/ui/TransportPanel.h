@@ -165,6 +165,7 @@ private:
     void SyncFollowButton();
     void SyncMuteButton();
     void SyncRenderLock();                // greys the transport while a render owns it
+    void SyncResolutionLock();            // freezes the output size while the encoder owns it
     void ApplyPlayButton();               // text and tooltip from m_playing + m_renderLocked
     void SyncResolution();                // combo selection from AppConfig, and the custom pair
 
@@ -212,6 +213,7 @@ private:
     int m_page = -1;
     bool m_playing = false;
     bool m_renderLocked = false;
+    bool m_resolutionLocked = false;
     bool m_hasAudio = false;
     bool m_followEnabled = false;
     QString m_clockText;

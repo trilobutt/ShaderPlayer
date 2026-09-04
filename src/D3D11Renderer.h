@@ -73,8 +73,10 @@ public:
     void SetShaderResolution(float width, float height);
     void SetCustomUniforms(const float* data, size_t floatCount);
 
-    // Noise texture — generates Perlin (R) + Voronoi (G) into a tiling texture
-    // bound globally as t1 / s1 for all pixel shaders.
+    // Noise texture — generates Perlin (R) + Voronoi (G) into a tiling texture bound
+    // globally as t1 / s1 for all pixel shaders. Genuinely periodic: `scale` is rounded
+    // to a whole lattice period, which is what lets the WRAP sampler at s1 wrap without
+    // a seam.
     bool UpdateNoiseTexture(float scale, int texSize);
 
     // The two halves of UpdateNoiseTexture, split so the CPU half can run off the GUI

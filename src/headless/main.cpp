@@ -97,6 +97,29 @@ bool ParseSize(const std::string& s, int& w, int& h) {
     return w > 0 && h > 0;
 }
 
+// std::stof and std::atoi are the wrong tools for an argument: one throws out of main on a
+// typo, the other reports 0 for both "0" and "banana". ParseSize and ParseFloatList
+// already guard themselves; these give the scalar arguments the same treatment.
+bool ParseFloatArg(const std::string& s, float& out) {
+    try {
+        size_t used = 0;
+        const float v = std::stof(s, &used);
+        if (used != s.size()) return false;
+        out = v;
+        return true;
+    } catch (...) { return false; }
+}
+
+bool ParseIntArg(const std::string& s, int& out) {
+    try {
+        size_t used = 0;
+        const int v = std::stoi(s, &used);
+        if (used != s.size()) return false;
+        out = v;
+        return true;
+    } catch (...) { return false; }
+}
+
 std::vector<float> ParseFloatList(const std::string& s) {
     std::vector<float> out;
     std::stringstream ss(s);
@@ -249,6 +272,7 @@ bool LoadKeyframes(const std::string& path, ShaderPreset& preset, std::string& e
 
         KeyframeTimeline tl;
         tl.enabled = true;
+        try {
         for (const auto& k : spec["keys"]) {
             Keyframe kf;
             kf.time = k.value("t", 0.0f);
@@ -267,6 +291,10 @@ bool LoadKeyframes(const std::string& path, ShaderPreset& preset, std::string& e
                 kf.handles.inY  = k["handles"][3].get<float>();
             }
             tl.AddKeyframe(kf);
+        }
+        } catch (const std::exception& e) {
+            err = "keyframes: '" + it.key() + "': " + e.what();
+            return false;
         }
         target->timeline = std::move(tl);
     }
@@ -315,16 +343,42 @@ int main(int argc, char** argv) {
             else if (v == "rgba")  channels = 4;
             else return Fail("--pix wants rgb24 or rgba");
         }
-        else if (a == "--frames")      { frameCount = std::atoi(need(i, "--frames").c_str()); ++i; }
-        else if (a == "--fps")         { fps        = std::stof(need(i, "--fps"));            ++i; }
-        else if (a == "--start")       { startTime  = std::stof(need(i, "--start"));          ++i; }
-        else if (a == "--noise-scale") { noiseScale = std::stof(need(i, "--noise-scale"));    ++i; }
-        else if (a == "--noise-size")  { noiseSize  = std::atoi(need(i, "--noise-size").c_str()); ++i; }
+        else if (a == "--frames") {
+            const std::string v = need(i, "--frames"); ++i;
+            if (!ParseIntArg(v, frameCount) || frameCount < 0)
+                return Fail("--frames wants a non-negative whole number");
+        }
+        else if (a == "--fps") {
+            const std::string v = need(i, "--fps"); ++i;
+            if (!ParseFloatArg(v, fps) || !(fps > 0.0f))
+                return Fail("--fps wants a positive number");
+        }
+        else if (a == "--start") {
+            const std::string v = need(i, "--start"); ++i;
+            if (!ParseFloatArg(v, startTime)) return Fail("--start wants a number in seconds");
+        }
+        else if (a == "--noise-scale") {
+            const std::string v = need(i, "--noise-scale"); ++i;
+            if (!ParseFloatArg(v, noiseScale) || noiseScale < 1.0f || noiseScale > 32.0f)
+                return Fail("--noise-scale wants a number from 1 to 32");
+        }
+        else if (a == "--noise-size") {
+            const std::string v = need(i, "--noise-size"); ++i;
+            if (!ParseIntArg(v, noiseSize) || noiseSize < 64 || noiseSize > 4096)
+                return Fail("--noise-size wants a number from 64 to 4096");
+        }
         else if (a == "--blend") {
             const std::string v = need(i, "--blend"); ++i;
             const size_t c = v.find(':');
-            blendMode   = std::atoi(v.substr(0, c).c_str());
-            blendAmount = (c == std::string::npos) ? 1.0f : std::stof(v.substr(c + 1));
+            if (!ParseIntArg(v.substr(0, c), blendMode) || blendMode < 0 || blendMode > 10)
+                return Fail("--blend wants MODE:AMOUNT with MODE from 0 to 10");
+            if (c != std::string::npos) {
+                if (!ParseFloatArg(v.substr(c + 1), blendAmount) ||
+                    blendAmount < 0.0f || blendAmount > 1.0f)
+                    return Fail("--blend wants an AMOUNT from 0 to 1");
+            } else {
+                blendAmount = 1.0f;
+            }
         }
         else if (a == "--audio") {
             const std::string v = need(i, "--audio"); ++i;
@@ -335,7 +389,9 @@ int main(int argc, char** argv) {
                 const size_t eq = tok.find('=');
                 if (eq == std::string::npos) return Fail("--audio wants key=value pairs");
                 const std::string k = tok.substr(0, eq);
-                const float val = std::stof(tok.substr(eq + 1));
+                float val = 0.0f;
+                if (!ParseFloatArg(tok.substr(eq + 1), val))
+                    return Fail("--audio: '" + tok + "' is not a number");
                 if      (k == "rms")      audio.rms   = val;
                 else if (k == "bass")     audio.bass  = val;
                 else if (k == "mid")      audio.mid   = val;

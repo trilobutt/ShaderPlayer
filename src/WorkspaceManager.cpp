@@ -35,7 +35,7 @@ WorkspaceManager::WorkspaceManager() {
     defaultPreset.panels.editor      = true;
     defaultPreset.panels.library     = true;
     defaultPreset.panels.transport   = true;
-    defaultPreset.panels.recording   = true;
+    defaultPreset.panels.recording   = false;
     defaultPreset.panels.noise       = false;
     defaultPreset.panels.spout       = false;
     defaultPreset.panels.audio       = false;
@@ -64,9 +64,11 @@ void WorkspaceManager::ScanDirectory() {
     if (m_presets.size() > 1)
         m_presets.erase(m_presets.begin() + 1, m_presets.end());
 
-    if (!std::filesystem::exists(m_layoutsDir)) return;
+    std::error_code ec;
+    if (!std::filesystem::is_directory(m_layoutsDir, ec) || ec) return;
 
-    for (const auto& entry : std::filesystem::directory_iterator(m_layoutsDir)) {
+    for (const auto& entry : std::filesystem::directory_iterator(m_layoutsDir, ec)) {
+        if (ec) break;
         if (!entry.is_regular_file()) continue;
         if (entry.path().extension() != ".ini") continue;
 
@@ -94,14 +96,15 @@ int WorkspaceManager::SavePreset(const std::string& name, const QByteArray& stat
 
     // Ensure unique filepath: append suffix if the sanitised name collides on disk
     // but is not already tracked in our vector (different name, same sanitised form).
-    if (std::filesystem::exists(preset.filepath)) {
+    std::error_code ec;
+    if (std::filesystem::exists(preset.filepath, ec)) {
         bool inVector = false;
         for (int i = 1; i < static_cast<int>(m_presets.size()); ++i) {
             if (m_presets[i].filepath == preset.filepath) { inVector = true; break; }
         }
         if (!inVector) {
             int suffix = 2;
-            while (std::filesystem::exists(preset.filepath)) {
+            while (std::filesystem::exists(preset.filepath, ec)) {
                 filename = SanitiseName(name) + "_" + std::to_string(suffix++) + ".ini";
                 preset.filepath = (std::filesystem::path(m_layoutsDir) / filename).string();
             }
@@ -155,7 +158,10 @@ bool WorkspaceManager::LoadPreset(int index, QByteArray& state, PanelVisibility&
 
 void WorkspaceManager::DeletePreset(int index) {
     if (index <= 0 || index >= static_cast<int>(m_presets.size())) return;
-    std::filesystem::remove(m_presets[index].filepath);
+    // A read-only or locked file must not throw out of a menu handler; the preset leaves
+    // the list either way, and a stale .ini is picked up again by the next scan.
+    std::error_code ec;
+    std::filesystem::remove(m_presets[index].filepath, ec);
     m_presets.erase(m_presets.begin() + index);
 }
 

@@ -100,9 +100,21 @@ void VideoOutputWindow::RebuildRTV() {
 }
 
 void VideoOutputWindow::ResizeSwapChain(int width, int height) {
+    // Same contract as ViewportWidget: BlitDisplayTo leaves this RTV bound, and a
+    // flip-model resize refuses while the pipeline still references the back buffer.
+    if (m_context) {
+        m_context->OMSetRenderTargets(0, nullptr, nullptr);
+        m_context->Flush();
+    }
     m_rtv.Reset();
-    m_swapChain->ResizeBuffers(0, static_cast<UINT>(width), static_cast<UINT>(height),
-                               DXGI_FORMAT_UNKNOWN, 0);
+
+    if (FAILED(m_swapChain->ResizeBuffers(0, static_cast<UINT>(width),
+                                          static_cast<UINT>(height),
+                                          DXGI_FORMAT_UNKNOWN, 0))) {
+        RebuildRTV();
+        return;
+    }
+
     m_width  = width;
     m_height = height;
     RebuildRTV();

@@ -236,23 +236,44 @@ bool VideoEncoder::InitEncoder(const RecordingSettings& settings, int width, int
         return false;
     }
 
+    // Every failure below has to undo the whole of InitEncoder: by this point the format
+    // context has its header written and its file open, and returning false while leaving
+    // them alive leaks both, with the next StartRecording overwriting the pointer and
+    // losing the handle.
+    const auto abandon = [this]() {
+        if (m_frame)    av_frame_free(&m_frame);
+        if (m_srcFrame) av_frame_free(&m_srcFrame);
+        if (m_swsCtx) { sws_freeContext(m_swsCtx); m_swsCtx = nullptr; }
+        FreeAudioResources();
+        m_audioStream = nullptr;
+        if (m_formatCtx) {
+            if (!(m_formatCtx->oformat->flags & AVFMT_NOFILE))
+                avio_closep(&m_formatCtx->pb);
+            avformat_free_context(m_formatCtx);
+            m_formatCtx = nullptr;
+        }
+        if (m_codecCtx) avcodec_free_context(&m_codecCtx);
+        m_videoStream = nullptr;
+        return false;
+    };
+
     // Destination (encoder) frame
     m_frame = av_frame_alloc();
-    if (!m_frame) return false;
+    if (!m_frame) return abandon();
     m_frame->format = m_codecCtx->pix_fmt;
     m_frame->width  = width;
     m_frame->height = height;
-    if (av_frame_get_buffer(m_frame, 0) < 0) return false;
+    if (av_frame_get_buffer(m_frame, 0) < 0) return abandon();
 
     // Source (RGBA) frame — FFmpeg allocates this with AV_INPUT_BUFFER_PADDING_SIZE
     // extra bytes per plane, guaranteeing swscale's SIMD/chroma read-ahead can't
     // stray into an unmapped page regardless of dimension alignment.
     m_srcFrame = av_frame_alloc();
-    if (!m_srcFrame) return false;
+    if (!m_srcFrame) return abandon();
     m_srcFrame->format = AV_PIX_FMT_RGBA;
     m_srcFrame->width  = width;
     m_srcFrame->height = height;
-    if (av_frame_get_buffer(m_srcFrame, 32) < 0) return false;
+    if (av_frame_get_buffer(m_srcFrame, 32) < 0) return abandon();
 
     // Create swscale context for RGBA -> YUV conversion
     m_swsCtx = sws_getContext(
@@ -260,8 +281,9 @@ bool VideoEncoder::InitEncoder(const RecordingSettings& settings, int width, int
         width, height, m_codecCtx->pix_fmt,
         SWS_BILINEAR, nullptr, nullptr, nullptr
     );
+    if (!m_swsCtx) return abandon();
 
-    return m_swsCtx != nullptr;
+    return true;
 }
 
 void VideoEncoder::InitAudioStream(AVCodecID codecId, int sampleRate) {
@@ -352,6 +374,18 @@ void VideoEncoder::InitAudioStream(AVCodecID codecId, int sampleRate) {
 
 bool VideoEncoder::SubmitFrame(const std::vector<uint8_t>& rgbaData, int width, int height) {
     if (!m_recording.load()) return false;
+
+    // m_srcFrame was allocated once at m_width x m_height, and EncoderThread copies
+    // width*4 bytes per row for `height` rows into it with no bound of its own. A larger
+    // frame therefore writes past that buffer: raising the generative output resolution
+    // mid-recording is enough to do it, and so is a non-zero recordingDefaults.width in
+    // config.json. Refuse the frame instead. m_width and m_height are written by
+    // InitEncoder before m_recording goes true and never again, so reading them here
+    // needs no lock.
+    if (width != m_width || height != m_height) {
+        m_framesDropped++;
+        return false;
+    }
 
     std::unique_lock<std::mutex> lock(m_queueMutex);
 

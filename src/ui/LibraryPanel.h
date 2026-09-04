@@ -45,6 +45,12 @@ signals:
     // took the active preset with it).
     void PresetActivated();
 
+    // The preset vector itself changed shape, so anything holding a ShaderPreset* into it
+    // is now pointing at a different preset or past the end. Distinct from PresetActivated
+    // because the active shader has not changed and the editor document must not be
+    // reloaded from it: the user may have uncompiled edits in the buffer.
+    void PresetsChanged();
+
 private:
     static constexpr int kGroupCount = 3;   // audio, generative, video effects
 

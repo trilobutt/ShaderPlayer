@@ -70,7 +70,8 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
     for (const auto& p : preset.params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
-    preset.params = ParseISFParams(preset.source, &preset.isGenerative, &preset.isAudio);
+    std::string paramWarning;
+    preset.params = ParseISFParams(preset.source, &preset.isGenerative, &preset.isAudio, &paramWarning);
 
     for (auto& p : preset.params) {
         auto it = saved.find(p.name);
@@ -96,7 +97,7 @@ bool ShaderManager::CompilePreset(ShaderPreset& preset) {
         return true;
     } else {
         preset.isValid = false;
-        preset.compileError = error;
+        preset.compileError = paramWarning + error;
         return false;
     }
 }
@@ -108,9 +109,11 @@ bool ShaderManager::RecompilePreset(int index) {
     for (const auto& p : m_presets[index].params)
         saved[p.name] = {p.values[0], p.values[1], p.values[2], p.values[3]};
 
+    std::string paramWarning;
     m_presets[index].params = ParseISFParams(m_presets[index].source,
                                               &m_presets[index].isGenerative,
-                                              &m_presets[index].isAudio);
+                                              &m_presets[index].isAudio,
+                                              &paramWarning);
 
     for (auto& p : m_presets[index].params) {
         auto it = saved.find(p.name);
@@ -134,7 +137,7 @@ bool ShaderManager::RecompilePreset(int index) {
         return true;
     } else {
         m_presets[index].isValid = false;
-        m_presets[index].compileError = error;
+        m_presets[index].compileError = paramWarning + error;
         return false;
     }
 }
@@ -151,10 +154,12 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
         // calls LoadShaderMetadataFromFile (which parses ISF without compiling) then
         // patches param.values from savedParamValues before calling AddPreset.
         // Skipping re-parse here preserves those restored user values.
+        std::string paramWarning;
         if (m_presets.back().params.empty()) {
             m_presets.back().params = ParseISFParams(m_presets.back().source,
                                                       &m_presets.back().isGenerative,
-                                                      &m_presets.back().isAudio);
+                                                      &m_presets.back().isAudio,
+                                                      &paramWarning);
         }
         std::string preamble = BuildDefinesPreamble(m_presets.back().params, m_presets.back().name);
         if (m_renderer.CompilePixelShader(preamble + m_presets.back().source, shader, error)) {
@@ -162,15 +167,17 @@ int ShaderManager::AddPreset(const ShaderPreset& preset) {
             m_presets.back().compileError.clear();
         } else {
             m_presets.back().isValid = false;
-            m_presets.back().compileError = error;
+            m_presets.back().compileError = paramWarning + error;
         }
     }
     
     m_compiledShaders.push_back(shader);
 
     // Track file timestamp for hot reload
-    if (!preset.filepath.empty() && std::filesystem::exists(preset.filepath)) {
-        m_fileTimestamps[preset.filepath] = std::filesystem::last_write_time(preset.filepath);
+    if (!preset.filepath.empty()) {
+        std::error_code ec;
+        const auto stamp = std::filesystem::last_write_time(preset.filepath, ec);
+        if (!ec) m_fileTimestamps[preset.filepath] = stamp;
     }
 
     return static_cast<int>(m_presets.size()) - 1;
@@ -183,8 +190,11 @@ void ShaderManager::AddPresets(std::vector<ShaderPreset> presets) {
     // arriving with params already filled has had user values patched into them, and a
     // re-parse would throw those away.
     for (auto& p : presets) {
-        if (p.params.empty() && !p.source.empty())
-            p.params = ParseISFParams(p.source, &p.isGenerative, &p.isAudio);
+        if (p.params.empty() && !p.source.empty()) {
+            std::string paramWarning;
+            p.params = ParseISFParams(p.source, &p.isGenerative, &p.isAudio, &paramWarning);
+            p.compileError += paramWarning;
+        }
     }
 
     // Compile across all cores. D3D11 devices are free-threaded, and D3DCompile in
@@ -237,7 +247,7 @@ void ShaderManager::AddPresets(std::vector<ShaderPreset> presets) {
         if (results[i].compiled) {
             p.isValid = results[i].ok;
             if (results[i].ok) p.compileError.clear();
-            else               p.compileError = results[i].error;
+            else               p.compileError += results[i].error;
         }
 
         if (!p.filepath.empty()) {
@@ -270,43 +280,6 @@ void ShaderManager::RemovePreset(int index) {
         SetPassthrough();
     } else if (m_activeIndex > index) {
         --m_activeIndex;
-    }
-}
-
-void ShaderManager::UpdatePreset(int index, const ShaderPreset& preset) {
-    if (index < 0 || index >= static_cast<int>(m_presets.size())) return;
-
-    std::string oldPath = m_presets[index].filepath;
-    m_presets[index] = preset;
-
-    // Recompile
-    ComPtr<ID3D11PixelShader> shader;
-    std::string error;
-    
-    m_presets[index].params = ParseISFParams(preset.source,
-                                              &m_presets[index].isGenerative,
-                                              &m_presets[index].isAudio);
-    std::string preamble = BuildDefinesPreamble(m_presets[index].params, m_presets[index].name);
-
-    if (m_renderer.CompilePixelShader(preamble + preset.source, shader, error)) {
-        m_presets[index].isValid = true;
-        m_presets[index].compileError.clear();
-        m_compiledShaders[index] = shader;
-        // Same as RecompilePreset: hot-reloading the active shader must reach the GPU
-        // now, otherwise the renderer's held reference keeps the pre-edit version live.
-        if (index == m_activeIndex)
-            m_renderer.SetActivePixelShader(shader.Get());
-    } else {
-        m_presets[index].isValid = false;
-        m_presets[index].compileError = error;
-    }
-
-    // Update file tracking
-    if (oldPath != preset.filepath) {
-        m_fileTimestamps.erase(oldPath);
-    }
-    if (!preset.filepath.empty() && std::filesystem::exists(preset.filepath)) {
-        m_fileTimestamps[preset.filepath] = std::filesystem::last_write_time(preset.filepath);
     }
 }
 
@@ -349,43 +322,59 @@ void ShaderManager::EnableFileWatching(bool enable) {
     m_fileWatchingEnabled = enable;
 }
 
-void ShaderManager::CheckForChanges() {
-    if (!m_fileWatchingEnabled) return;
+bool ShaderManager::CheckForChanges() {
+    if (!m_fileWatchingEnabled) return false;
     SP_PROFILE(kCheckForChanges);
 
     // Two filesystem calls per preset, and the preset list runs to 45. Polling that at
     // frame rate costs ~1.7 ms of every frame to answer a question no editor can change
     // the answer to more than twice a second.
     const auto now = std::chrono::steady_clock::now();
-    if (now - m_lastWatchCheck < std::chrono::milliseconds(500)) return;
+    if (now - m_lastWatchCheck < std::chrono::milliseconds(500)) return false;
     m_lastWatchCheck = now;
 
+    bool reloaded = false;
+
     for (int i = 0; i < static_cast<int>(m_presets.size()); ++i) {
-        const std::string& filepath = m_presets[i].filepath;
+        const std::string filepath = m_presets[i].filepath;
         if (filepath.empty()) continue;
 
-        if (!std::filesystem::exists(filepath)) continue;
+        // One call, and a non-throwing one. The exists()-then-stat() pair it replaces was
+        // a TOCTOU against the very operation being watched: an editor that saves by
+        // writing a temp file and replacing leaves a window where the path passes exists()
+        // and the stat then throws filesystem_error out of the render loop.
+        std::error_code ec;
+        const auto currentTime = std::filesystem::last_write_time(filepath, ec);
+        if (ec) continue;
 
-        auto currentTime = std::filesystem::last_write_time(filepath);
         auto it = m_fileTimestamps.find(filepath);
-        
-        if (it != m_fileTimestamps.end() && currentTime != it->second) {
-            // File changed, reload
-            ShaderPreset updated;
-            if (LoadShaderFromFile(filepath, updated)) {
-                // Preserve keybinding; note: param values reset to ISF defaults
-                // on hot-reload (UpdatePreset is a wholesale replace by design).
-                updated.shortcutKey = m_presets[i].shortcutKey;
-                updated.shortcutModifiers = m_presets[i].shortcutModifiers;
-                UpdatePreset(i, updated);
-            }
-            m_fileTimestamps[filepath] = currentTime;
-        }
+        if (it == m_fileTimestamps.end() || currentTime == it->second) continue;
+
+        // Read the file into the preset already in the vector and recompile it in place.
+        // RecompilePreset carries parameter values across by name and leaves the timeline,
+        // blend mode, blend amount and keybinding alone, which is what an F5 recompile of
+        // the same file does. The wholesale replace this supersedes threw all of that away
+        // on every external save.
+        std::ifstream file(filepath);
+        if (!file.is_open()) continue;
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        m_presets[i].source = buffer.str();
+
+        RecompilePreset(i);
+        m_fileTimestamps[filepath] = currentTime;
+        reloaded = true;
     }
+
+    return reloaded;
 }
 
 void ShaderManager::ScanDirectory(const std::string& directory) {
-    if (!std::filesystem::exists(directory)) return;
+    // error_code throughout: a directory that disappears between the check and the walk,
+    // or one on a network share that refuses the listing, would otherwise throw
+    // filesystem_error out of a UI handler with nothing to catch it.
+    std::error_code ec;
+    if (!std::filesystem::is_directory(directory, ec) || ec) return;
 
     // Read and parse every new file first, then hand the whole batch to AddPresets, which
     // compiles them across all cores. Reading here rather than through LoadShaderFromFile
@@ -393,7 +382,8 @@ void ShaderManager::ScanDirectory(const std::string& directory) {
     // bytecode AddPreset then threw away and recompiled.
     std::vector<ShaderPreset> batch;
 
-    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
+        if (ec) break;
         if (!entry.is_regular_file()) continue;
 
         std::string ext = entry.path().extension().string();
@@ -471,7 +461,8 @@ float4 main(PS_INPUT input) : SV_TARGET {
 
 std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source,
                                                          bool* outIsGenerative,
-                                                         bool* outIsAudio) {
+                                                         bool* outIsAudio,
+                                                         std::string* outWarning) {
     // Find the ISF block: /*{ ... }*/
     const std::string openTag  = "/*{";
     const std::string closeTag = "}*/";
@@ -566,9 +557,13 @@ std::vector<ShaderParam> ShaderManager::ParseISFParams(const std::string& source
             else if (p.type == ShaderParamType::Color) size = 4;
 
             if (offset + size > kCustomFloats) {
-                // Budget exhausted; remaining INPUTS are silently dropped.
-                // D3DCompile will report 'undeclared identifier' for any shader code
-                // that references a dropped param name.
+                // Budget exhausted. This parameter and every one after it is dropped, and
+                // the shader then fails on an undeclared identifier with nothing on screen
+                // explaining why unless the reason travels with it.
+                if (outWarning && outWarning->empty()) {
+                    *outWarning = "custom[] budget exhausted at '" + p.name +
+                                  "': this parameter and those after it were dropped.\n";
+                }
                 break;
             }
 

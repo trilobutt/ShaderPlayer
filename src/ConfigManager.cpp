@@ -1,5 +1,6 @@
 #include "ConfigManager.h"
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 
 namespace SP {
@@ -206,6 +207,42 @@ void from_json(const nlohmann::json& j, AppConfig& c) {
 
 ConfigManager::ConfigManager() = default;
 
+namespace {
+
+// config.json is external input. Every field below is a divisor, an allocation size, or a
+// value the UI cannot produce, so a hand-edited or corrupt file is bounded here rather
+// than at the point it would crash. The ranges match the controls that write them: the
+// noise panel's sizes, the transport's 7680x4320 spin boxes, the recording panel's
+// bitrate spinner.
+void SanitiseConfig(AppConfig& c) {
+    c.noise.textureSize = std::clamp(c.noise.textureSize, 64, 4096);
+    c.noise.scale       = std::clamp(c.noise.scale, 1.0f, 32.0f);
+
+    c.generativeWidth  = std::clamp(c.generativeWidth,  1, 7680);
+    c.generativeHeight = std::clamp(c.generativeHeight, 1, 4320);
+
+    // 0 means "match the source" and is the only value the panel writes. Anything else out
+    // of range would size the encoder against frames that arrive at another size.
+    if (c.recordingDefaults.width  != 0)
+        c.recordingDefaults.width  = std::clamp(c.recordingDefaults.width,  16, 7680);
+    if (c.recordingDefaults.height != 0)
+        c.recordingDefaults.height = std::clamp(c.recordingDefaults.height, 16, 4320);
+    c.recordingDefaults.fps     = std::clamp(c.recordingDefaults.fps, 0, 1000);
+    c.recordingDefaults.bitrate = std::clamp(c.recordingDefaults.bitrate, 100000, 2000000000);
+    c.recordingDefaults.proresProfile = std::clamp(c.recordingDefaults.proresProfile, 0, 3);
+    if (c.recordingDefaults.codec != "libx264" && c.recordingDefaults.codec != "prores_ks")
+        c.recordingDefaults.codec = "libx264";
+
+    c.audioVolume           = std::clamp(c.audioVolume, 0.0f, 1.0f);
+    c.audio.beatSensitivity = std::clamp(c.audio.beatSensitivity, 0.1f, 10.0f);
+    c.audio.beatDecay       = std::clamp(c.audio.beatDecay, 0.0f, 0.999f);
+    c.audio.smoothing       = std::clamp(c.audio.smoothing, 0.0f, 0.999f);
+
+    c.autoCompileDelayMs = std::clamp(c.autoCompileDelayMs, 0, 60000);
+}
+
+}  // namespace
+
 bool ConfigManager::Load(const std::string& filepath) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
@@ -216,6 +253,7 @@ bool ConfigManager::Load(const std::string& filepath) {
         nlohmann::json j;
         file >> j;
         m_config = j.get<AppConfig>();
+        SanitiseConfig(m_config);
         return true;
     } catch (const std::exception&) {
         return false;
@@ -223,18 +261,37 @@ bool ConfigManager::Load(const std::string& filepath) {
 }
 
 bool ConfigManager::Save(const std::string& filepath) const {
-    std::ofstream file(filepath);
-    if (!file.is_open()) {
+    // Written to a temp file and renamed into place. std::ofstream truncates on open, so a
+    // direct write that then throws, runs out of disk, or is interrupted by the crash
+    // handler's Shutdown() leaves an empty config: every saved parameter value, keyframe
+    // timeline, keybinding and dock layout gone. A rename is atomic, so a reader sees
+    // either the previous file or the complete new one.
+    const std::string tempPath = filepath + ".tmp";
+
+    try {
+        const std::string payload = nlohmann::json(m_config).dump(2);
+        std::ofstream file(tempPath, std::ios::binary | std::ios::trunc);
+        if (!file.is_open()) return false;
+        file << payload;
+        file.close();
+        if (!file) {
+            std::error_code ec;
+            std::filesystem::remove(tempPath, ec);
+            return false;
+        }
+    } catch (const std::exception&) {
+        std::error_code ec;
+        std::filesystem::remove(tempPath, ec);
         return false;
     }
 
-    try {
-        nlohmann::json j = m_config;
-        file << j.dump(2);
-        return true;
-    } catch (const std::exception&) {
+    std::error_code ec;
+    std::filesystem::rename(tempPath, filepath, ec);
+    if (ec) {
+        std::filesystem::remove(tempPath, ec);
         return false;
     }
+    return true;
 }
 
 std::string ConfigManager::GetDefaultConfigPath() {

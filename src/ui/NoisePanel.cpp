@@ -29,12 +29,14 @@ namespace SP {
 
 namespace {
 
-// Scale, as the outgoing panel offered it: 1.0 to 32.0 shown to one decimal. QSlider is
-// integral, so the slider runs in tenths and the readout divides back down.
-constexpr int kScaleTicksPerUnit = 10;
+// Scale is the texture's tiling period in whole lattice cells (see
+// D3D11Renderer::GenerateNoisePixels), so the slider runs in whole units. It used to run
+// in tenths and show one decimal, which offered a 4.3 the generator rounds to 4: the
+// readout named a frequency the texture did not have.
+constexpr int kScaleTicksPerUnit = 1;
 constexpr int kScaleMinTicks     = 1 * kScaleTicksPerUnit;
 constexpr int kScaleMaxTicks     = 32 * kScaleTicksPerUnit;
-constexpr int kScalePageTicks    = 10;   // one whole unit per PageUp
+constexpr int kScalePageTicks    = 4;    // four periods per PageUp
 
 // The three sizes the outgoing panel offered, in the order it offered them.
 constexpr int kSizes[] = { 256, 512, 1024 };
@@ -233,9 +235,16 @@ void NoiseTile::paintEvent(QPaintEvent* event)
 
     // Caption: the channel in the region hue, the field it carries beside it. The hue is
     // present at rest, so the tile identifies itself without a pointer on it.
+    //
+    // Aligned to the image, not to the widget. ImageRect centres a square inside whatever
+    // the layout hands this tile, and in the bottom dock that is half the window's width
+    // for a tile a couple of hundred pixels across: a caption spanning the widget put
+    // "R Perlin" against the far left edge with its tile most of a screen away, which
+    // reads as two unrelated things rather than as a labelled preview.
     const QFontMetrics metrics(font());
-    const QRect caption(rect().x(), rect().bottom() - metrics.height() + 1,
-                        rect().width(), metrics.height());
+    const QRect image = area.isEmpty() ? rect() : area;
+    const QRect caption(image.x(), rect().bottom() - metrics.height() + 1,
+                        image.width(), metrics.height());
 
     QFont bold = font();
     bold.setBold(true);
@@ -350,12 +359,12 @@ void NoisePanel::BuildControls(QVBoxLayout* layout)
     // release, because each one destroys and recreates up to a megapixel of IMMUTABLE
     // texture. A keyboard or wheel change is not a drag and commits at once.
     connect(m_scale, &QSlider::valueChanged, this, [this](int ticks) {
-        m_scaleValue->setText(QString::number(ScaleFromTicks(ticks), 'f', 1));
+        m_scaleValue->setText(QString::number(ScaleFromTicks(ticks), 'f', 0));
         if (!m_scale->isSliderDown()) Regenerate();
     });
     connect(m_scale, &QSlider::sliderReleased, this, &NoisePanel::Regenerate);
 
-    m_scaleValue->setText(QString::number(ScaleFromTicks(m_scale->value()), 'f', 1));
+    m_scaleValue->setText(QString::number(ScaleFromTicks(m_scale->value()), 'f', 0));
     layout->addWidget(scaleRow);
 
     // ---- texture size ----------------------------------------------------------------
@@ -427,7 +436,7 @@ void NoisePanel::SyncReadout()
     const NoiseSettings& noise = m_app.GetConfig().noise;
     m_bound->setText(tr("Bound: %1 x %1 at scale %2.")
                          .arg(noise.textureSize)
-                         .arg(QString::number(noise.scale, 'f', 1)));
+                         .arg(QString::number(noise.scale, 'f', 0)));
 }
 
 }  // namespace SP

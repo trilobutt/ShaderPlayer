@@ -210,7 +210,7 @@ SamplerState videoSampler : register(s0);
 cbuffer Constants : register(b0) {
     float time;
     float padding1;
-    float2 resolution;      // output resolution
+    float2 resolution;      // viewport client size, not the surface being filled
     float2 videoResolution; // source video resolution
     float2 padding2;
     float4 custom[8];
@@ -254,11 +254,16 @@ Texture2D noiseTexture : register(t1);
 SamplerState noiseSampler : register(s1);   // WRAP addressing
 ```
 
-- `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called via `Application::RegenerateNoise()`. It is `GenerateNoisePixels` + `UploadNoisePixels`, which are also callable separately: the CPU half is `static`, needs no device, and splits its rows across all cores (at the 1024² default it is ~200 ms on one core and ~15 ms on sixteen), so startup runs it on a worker while the device comes up. `ClampNoiseSize` gives a caller that generates ahead of time the same clamped size to pass back into the upload.
+- `D3D11Renderer::UpdateNoiseTexture(scale, texSize)` — regenerates (`D3D11_USAGE_IMMUTABLE`, fully recreated each call). Called via `Application::RegenerateNoise()`. It is `GenerateNoisePixels` + `UploadNoisePixels`, which are also callable separately: the CPU half is `static`, needs no device, and splits its rows across all cores (at 1024² it is ~200 ms on one core and ~15 ms on sixteen; the shipped default is 512²), so startup runs it on a worker while the device comes up. `ClampNoiseSize` gives a caller that generates ahead of time the same clamped size to pass back into the upload.
 - UI: View → Noise Generator (`src/ui/NoisePanel`). The panel's preview is a genuine GPU
   readback of the bound texture (`GetNoiseSRV()` → `CopyResource` into a STAGING clone →
   map), not a CPU re-simulation, so it cannot drift from what the shaders sample.
 - Config: `AppConfig::noise` (`NoiseSettings { float scale; int textureSize; }`), persisted as `noiseScale`/`noiseTextureSize` in `config.json`.
+- **`scale` is the tiling period in whole lattice cells, not a free-running frequency.**
+  `GenerateNoisePixels` rounds it to an integer and both generators wrap their lattice
+  coordinates into `[0, period)`, which is what makes the texture genuinely periodic under
+  the WRAP sampler at `s1`. The Noise panel's slider therefore runs in whole units; a
+  fractional scale would name a frequency the texture does not have.
 - Noise UV pattern for per-cell variation: `cellCoord / 64.0 + cellUv * (freq / 64.0)` — unique slice per cell, `freq` scales zoom.
 
 ### Sampling and Screen-Space Derivatives
@@ -413,6 +418,13 @@ KSyntaxHighlighting DLL, and the Qt runtime (`tools/deploy_qt.cmake` wrapping
 
 Configuration is stored in `config.json` next to the executable (created on first run if missing).
 
+`ConfigManager::Save` writes a temp file and renames it into place, so an interrupted or
+throwing write leaves the previous file intact rather than the empty one `ofstream`'s
+truncate-on-open would leave. `Load` runs every field through `SanitiseConfig`: the file is
+external input, and a hand-edited `noiseTextureSize` is an allocation size while a non-zero
+`recordingDefaults.width` sizes the encoder against frames that will never match it. Add a
+bound there for any new field that divides, allocates, or names a codec.
+
 ### Recording Settings
 
 `AppConfig::recordingDefaults` is the store's home: `MainWindow` seeds `m_recordingSettings`
@@ -563,11 +575,33 @@ Live capture and generative recording are unchanged: both stay real-time and are
 hand. `IsOfflineRender()` is false for both, which is what `RecordingPanel` reads to decide
 whether its button says "Render Video to File" or "Start Recording".
 
+**The output resolution is frozen while the encoder is open.** `VideoEncoder::InitEncoder`
+allocates `m_srcFrame` once at the size the recording started at, and `EncoderThread` copies
+`width * 4` bytes per row into it with no bound of its own, so a larger frame writes past the
+buffer. `SubmitFrame` refuses any frame whose geometry does not match and counts it dropped;
+`TransportPanel::SyncResolutionLock` is the other half, greying the Output combo and the
+custom width and height while `IsRecording()`, with a tooltip saying why. Re-enabling either
+control during a recording reopens a heap overflow reachable from the transport.
+
 ### Shader Compile Path
 
 - **Editor compile (F5)**: `Application::CompileCurrentShader(source)` → updates `preset->source`, calls `ShaderManager::RecompilePreset(activeIndex)` (index-based, reliable), then `SetActivePreset(activeIndex)` to push new `m_activePS` to the renderer. Effect appears on the next `BeginFrame`.
 - **Initial load / scan**: read and parse first, compile as a batch. `LoadShaderMetadataFromFile` (static, touches no manager state, safe on a worker thread) fills source + ISF params, then `AddPresets(batch)` compiles the lot across all cores. Both the startup restore in `InitializeQt` and `ScanDirectory` go this way.
 - **No active preset + compile**: `AddPreset` creates the preset, `SetActivePreset` applies it.
+- **Hot reload**: `CheckForChanges()` reads the changed file into the preset already in the
+  vector and calls `RecompilePreset(i)`, so an external save keeps parameter values, the
+  keyframe timeline, the blend mode and amount, and the keybinding, exactly as F5 does. It
+  returns `true` when anything reloaded, and `Application::ProcessFrame` owes
+  `RefreshParameters()` on that: the reload replaces the parameter vector the panel's rows
+  are built against.
+
+**Anything caching a `ShaderPreset*` must be re-seated whenever the preset vector changes
+shape**, not only when the active preset changes. `ParamsPanel` and every `KeyframeDetail`
+under it hold such a pointer and dereference it on the next frame, so a `push_back` that
+reallocates or an `erase` that shifts leaves them pointing at a different preset or past the
+end. `RefreshParameters()` is the re-seat, and it is owed by every site that adds or removes
+a preset: `ScanFolderDialog`, `LibraryPanel`'s Remove action (via its `PresetsChanged`
+signal), and hot reload.
 
 ### Shader Bytecode Cache
 
@@ -730,6 +764,13 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - Recording framerate matches playback framerate (no arbitrary output rates)
 - A recorded file carries the source's audio only when the source is a file. Live capture
   opens a dshow video device with no audio pin, so a webcam recording is silent.
+- A generative recording declares 60 fps when `RecordingSettings::fps` is 0 (there is no
+  source to match) while submitting one frame per render tick, and the tick runs at the
+  display's rate. Above 60 Hz the file therefore carries more frames than its declared rate
+  accounts for and plays back longer than the capture took. Set an explicit fps in the
+  Recording panel to avoid it. Unmeasured: the mechanism is plain in
+  `Application::StartRecording`, but no recording has been timed against a clock to
+  quantify the drift.
 
 ## Qt Notes
 
@@ -969,7 +1010,7 @@ Parameters packed into `custom` (`float4 custom[8]` = 32 floats, `kCustomFloats`
 
 Parameters exceeding 32 floats total are skipped with a warning appended to `ShaderPreset::compileError`.
 
-**Diagnosing missing shaders**: if a shader doesn't appear after Scan Folder, it has a compile error. Check `ShaderPreset::compileError` in the debugger — no UI currently surfaces this field.
+**Diagnosing missing shaders**: if a shader doesn't appear after Scan Folder, it has a compile error. `LibraryPanel` gives a failed preset an error dot carrying `ShaderPreset::compileError` as its tooltip, and a preset dropped for cbuffer budget carries the naming warning ahead of the fxc error, so the undeclared identifier that follows has its reason attached.
 
 **Dead parameters**: a parameter declared in the ISF block but never read by the shader body still parses, still packs a `custom[]` slot and still renders a working widget that does nothing. Neither the compiler nor `validate_shaders.py` can see it, because the `#define` alias is simply unused. When editing a shader, check every declared name appears in the body.
 

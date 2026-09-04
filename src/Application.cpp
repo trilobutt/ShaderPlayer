@@ -123,7 +123,12 @@ bool Application::InitializeQt() {
     // globally as t1/s1 for all shaders).
     {
         const auto& cfg = m_configManager.GetConfig();
-        m_renderer.UploadNoisePixels(noiseJob.get(), noiseSize);
+        // A bad_alloc from the noise buffer is a texture the shaders can do without, not a
+        // reason to terminate the process before the window has been built.
+        try {
+            m_renderer.UploadNoisePixels(noiseJob.get(), noiseSize);
+        } catch (const std::exception&) {
+        }
         m_renderer.SetGenerativeResolution(cfg.generativeWidth, cfg.generativeHeight);
     }
 
@@ -158,7 +163,11 @@ bool Application::InitializeQt() {
     // Compile the presets the worker read and parsed above. AddPresets compiles the whole
     // batch across all cores, which is what keeps a cold bytecode cache from serialising
     // ~45 D3DCompile calls into several seconds.
-    m_shaderManager->AddPresets(presetJob.get());
+    try {
+        m_shaderManager->AddPresets(presetJob.get());
+    } catch (const std::exception&) {
+        // A preset that could not be read is one the directory scan below picks up again.
+    }
 
     // Resolve the shader directory: if the configured path doesn't exist, try the
     // directory next to the executable (works for dev builds run from build/Release/).
@@ -206,6 +215,12 @@ bool Application::InitializeQt() {
 }
 
 void Application::Shutdown() {
+    // Idempotent: the crash filter calls this and so does the destructor, and everything
+    // below is written to run once. Without the guard the second pass reached SaveConfig
+    // with m_shaderManager already reset.
+    if (m_shutdownDone) return;
+    m_shutdownDone = true;
+
     StopRecording();
     SaveConfig();
 
@@ -223,79 +238,100 @@ void Application::Shutdown() {
     m_decoder.Close();
 }
 
+// What the unhandled-exception filter is allowed to do. Releasing the Spout sender takes
+// it out of every receiver's list immediately, which is the one piece of state that
+// outlives this process. Nothing else: a crashed process must not be writing config.json
+// or tearing down a Qt widget tree.
+void Application::CrashCleanup() {
+    m_spoutOutput.Shutdown();
+}
+
 void Application::HandleKeyboardShortcuts(UINT vkCode) {
     bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
 
-    // Global shortcuts
-    switch (vkCode) {
-    case VK_SPACE:
-        TogglePlayback();
-        return;
-    case VK_ESCAPE:
-        m_shaderManager->SetPassthrough();
-        // The library and parameters panels are retained widgets, so a preset change
-        // made from outside them has to be pushed; the Shader menu's Reset to
-        // Passthrough item does exactly this.
-        if (m_mainWindow) {
-            m_mainWindow->RefreshLibrary();
-            m_mainWindow->RefreshParameters();
+    // The exact set held, not a subset test. Every binding comparison below is against
+    // this: the old form only checked that each *required* modifier was down, so a preset
+    // bound to plain P also fired on Ctrl+P and Shift+P, shadowing anything bound to
+    // those, and FindBindingConflict called both free.
+    const int mods = (ctrl ? MOD_CONTROL : 0) | (shift ? MOD_SHIFT : 0) | (alt ? MOD_ALT : 0);
+
+    // Global shortcuts. Each block is gated on the exact modifier set it wants and falls
+    // through to the binding search otherwise, rather than returning unconditionally.
+    if (mods == 0) {
+        switch (vkCode) {
+        case VK_SPACE:
+            TogglePlayback();
+            return;
+        case VK_ESCAPE:
+            m_shaderManager->SetPassthrough();
+            // The library and parameters panels are retained widgets, so a preset change
+            // made from outside them has to be pushed; the Shader menu's Reset to
+            // Passthrough item does exactly this.
+            if (m_mainWindow) {
+                m_mainWindow->RefreshLibrary();
+                m_mainWindow->RefreshParameters();
+            }
+            return;
+        case VK_F1:
+            if (m_mainWindow) m_mainWindow->ToggleEditorDock();
+            return;
+        case VK_F2:
+            if (m_mainWindow) m_mainWindow->ToggleLibraryDock();
+            return;
+        case VK_F3:
+            if (m_mainWindow) m_mainWindow->ToggleTransportDock();
+            return;
+        case VK_F4:
+            if (m_mainWindow) m_mainWindow->ToggleRecordingDock();
+            return;
+        case VK_F5:
+            // Through the window, not straight into CompileCurrentShader: the editor owns
+            // the document being compiled and shows the result in its own status line.
+            if (m_mainWindow) m_mainWindow->CompileShader();
+            return;
+        case VK_F6:
+            if (m_mainWindow) m_mainWindow->ShowKeybindingsReference();
+            return;
+        case VK_F7:
+            ToggleVideoOutputWindow();
+            return;
+        case VK_F8:
+            if (m_mainWindow) m_mainWindow->ToggleSpoutDock();
+            return;
+        case VK_F9:
+            // Through the panel, which owns the RecordingSettings the user configured. Calling
+            // StartRecording from here with a fresh struct wrote to a hardcoded output.mp4 and
+            // ignored every field in the dock.
+            if (m_mainWindow) m_mainWindow->ToggleRecording();
+            return;
         }
-        return;
-    case VK_F1:
-        if (m_mainWindow) m_mainWindow->ToggleEditorDock();
-        return;
-    case VK_F2:
-        if (m_mainWindow) m_mainWindow->ToggleLibraryDock();
-        return;
-    case VK_F3:
-        if (m_mainWindow) m_mainWindow->ToggleTransportDock();
-        return;
-    case VK_F4:
-        if (m_mainWindow) m_mainWindow->ToggleRecordingDock();
-        return;
-    case VK_F5:
-        // Through the window, not straight into CompileCurrentShader: the editor owns
-        // the document being compiled and shows the result in its own status line.
-        if (m_mainWindow) m_mainWindow->CompileShader();
-        return;
-    case VK_F6:
-        if (m_mainWindow) m_mainWindow->ShowKeybindingsReference();
-        return;
-    case VK_F7:
-        ToggleVideoOutputWindow();
-        return;
-    case VK_F8:
-        if (m_mainWindow) m_mainWindow->ToggleSpoutDock();
-        return;
-    case VK_F9:
-        // Through the panel, which owns the RecordingSettings the user configured. Calling
-        // StartRecording from here with a fresh struct wrote to a hardcoded output.mp4 and
-        // ignored every field in the dock.
-        if (m_mainWindow) m_mainWindow->ToggleRecording();
-        return;
-    case 'O':
-        if (ctrl) {
+    }
+
+    if (mods == MOD_CONTROL) {
+        switch (vkCode) {
+        case 'O':
             OpenVideoDialog();
+            return;
+        case 'S':
+            if (m_mainWindow) {
+                SaveCurrentShader(m_mainWindow->EditorSource().toStdString());
+            }
+            return;
+        case 'N':
+            // Reserved by FindBindingConflict and shown in the F6 reference, but the
+            // dispatch had no case for it, so Ctrl+N was unbindable and did nothing.
+            if (m_mainWindow) m_mainWindow->OnNewShader();
+            return;
         }
-        return;
-    case 'S':
-        if (ctrl && m_mainWindow) {
-            SaveCurrentShader(m_mainWindow->EditorSource().toStdString());
-        }
-        return;
     }
 
     // Custom passthrough keybinding (Escape is always hardcoded; this is a secondary binding)
     {
         const AppConfig& cfg = m_configManager.GetConfig();
         if (cfg.passthroughKey != 0) {
-            bool modifiersMatch = true;
-            if ((cfg.passthroughModifiers & MOD_CONTROL) && !ctrl) modifiersMatch = false;
-            if ((cfg.passthroughModifiers & MOD_SHIFT)   && !shift) modifiersMatch = false;
-            if ((cfg.passthroughModifiers & MOD_ALT)     && !alt)   modifiersMatch = false;
-            if (modifiersMatch && vkCode == static_cast<UINT>(cfg.passthroughKey)) {
+            if (mods == cfg.passthroughModifiers && vkCode == static_cast<UINT>(cfg.passthroughKey)) {
                 m_shaderManager->SetPassthrough();
                 if (m_mainWindow) {
                     m_mainWindow->RefreshLibrary();
@@ -311,12 +347,7 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         auto* preset = m_shaderManager->GetPreset(i);
         if (!preset || preset->shortcutKey == 0) continue;
 
-        bool modifiersMatch = true;
-        if ((preset->shortcutModifiers & MOD_CONTROL) && !ctrl) modifiersMatch = false;
-        if ((preset->shortcutModifiers & MOD_SHIFT) && !shift) modifiersMatch = false;
-        if ((preset->shortcutModifiers & MOD_ALT) && !alt) modifiersMatch = false;
-
-        if (modifiersMatch && vkCode == static_cast<UINT>(preset->shortcutKey)) {
+        if (mods == preset->shortcutModifiers && vkCode == static_cast<UINT>(preset->shortcutKey)) {
             m_shaderManager->SetActivePreset(i);
             OnParamChanged();
             if (m_mainWindow) {
@@ -336,12 +367,7 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
         const WorkspacePreset& wp = m_workspaceManager->GetPresets()[i];
         if (wp.shortcutKey == 0) continue;
 
-        bool modifiersMatch = true;
-        if ((wp.shortcutModifiers & MOD_CONTROL) && !ctrl) modifiersMatch = false;
-        if ((wp.shortcutModifiers & MOD_SHIFT)   && !shift) modifiersMatch = false;
-        if ((wp.shortcutModifiers & MOD_ALT)     && !alt)   modifiersMatch = false;
-
-        if (modifiersMatch && vkCode == static_cast<UINT>(wp.shortcutKey)) {
+        if (mods == wp.shortcutModifiers && vkCode == static_cast<UINT>(wp.shortcutKey)) {
             LoadWorkspacePreset(i);
             return;
         }
@@ -351,6 +377,9 @@ void Application::HandleKeyboardShortcuts(UINT vkCode) {
 void Application::RequestExit() {
     if (m_exitRequested) return;
     m_exitRequested = true;
+    // quit() unwinds the event loop without closing any widget, so MainWindow::closeEvent
+    // does not run on this route and the dock layout would go unsaved.
+    if (m_mainWindow) m_mainWindow->SaveWindowState();
     QCoreApplication::quit();
 }
 
@@ -376,8 +405,11 @@ void Application::ProcessFrame() {
 
     m_newVideoFrame = false;
 
-    // Check for shader file changes
-    m_shaderManager->CheckForChanges();
+    // Check for shader file changes. A reload replaces the active preset's parameter
+    // vector, so the panel's rows have to be rebuilt against it; nothing did that before
+    // and the widgets stayed bound to a parameter list the file no longer declares.
+    if (m_shaderManager->CheckForChanges() && m_mainWindow)
+        m_mainWindow->RefreshParameters();
 
     if (m_decoder.IsOpen()) {
         if (m_playbackState == PlaybackState::Playing) {
@@ -701,7 +733,9 @@ bool Application::OpenVideo(const std::string& filepath) {
         return false;
     }
 
-    m_frameDuration = 1.0 / m_decoder.GetFPS();
+    // D3 guarantees a positive rate, but this is the divisor that decides whether the
+    // video advances at all, so it does not take that on trust.
+    m_frameDuration = (m_decoder.GetFPS() > 0.0) ? 1.0 / m_decoder.GetFPS() : 1.0 / 30.0;
     m_configManager.GetConfig().lastOpenedVideo = filepath;
 
     // Decode first frame
@@ -749,7 +783,9 @@ bool Application::OpenCapture(const std::string& deviceOrUrl, bool isDshow) {
         return false;
     }
 
-    m_frameDuration = 1.0 / m_decoder.GetFPS();
+    // D3 guarantees a positive rate, but this is the divisor that decides whether the
+    // video advances at all, so it does not take that on trust.
+    m_frameDuration = (m_decoder.GetFPS() > 0.0) ? 1.0 / m_decoder.GetFPS() : 1.0 / 30.0;
     m_playbackState = PlaybackState::Playing;
     m_lastFrameTime = std::chrono::steady_clock::now();
 
@@ -811,7 +847,7 @@ void Application::SetAudioMute(bool mute) {
     m_audioPlayer.SetMute(mute);
 }
 
-bool Application::CompileCurrentShader(const std::string& source) {
+bool Application::CompileCurrentShader(const std::string& source, bool quiet) {
     int activeIndex = m_shaderManager->GetActivePresetIndex();
     auto* preset = m_shaderManager->GetActivePreset();
     if (preset) {
@@ -825,10 +861,10 @@ bool Application::CompileCurrentShader(const std::string& source) {
             // rather than merely having its keyframe selection cleared. The editor
             // document is deliberately left alone: it is the source just compiled.
             if (m_mainWindow) m_mainWindow->RefreshParameters();
-            Toast(m_mainWindow.get(), "Shader compiled successfully");
+            if (!quiet) Toast(m_mainWindow.get(), "Shader compiled successfully");
             return true;
         } else {
-            Toast(m_mainWindow.get(), "Shader compilation failed: " +
+            if (!quiet) Toast(m_mainWindow.get(), "Shader compilation failed: " +
                 (preset->compileError.empty() ? "unknown error" : preset->compileError.substr(0, 80)));
             return false;
         }
@@ -849,11 +885,11 @@ bool Application::CompileCurrentShader(const std::string& source) {
                 m_mainWindow->RefreshLibrary();
                 m_mainWindow->RefreshParameters();
             }
-            Toast(m_mainWindow.get(), "Shader compiled successfully");
+            if (!quiet) Toast(m_mainWindow.get(), "Shader compiled successfully");
             return true;
         } else {
             m_shaderManager->RemovePreset(idx);
-            Toast(m_mainWindow.get(), "Shader compilation failed");
+            if (!quiet) Toast(m_mainWindow.get(), "Shader compilation failed");
             return false;
         }
     }
@@ -908,7 +944,6 @@ void Application::SaveShaderAsDialog(const std::string& source) {
             newPreset.filepath = filepath;
             newPreset.name = std::filesystem::path(filepath).stem().string();
             newPreset.source = source;
-            m_shaderManager->CompilePreset(newPreset);
             int idx = m_shaderManager->AddPreset(newPreset);
             m_shaderManager->SetActivePreset(idx);
             OnParamChanged();
@@ -937,7 +972,13 @@ void Application::ScanFolderDialog() {
     SaveConfig();
     // The scan is the only thing that adds presets in bulk, and the library
     // is a retained list: without this the new shaders are loaded but unlisted.
-    if (m_mainWindow) m_mainWindow->RefreshLibrary();
+    // RefreshParameters is not optional either: AddPresets push_backs, which reallocates
+    // m_presets, and ParamsPanel and every KeyframeDetail under it hold a ShaderPreset*
+    // into that vector which they dereference on the next frame.
+    if (m_mainWindow) {
+        m_mainWindow->RefreshLibrary();
+        m_mainWindow->RefreshParameters();
+    }
     Toast(m_mainWindow.get(),
           "Scanned: " + std::filesystem::path(path).filename().string());
 }
@@ -1058,8 +1099,17 @@ void Application::FinishOfflineRender(bool completed) {
 void Application::SaveConfig() {
     // Update shader presets in config
     auto& config = m_configManager.GetConfig();
+
+    // Null when InitializeQt failed before the manager existed, and again on a second
+    // Shutdown. Leaving the saved preset list untouched is right in both cases: clearing
+    // it would erase 45 presets' values and keybindings from config.json.
+    if (!m_shaderManager) {
+        m_configManager.Save(ConfigManager::GetDefaultConfigPath());
+        return;
+    }
+
     config.shaderPresets.clear();
-    
+
     for (int i = 0; i < m_shaderManager->GetPresetCount(); ++i) {
         auto* preset = m_shaderManager->GetPreset(i);
         if (preset && !preset->filepath.empty()) {
@@ -1142,27 +1192,25 @@ std::string Application::FindBindingConflict(int vkCode, int modifiers,
 {
     if (vkCode == 0) return {};
 
-    // Hardcoded unmodified keys
-    if (modifiers == 0) {
-        switch (vkCode) {
-        case VK_SPACE:  return "reserved for Play/Pause (Space)";
-        case VK_ESCAPE: return "reserved for Reset to Passthrough (Escape)";
-        case VK_F1:     return "reserved for Toggle Editor (F1)";
-        case VK_F2:     return "reserved for Toggle Library (F2)";
-        case VK_F3:     return "reserved for Toggle Transport (F3)";
-        case VK_F4:     return "reserved for Toggle Recording (F4)";
-        case VK_F5:     return "reserved for Compile (F5)";
-        case VK_F6:     return "reserved for Toggle Keybindings (F6)";
-        case VK_F7:     return "reserved for Video Output Window (F7)";
-        case VK_F8:     return "reserved for Spout Output panel (F8)";
-        case VK_F9:     return "reserved for Start/Stop Recording (F9)";
-        }
-    }
-    // Hardcoded Ctrl combos
-    if (modifiers == MOD_CONTROL) {
-        if (vkCode == 'O') return "reserved for Open Video (Ctrl+O)";
-        if (vkCode == 'S') return "reserved for Save Shader (Ctrl+S)";
-        if (vkCode == 'N') return "reserved for New Shader (Ctrl+N)";
+    // Reserved for every modifier combination, not only the bare key. The dispatch in
+    // HandleKeyboardShortcuts matches on the VK code alone, so Shift+F1 fired Toggle
+    // Editor and a plain O or S was swallowed by the Ctrl+O / Ctrl+S cases and did
+    // nothing at all. Reporting those free made them bindable, and then dead or wrong.
+    switch (vkCode) {
+    case VK_SPACE:  return "reserved for Play/Pause (Space)";
+    case VK_ESCAPE: return "reserved for Reset to Passthrough (Escape)";
+    case VK_F1:     return "reserved for Toggle Editor (F1)";
+    case VK_F2:     return "reserved for Toggle Library (F2)";
+    case VK_F3:     return "reserved for Toggle Transport (F3)";
+    case VK_F4:     return "reserved for Toggle Recording (F4)";
+    case VK_F5:     return "reserved for Compile (F5)";
+    case VK_F6:     return "reserved for Toggle Keybindings (F6)";
+    case VK_F7:     return "reserved for Video Output Window (F7)";
+    case VK_F8:     return "reserved for Spout Output panel (F8)";
+    case VK_F9:     return "reserved for Start/Stop Recording (F9)";
+    case 'O':       return "reserved for Open Video (Ctrl+O)";
+    case 'S':       return "reserved for Save Shader (Ctrl+S)";
+    case 'N':       return "reserved for New Shader (Ctrl+N)";
     }
 
     // Passthrough keybinding

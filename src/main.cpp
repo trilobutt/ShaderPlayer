@@ -98,13 +98,16 @@ static LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* ep) {
     WriteCrashLog(ep);
 
     if (g_appForCrashCleanup) {
-        // Minimal-risk cleanup: just Spout and the decoder.
-        // Avoid anything that requires a valid D3D device or window.
+        // Minimal-risk cleanup, and now actually minimal: releasing the Spout sender is
+        // the one piece of state that outlives this process. Shutdown() was doing far more
+        // than the comment claimed — writing config.json and tearing down the whole Qt
+        // widget tree — from a process whose heap may already be corrupt, which is how a
+        // crash took the user's configuration with it.
         __try {
-            g_appForCrashCleanup->Shutdown();
+            g_appForCrashCleanup->CrashCleanup();
         } __except (EXCEPTION_EXECUTE_HANDLER) {
-            // If Shutdown itself faults (heap corruption etc.), swallow it —
-            // we're already crashing and the OS will clean up the rest.
+            // If the cleanup itself faults, swallow it — we're already crashing and the
+            // OS will clean up the rest.
         }
         g_appForCrashCleanup = nullptr;
     }

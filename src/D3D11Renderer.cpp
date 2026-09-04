@@ -1,6 +1,7 @@
 #include "D3D11Renderer.h"
 #include <stdexcept>
 #include <atomic>
+#include <cmath>
 #include <fstream>
 #include <thread>
 
@@ -215,6 +216,9 @@ void D3D11Renderer::Shutdown() {
     m_displaySRV.Reset();
     m_noiseTexture.Reset();
     m_noiseSRV.Reset();
+    m_audioConstantBuffer.Reset();
+    m_spectrumTexture.Reset();
+    m_spectrumSRV.Reset();
     m_wrapSampler.Reset();
     m_compositorPS.Reset();
     m_compositorSrcTexture.Reset();
@@ -1048,8 +1052,18 @@ static float quintic(float t) {
     return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
 }
 
+// Lattice coordinates wrap into [0, period), which is what makes the generated texture
+// genuinely periodic: it is sampled through a WRAP sampler, so the cell at u=0 and the
+// cell at u=1 have to be the same cell or a seam falls down the join.
+static int wrapCell(int v, int period) {
+    const int r = v % period;
+    return (r < 0) ? r + period : r;
+}
+
 // Pseudo-random gradient dot product for Perlin noise
-static float gradDot(int ix, int iy, float fx, float fy) {
+static float gradDot(int ix, int iy, float fx, float fy, int period) {
+    ix = wrapCell(ix, period);
+    iy = wrapCell(iy, period);
     uint32_t h = static_cast<uint32_t>(ix) * 1619u + static_cast<uint32_t>(iy) * 31337u;
     h ^= h >> 13;
     h *= 0xbf58476du;
@@ -1063,7 +1077,7 @@ static float gradDot(int ix, int iy, float fx, float fy) {
     return 0.0f;
 }
 
-static float perlinNoise(float x, float y) {
+static float perlinNoise(float x, float y, int period) {
     int xi = static_cast<int>(floorf(x));
     int yi = static_cast<int>(floorf(y));
     float xf = x - static_cast<float>(xi);
@@ -1071,10 +1085,10 @@ static float perlinNoise(float x, float y) {
     float u  = quintic(xf);
     float v  = quintic(yf);
 
-    float n00 = gradDot(xi,     yi,     xf,     yf    );
-    float n10 = gradDot(xi + 1, yi,     xf - 1, yf    );
-    float n01 = gradDot(xi,     yi + 1, xf,     yf - 1);
-    float n11 = gradDot(xi + 1, yi + 1, xf - 1, yf - 1);
+    float n00 = gradDot(xi,     yi,     xf,     yf,     period);
+    float n10 = gradDot(xi + 1, yi,     xf - 1, yf,     period);
+    float n01 = gradDot(xi,     yi + 1, xf,     yf - 1, period);
+    float n11 = gradDot(xi + 1, yi + 1, xf - 1, yf - 1, period);
 
     float lx0 = n00 + u * (n10 - n00);
     float lx1 = n01 + u * (n11 - n01);
@@ -1082,24 +1096,29 @@ static float perlinNoise(float x, float y) {
 }
 
 // Hash giving a float in [0,1] for a cell feature point coordinate
-static float cellHash(uint32_t ix, uint32_t iy, uint32_t seed) {
-    uint32_t h = ix * 1619u + iy * 31337u + seed * 6271u;
+static float cellHash(int ix, int iy, uint32_t seed, int period) {
+    const uint32_t wx = static_cast<uint32_t>(wrapCell(ix, period));
+    const uint32_t wy = static_cast<uint32_t>(wrapCell(iy, period));
+    uint32_t h = wx * 1619u + wy * 31337u + seed * 6271u;
     h ^= h >> 13;
     h *= 0xbf58476du;
     h ^= h >> 31;
     return static_cast<float>(h & 0xFFFFu) / 65535.0f;
 }
 
-static float voronoiNoise(float x, float y) {
+static float voronoiNoise(float x, float y, int period) {
     int xi = static_cast<int>(floorf(x));
     int yi = static_cast<int>(floorf(y));
     float minDist = 1e10f;
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
-            int cx = xi + dx;
-            int cy = yi + dy;
-            float px = static_cast<float>(cx) + cellHash(static_cast<uint32_t>(cx), static_cast<uint32_t>(cy), 0u);
-            float py = static_cast<float>(cy) + cellHash(static_cast<uint32_t>(cx), static_cast<uint32_t>(cy), 1u);
+            const int cx = xi + dx;
+            const int cy = yi + dy;
+            // The feature point keeps the unwrapped cell origin so distances stay
+            // continuous across the seam; only the hash that places it inside the cell
+            // is wrapped.
+            float px = static_cast<float>(cx) + cellHash(cx, cy, 0u, period);
+            float py = static_cast<float>(cy) + cellHash(cx, cy, 1u, period);
             float d  = sqrtf((x - px) * (x - px) + (y - py) * (y - py));
             if (d < minDist) minDist = d;
         }
@@ -1130,7 +1149,10 @@ void D3D11Renderer::SetGenerativeResolution(int width, int height) {
 }
 
 int D3D11Renderer::ClampNoiseSize(int texSize) {
-    return (std::max)(texSize, 64);
+    // The upper bound is the allocation guard: this size squared times four is a heap
+    // buffer built on a worker thread at startup, and the value can arrive from a
+    // hand-edited config.json.
+    return (std::min)((std::max)(texSize, 64), 4096);
 }
 
 std::vector<uint8_t> D3D11Renderer::GenerateNoisePixels(float scale, int texSize) {
@@ -1142,14 +1164,20 @@ std::vector<uint8_t> D3D11Renderer::GenerateNoisePixels(float scale, int texSize
     // Every pixel is an independent function of its own coordinate, so the rows split
     // with no sharing at all. At the 1024² default this is ~200 ms of the startup budget
     // on one core, and the same figure stalls the Noise panel on every regenerate.
-    const auto fillRows = [&pixels, scale, texSize](int yBegin, int yEnd) {
+    // The lattice period the texture wraps on. Both generators below are periodic over
+    // whole cells, so the frequency is rounded to one: at scale 4.3 the texture would
+    // either tile at 4 or seam, and tiling is what the WRAP sampler at s1 and every shader
+    // that offsets into this texture expect.
+    const int period = (std::max)(1, static_cast<int>(std::lround(scale)));
+
+    const auto fillRows = [&pixels, period, texSize](int yBegin, int yEnd) {
         for (int y = yBegin; y < yEnd; ++y) {
             for (int x = 0; x < texSize; ++x) {
-                float nx = (x + 0.5f) / static_cast<float>(texSize) * scale;
-                float ny = (y + 0.5f) / static_cast<float>(texSize) * scale;
+                float nx = (x + 0.5f) / static_cast<float>(texSize) * period;
+                float ny = (y + 0.5f) / static_cast<float>(texSize) * period;
 
-                float p = perlinNoise(nx, ny);
-                float v = 1.0f - voronoiNoise(nx, ny);  // invert: bright centres
+                float p = perlinNoise(nx, ny, period);
+                float v = 1.0f - voronoiNoise(nx, ny, period);  // invert: bright centres
 
                 p = (std::max)(0.0f, (std::min)(1.0f, p));
                 v = (std::max)(0.0f, (std::min)(1.0f, v));

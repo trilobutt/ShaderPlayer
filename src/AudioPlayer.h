@@ -66,6 +66,9 @@ private:
     std::atomic<uint64_t>    m_wPos{0};
     std::atomic<uint64_t>    m_rPos{0};
     std::atomic<bool>        m_flush{false};
+    // Write position at the moment Flush() was called: the consumer skips to here rather
+    // than to wherever the write cursor has reached by the time it runs.
+    std::atomic<uint64_t>    m_flushTo{0};
 
     // ── Resampler (main thread only) ─────────────────────────────────────────
     SwrContext*        m_swrCtx      = nullptr;

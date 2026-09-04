@@ -887,6 +887,7 @@ void TransportPanel::Tick()
 {
     SyncPage();
     SyncRenderLock();
+    SyncResolutionLock();
     SyncPlayButton();
     SyncAudioRow();
     SyncFollowButton();
@@ -941,6 +942,28 @@ void TransportPanel::SyncRenderLock()
                               : tr("Stop playback and return to the start."));
     m_scrubber->setToolTip(locked ? RenderLockHint() : QString());
     ApplyPlayButton();
+}
+
+void TransportPanel::SyncResolutionLock()
+{
+    // FFmpeg sized the encoder from this resolution when the recording started, and every
+    // frame after a change arrives at a size it refuses. This control is the one place
+    // that can say so, and a greyed control carrying the reason reads better than a
+    // recording that silently stops accepting frames.
+    const bool locked = m_app.GetEncoder().IsRecording();
+    if (locked == m_resolutionLocked) return;
+    m_resolutionLocked = locked;
+
+    m_genPreset->setEnabled(!locked);
+    m_genWidth->setEnabled(!locked);
+    m_genHeight->setEnabled(!locked);
+
+    const QString hint = tr("The output resolution is fixed while recording.");
+    m_genPreset->setToolTip(locked ? hint
+                                   : tr("Output resolution the shader renders at while no "
+                                        "video is open."));
+    m_genWidth->setToolTip(locked ? hint : tr("Output width in pixels."));
+    m_genHeight->setToolTip(locked ? hint : tr("Output height in pixels."));
 }
 
 void TransportPanel::ApplyPlayButton()

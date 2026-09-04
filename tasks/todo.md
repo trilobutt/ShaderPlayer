@@ -293,47 +293,6 @@ done-when: `docs/marketing-plan.md` exists and is specific enough to act on this
 
 ---
 
----
-
-## CLAUDE.md corrections owed at fold-in
-
-Nine claims in `CLAUDE.md` were found false against the code during this run. None was
-edited by a phase; all belong in the review session's fold-in. The first three are
-documentation errors, the rest are product defects the documentation had papered over.
-One of the nine (F9) was fixed upstream mid-run and is struck through below, so eight
-stand.
-
-1. § "Shader System": shipped shaders each carry an ISF description. Was false for 40 of
-   45 until B0a; true now.
-2. § "Shader Parameter System": `compileError` has "no UI currently surfaces this field".
-   `ui/LibraryPanel.cpp:320` gives a failed preset an error dot with the message as tooltip.
-3. § "Global Noise Texture": the "1024² default" is 512 (`Common.h:187`).
-4. § "Shader System": the `resolution` cbuffer field is called "output resolution". It is
-   the viewport panel's client size, which differs from the surface the shader fills.
-5. § "Cbuffer Packing Rules": over-budget parameters are "skipped with a warning appended
-   to `ShaderPreset::compileError`". `ShaderManager.cpp:568` `break`s silently, dropping
-   that parameter and every one after it. The shader then fails on an undeclared
-   identifier with nothing on screen explaining why.
-6. § "Qt Notes": "`Application::HandleKeyboardShortcuts` owns every key in the product".
-   Ctrl+N is reserved by `FindBindingConflict` (`Application.cpp:1045`) and displayed in
-   the F6 reference, but the dispatch `switch` has no `case 'N'`. It is unbindable and
-   does nothing.
-7. ~~F9 ignores the Recording panel.~~ **Fixed upstream** in `4292050` while this run was in
-   progress: F9 now routes through `MainWindow::ToggleRecording` and uses the panel's
-   settings. Listed here only so the count is not read as eight outstanding defects.
-8. Reserved keys swallow every modifier combination, but the binding dialog refuses only
-   the unmodified form, so Shift+F1, Ctrl+F5 and a plain `O` or `S` all pass
-   `FindBindingConflict` and then never fire.
-9. A file reload resets parameter values and drops keyframes, while an F5 recompile
-   preserves values by name and keeps keyframes (`ShaderManager.cpp:276` against `:107`).
-   Nothing calls `RefreshParameters` after `CheckForChanges`, so the panel shows stale
-   widgets after an external edit.
-
-Unmeasured and flagged rather than asserted: generative recording declares 60 fps
-unconditionally (`Application.cpp:913`) while submitting one frame per render tick, so on a
-display above 60 Hz the file should run longer than real time. No recording was made to
-confirm it.
-
 ## Risks worth stating before starting
 
 - **B0 is unblocked**: an Opalstack API token now exists at `OPALSTACK_API` in
