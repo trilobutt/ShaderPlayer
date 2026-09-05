@@ -190,6 +190,11 @@ private:
     
     // Timing
     std::chrono::steady_clock::time_point m_lastFrameTime;
+    // Smoothed interval between ticks, which is the display's refresh period whenever the
+    // pacer is driving the loop. Half of it is the tolerance the video frame gate needs:
+    // see the gate in ProcessFrame for why a plain >= test runs the video slow.
+    std::chrono::steady_clock::time_point m_lastTickTime{};
+    double m_tickPeriod = 0.0;
     double m_frameDuration = 1.0 / 30.0;
     float m_playbackTime = 0.0f;
     float m_generativeTime = 0.0f;  // Accumulated wall-clock time for generative shaders

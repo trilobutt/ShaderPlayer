@@ -511,6 +511,37 @@ Three things are load-bearing:
 latency by the time the tick runs, so the call returns without blocking, and the interval
 is what keeps the picture tear-free.
 
+### Video Frame Pacing, and Why It Reaches the Audio
+
+Playback ticks at the display's rate and the video's frames arrive at the source's, and the
+two are not commensurate. `ProcessFrame`'s gate therefore fires on the tick **nearest** a
+frame's slot, not on the first tick at or past it: `elapsed >= m_frameDuration - 0.5 *
+m_tickPeriod`, where `m_tickPeriod` is a smoothed measure of the tick interval. It then
+advances `m_lastFrameTime` by exactly one frame rather than resetting it to `now`, so the
+long-run rate is the source's own and the early bias cannot compound; a debt of more than
+two frames is dropped rather than sprinted through.
+
+**Both halves are load-bearing, and getting either wrong is heard rather than seen.** A
+plain `>=` test misses by a fraction of a millisecond at ordinary rates (at a 16.6 ms tick a
+30 fps frame's two-tick mark lands 0.2 ms short), waits a third tick, and plays 30 fps
+content at 25. That is not a cosmetic slowness: the video falls behind real time for as long
+as it plays, and it shares one `av_read_frame` stream with the audio. `ReadAudioAhead` queues
+a video packet for every one it passes looking for audio, so a video consumer that cannot
+keep pace grows `m_videoPktQueue` without bound, and at `kMaxQueuedVideoPackets` the
+read-ahead stops collecting audio entirely and the **sound** breaks up while the picture
+still looks fine. Measured before the fix: the queue climbed steadily and pinned at the cap
+around 22 s into every loop, and reset on the loop, which is exactly how it presented.
+
+`VideoDecoder::QueuedVideoPackets()` is how far the video consumer is behind the demuxer. It
+sits at the file's read-ahead depth (around 130 on an ordinary file, not a fault) while
+playback keeps pace. Past `kVideoCatchUpThreshold` (half the cap) `ProcessFrame` decodes
+without presenting, at most `kMaxCatchUpFrames` per tick, until the queue is back under it.
+This is the one place the player is allowed to drop frames, and it is deliberate: a shader
+too heavy for the machine should cost picture, never sound. Never lower the threshold to hug
+the steady state, and never let the cap be reached in normal playback; the cap is the
+last-resort bound on a file whose audio track ends before its video, where the read would
+otherwise clone every remaining video packet in the file.
+
 Profile it with `pwsh -File tools/measure_responsiveness.ps1` (see `FrameProfiler` in the
 component list).
 

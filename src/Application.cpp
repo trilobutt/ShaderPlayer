@@ -23,6 +23,18 @@ void Toast(MainWindow* window, const std::string& message) {
     if (window) window->ShowToast(QString::fromStdString(message));
 }
 
+// When the demuxer's video packet queue passes this, playback skips frames to drain it.
+// Set between the depth the queue sits at when playback is keeping pace (around 130 on an
+// ordinary file, which is the demuxer's own read-ahead and not a fault) and
+// VideoDecoder::MaxQueuedVideoPackets(), where the read-ahead stops collecting audio. Too
+// low and healthy playback skips frames it did not need to; the point is to never arrive
+// at the cap, not to hug the steady state.
+constexpr size_t kVideoCatchUpThreshold = VideoDecoder::MaxQueuedVideoPackets() / 2;
+
+// Frames a single tick may skip. Enough to drain a real backlog within a second or so,
+// few enough that the catch-up cannot become the stall it exists to prevent.
+constexpr int kMaxCatchUpFrames = 4;
+
 }  // namespace
 
 Application::Application() = default;
@@ -403,6 +415,19 @@ void Application::ProcessFrame() {
     auto now = std::chrono::steady_clock::now();
     double elapsed = std::chrono::duration<double>(now - m_lastFrameTime).count();
 
+    // Measure the tick interval. The video frame gate below needs it to decide which of two
+    // ticks a frame's slot is nearer to, and it is not a constant: the pacer follows the
+    // display, and the idle timer takes over whenever nothing presents. Outliers are
+    // rejected rather than smoothed, since a single stall would otherwise widen the
+    // tolerance for the next several seconds.
+    if (m_lastTickTime.time_since_epoch().count() != 0) {
+        const double tickDt = std::chrono::duration<double>(now - m_lastTickTime).count();
+        if (tickDt > 0.0 && tickDt < 0.05) {
+            m_tickPeriod = (m_tickPeriod > 0.0) ? (0.9 * m_tickPeriod + 0.1 * tickDt) : tickDt;
+        }
+    }
+    m_lastTickTime = now;
+
     m_newVideoFrame = false;
 
     // Check for shader file changes. A reload replaces the active preset's parameter
@@ -434,7 +459,17 @@ void Application::ProcessFrame() {
                 // recording. A render paced off the clock would drop or repeat frames
                 // whenever the shader cost more than a frame's time, and a render that
                 // looped would write the video twice.
-                if (m_offlineRender || elapsed >= m_frameDuration) {
+                //
+                // The gate fires on the tick *nearest* the frame's slot, not on the first
+                // tick at or past it. Frames and refreshes are not commensurate: at a
+                // 16.6 ms tick a 30 fps frame is due at 33.3 ms, the two-tick mark lands
+                // 0.2 ms short, and a plain `>=` therefore waited a third tick and played
+                // 30 fps content at 25. That is not merely slow, it is unbounded: the video
+                // falls behind real time for as long as it plays, the audio read-ahead
+                // queues video packets it cannot drain, and at kMaxQueuedVideoPackets that
+                // read-ahead stops collecting audio altogether and the sound breaks up.
+                const double slot = m_frameDuration - 0.5 * m_tickPeriod;
+                if (m_offlineRender || elapsed >= slot) {
                     if (m_decoder.DecodeNextFrame(m_currentFrame)) {
                         m_newVideoFrame = true;
                         m_videoUploadPending = true;
@@ -448,7 +483,44 @@ void Application::ProcessFrame() {
                         m_audioAnalyzer.Reset();
                         m_audioPlayer.Flush();
                     }
-                    m_lastFrameTime = now;
+
+                    // Advance by exactly one frame rather than resetting to now. Firing a
+                    // fraction of a tick early is what the tolerance above is for, and
+                    // resetting to now would fold that fraction into the next frame's slot
+                    // too, so the small early bias would compound into a video running
+                    // measurably fast against its own soundtrack. Stepping the due time
+                    // keeps the long-run rate exactly the source's.
+                    using Dur = std::chrono::steady_clock::duration;
+                    const Dur frameStep = std::chrono::duration_cast<Dur>(
+                        std::chrono::duration<double>(m_frameDuration));
+                    m_lastFrameTime += frameStep;
+                    // Unless we are properly behind: a stall, a breakpoint or a background
+                    // throttle leaves a debt that catching up frame by frame would spend by
+                    // sprinting through the video. Drop the debt and carry on from here.
+                    if (now - m_lastFrameTime > 2 * frameStep) m_lastFrameTime = now;
+                }
+
+                // Catch up if the video has fallen far enough behind the demuxer to
+                // threaten the sound. The read-ahead queues a video packet for every one it
+                // passes looking for audio, and at kMaxQueuedVideoPackets it stops
+                // collecting audio entirely, so a video consumer that cannot keep pace
+                // eventually silences the track rather than merely stuttering. Skipping
+                // frames here is the right way to spend that: a shader too heavy for the
+                // machine should cost picture, never sound.
+                //
+                // Bounded per tick so catching up cannot itself become the stall. Nothing
+                // is presented from these frames; the loop only drains the queue.
+                if (!m_offlineRender) {
+                    const size_t queued = m_decoder.QueuedVideoPackets();
+                    if (queued > kVideoCatchUpThreshold) {
+                        for (int i = 0; i < kMaxCatchUpFrames; ++i) {
+                            if (!m_decoder.DecodeNextFrame(m_currentFrame)) break;
+                            m_newVideoFrame = true;
+                            m_videoUploadPending = true;
+                            m_playbackTime = static_cast<float>(m_currentFrame.timestamp);
+                            if (m_decoder.QueuedVideoPackets() <= kVideoCatchUpThreshold) break;
+                        }
+                    }
                 }
 
                 // Audio: fill the ring buffer to a 2-second target on every tick.

@@ -45,6 +45,14 @@ public:
     double GetDuration() const { return m_duration; }
     int64_t GetFrameCount() const { return m_frameCount; }
     double GetCurrentTime() const { return m_currentTime; }
+
+    // How many video packets the audio read-ahead has queued for DecodeNextFrame. This is
+    // how far the video consumer is behind the demuxer: it sits at the file's interleave
+    // depth while playback keeps pace, and climbs when it does not. Application watches it
+    // to skip frames before it reaches kMaxQueuedVideoPackets, because at the cap the
+    // read-ahead stops collecting audio and the sound breaks up.
+    size_t QueuedVideoPackets() const { return m_videoPktQueue.size(); }
+    static constexpr size_t MaxQueuedVideoPackets() { return kMaxQueuedVideoPackets; }
     AVPixelFormat GetPixelFormat() const { return m_pixelFormat; }
     std::string GetCodecName() const { return m_codecName; }
 
@@ -134,7 +142,12 @@ private:
     // Entries are av_packet_clone()'d; caller must av_packet_free() on pop. Capped: the
     // read-ahead loop terminates on the audio it collects, and a file whose audio ends
     // early would otherwise queue the entire rest of the video.
-    static constexpr size_t kMaxQueuedVideoPackets = 256;
+    // Measured steady state on an ordinary file is around 130, which is the demuxer's
+    // read-ahead depth and not a fault, so this sits well clear of it: the cap is the
+    // last-resort bound on the pathological case (an audio track that ends before the
+    // video, where the read would otherwise clone every remaining video packet in the
+    // file), not a working limit. Application skips frames long before here.
+    static constexpr size_t kMaxQueuedVideoPackets = 512;
     std::queue<AVPacket*> m_videoPktQueue;
 
     bool m_audioEOFReached = false;
