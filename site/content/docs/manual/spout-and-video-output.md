@@ -62,5 +62,5 @@ Spout when the destination is another application on the same machine and you wa
 composited, keyed or restreamed there. The second window when the destination is a screen: a
 projector, a second monitor, a capture card fed from a display output.
 
-Neither interacts with [recording](/manual/recording/). All three take the same finished
+Neither interacts with [recording](/docs/manual/recording/). All three take the same finished
 picture, and turning any of them on or off mid-take changes nothing about the others.

@@ -26,7 +26,7 @@ passthrough, where the source is drawn untouched.
 
 A shader can also be bound to a key of its own, which is the fast way to cut between looks
 while recording. See [Workspaces and
-keybindings](/manual/workspaces-and-keybindings/).
+keybindings](/docs/manual/workspaces-and-keybindings/).
 
 ## Writing a new one
 
@@ -63,7 +63,7 @@ the tooltip on that dot. While a failed shader is active the renderer falls back
 passthrough, so the picture goes untreated rather than black. A shader whose error is
 `X3004: undeclared identifier` on one of its own parameter names is almost always an ISF
 block problem rather than a body problem; [the parser's silent
-failures](/reference/isf-block-and-parameters/) lists the five ways that happens.
+failures](/docs/reference/isf-block-and-parameters/) lists the five ways that happens.
 
 **Compiling rebuilds the parameter list from the ISF block.** Current values survive it: they
 are saved by name across the recompile and written back to any parameter that still exists

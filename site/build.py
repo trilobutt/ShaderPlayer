@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -61,7 +62,17 @@ DIST_DIR = SITE_ROOT / "dist"
 SHADERS_JSON = CONTENT_DIR / "shaders.json"
 EXTRACT_SCRIPT = SITE_ROOT / "tools" / "extract_shaders.py"
 
-SITE_TITLE = "ShaderPlayer Documentation"
+# The site is the product's now and the documentation is a section of it. Page
+# titles read "<page> · ShaderPlayer"; the header prints the Documentation
+# suffix only on the pages that are documentation.
+SITE_TITLE = "ShaderPlayer"
+
+# Every documentation page lives under content/docs/ and is served under /docs/.
+DOCS_DIR = "docs"
+
+# The Buy button's destination before a real Stripe Payment Link exists. An
+# indexable build refuses to carry it (see build()).
+PLACEHOLDER_PAYMENT_LINK = "https://buy.stripe.com/PLACEHOLDER"
 # The live site, created in phase B0. Overridable with --base-url for a local
 # or staging build; it only ever appears in sitemap.xml and robots.txt.
 DEFAULT_BASE_URL = "https://shaderplayer.marcsplained.com"
@@ -342,24 +353,55 @@ def collect_sources(shaders: list[dict[str, Any]], hlsl_alias: str) -> list[Page
         html_body = render_markdown(body, hlsl_alias)
 
         is_section_index = False
+        in_nav = True
+        searchable = True
+        template_name = "page.html"
         if rel == Path("index.md"):
+            # The product page. It is not documentation and is deliberately
+            # absent from the docs rail rather than pinned at the top of it.
             url = "/"
             output_path = DIST_DIR / "index.html"
             nav_path: list[str] = []
-            section = "Home"
+            section = "Product"
+            in_nav = False
+            template_name = "product.html"
+        elif rel == Path(DOCS_DIR) / "index.md":
+            # The documentation landing page leads the rail, the way the old
+            # home page did: build_nav pins any in-nav page with no nav_path.
+            url = f"/{DOCS_DIR}/"
+            output_path = DIST_DIR / DOCS_DIR / "index.html"
+            nav_path = []
+            section = "Documentation"
+        elif rel.parts[0] != DOCS_DIR:
+            # Any other page outside content/docs/ belongs to the product
+            # surface. It stays out of the rail, which is keyed on the directory
+            # a page lives in and would otherwise invent a section named after
+            # the file ("Thanks.Md"), and out of the search index, because a
+            # transactional page reachable only with a checkout session on the
+            # address is a dead end as a search result.
+            slug = rel.with_suffix("")
+            url = "/" + slug.as_posix() + "/"
+            output_path = DIST_DIR / slug / "index.html"
+            nav_path = []
+            section = "Product"
+            in_nav = False
+            searchable = False
         else:
             slug = rel.with_suffix("")
-            # A directory index (reference/index.md) is the page at that
+            # A directory index (docs/reference/index.md) is the page at that
             # directory's own URL, not a child called "index": it renders to
-            # dist/reference/index.html and is served at /reference/. The
-            # generated shader pages' "Back to <group>" breadcrumbs point at
-            # /reference/#<group>, so without this they land on a 404.
+            # dist/docs/reference/index.html and is served at /docs/reference/.
+            # The generated shader pages' "Back to <group>" breadcrumbs point at
+            # /docs/reference/#<group>, so without this they land on a 404.
             is_section_index = slug.name == "index"
             if is_section_index:
                 slug = slug.parent
             url = "/" + slug.as_posix() + "/"
             output_path = DIST_DIR / slug / "index.html"
-            top = rel.parts[0]
+            # The rail is two levels deep and the shader groups already claim the
+            # second, so a documentation page's section is the directory inside
+            # docs/ rather than "docs" itself.
+            top = rel.parts[1] if rel.parts[0] == DOCS_DIR and len(rel.parts) > 2 else rel.parts[0]
             section = NAV_SECTION_NAMES.get(top, top.replace("-", " ").replace("_", " ").title())
             nav_path = [section]
 
@@ -371,10 +413,10 @@ def collect_sources(shaders: list[dict[str, Any]], hlsl_alias: str) -> list[Page
                 nav_label=nav_label,
                 nav_path=nav_path,
                 is_section_index=is_section_index,
-                in_nav=True,
+                in_nav=in_nav,
                 search_section=section,
-                search_text=html_to_text(html_body),
-                template_name="page.html",
+                search_text=html_to_text(html_body) if searchable else "",
+                template_name=template_name,
                 template_context={"body": html_body},
             )
         )
@@ -386,8 +428,8 @@ def collect_sources(shaders: list[dict[str, Any]], hlsl_alias: str) -> list[Page
         text = shader["description"] + " " + " ".join(p["label"] for p in shader["params"])
         sources.append(
             PageSource(
-                url=f"/reference/shaders/{name}/",
-                output_path=DIST_DIR / "reference" / "shaders" / name / "index.html",
+                url=f"/{DOCS_DIR}/reference/shaders/{name}/",
+                output_path=DIST_DIR / DOCS_DIR / "reference" / "shaders" / name / "index.html",
                 title=shader["title"],
                 nav_label=shader["title"],
                 nav_path=["Reference", group_title],
@@ -507,8 +549,16 @@ def copy_static() -> None:
         dest.mkdir(parents=True, exist_ok=True)
 
 
-def build(*, base_url: str, noindex: bool) -> tuple[int, int]:
+def build(*, base_url: str, noindex: bool, payment_link: str) -> tuple[int, int]:
     """Build the whole site into DIST_DIR. Returns (total_pages, shader_pages)."""
+    # An indexable build is the launch, and a launch whose Buy button goes to a
+    # placeholder is worse than no launch. A noindex build carries it happily so
+    # the page can be worked on before the link exists.
+    if not noindex and payment_link == PLACEHOLDER_PAYMENT_LINK:
+        raise BuildError(
+            "refusing an indexable build with the placeholder payment link; pass "
+            "--payment-link or set SHADERPLAYER_PAYMENT_LINK"
+        )
     if DIST_DIR.exists():
         shutil.rmtree(DIST_DIR)
     DIST_DIR.mkdir(parents=True)
@@ -538,6 +588,7 @@ def build(*, base_url: str, noindex: bool) -> tuple[int, int]:
             "nav": nav,
             "base_url": base_url,
             "noindex": noindex,
+            "payment_link": payment_link,
             "url": src.url,
             "site_title": SITE_TITLE,
             "static_prefix": "/static/",
@@ -581,13 +632,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "disallow-all robots.txt (default: on; pass --no-noindex at the Project C launch)"
         ),
     )
+    parser.add_argument(
+        "--payment-link",
+        default=os.environ.get("SHADERPLAYER_PAYMENT_LINK", PLACEHOLDER_PAYMENT_LINK),
+        help="the Stripe Payment Link the Buy button points at (default: $SHADERPLAYER_PAYMENT_LINK, else a placeholder an indexable build refuses)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        total, shader_count = build(base_url=args.base_url.rstrip("/"), noindex=args.noindex)
+        total, shader_count = build(
+            base_url=args.base_url.rstrip("/"),
+            noindex=args.noindex,
+            payment_link=args.payment_link,
+        )
     except BuildError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

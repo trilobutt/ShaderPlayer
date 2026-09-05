@@ -87,7 +87,7 @@ Finish the source, then animate it.
 
 **An external edit does the same, and resets the values too.** A shader file changed on disk
 is re-read and recompiled within half a second, wholesale. See
-[Shaders and the editor](/manual/shaders-and-editing/).
+[Shaders and the editor](/docs/manual/shaders-and-editing/).
 
 Keyframes are saved to `config.json` under the parameter's name and restored at the next
 launch, so a session that ends normally loses nothing. Renaming a parameter in the shader

@@ -61,9 +61,9 @@ every shader whether it declares them or not.
 | `b1` | `cbuffer AudioConstants` | The six audio bands. Injected for you when the shader declares an audio parameter |
 | `t0` | `Texture2D videoTexture` | The decoded frame, RGBA8. Unbound and black with no video open |
 | `s0` | `SamplerState videoSampler` | Bilinear, CLAMP on all three axes |
-| `t1` | `Texture2D noiseTexture` | The [global noise texture](/reference/noise-texture/), Perlin in R and Voronoi in G |
+| `t1` | `Texture2D noiseTexture` | The [global noise texture](/docs/reference/noise-texture/), Perlin in R and Voronoi in G |
 | `s1` | `SamplerState noiseSampler` | Bilinear, WRAP on all three axes |
-| `t3` | `Texture2D spectrumTexture` | 256x1 `R32_FLOAT` [FFT magnitudes](/reference/audio-and-spectrum/). Injected alongside `b1` |
+| `t3` | `Texture2D spectrumTexture` | 256x1 `R32_FLOAT` [FFT magnitudes](/docs/reference/audio-and-spectrum/). Injected alongside `b1` |
 
 Declare `videoTexture`, `videoSampler`, `noiseTexture` and `noiseSampler` in every shader,
 whether or not you sample them. Do not declare `AudioConstants` or `spectrumTexture`: once
@@ -99,14 +99,14 @@ for the compositor pass, so they are not reliably zero.
 `custom[8]` is the parameter block: 32 floats, filled from your ISF block. Never index it
 by hand. The compiler generates a named alias per parameter, and hand-written indices go
 stale the moment you add a parameter above them. See
-[the ISF block](/reference/isf-block-and-parameters/).
+[the ISF block](/docs/reference/isf-block-and-parameters/).
 
 ## Entry point and output
 
 The entry point is `main`, the input struct carries `SV_POSITION` and one `TEXCOORD0`, and
 the return semantic is `SV_TARGET`. `input.uv` runs 0 to 1 with (0, 0) at the top-left, and
 `input.pos.xy` is the pixel centre in the render target, which is what
-[`spIGN` and `spDither`](/reference/shadercommon-helpers/) want.
+[`spIGN` and `spDither`](/docs/reference/shadercommon-helpers/) want.
 
 Shaders are compiled with `D3DCOMPILE_OPTIMIZATION_LEVEL3`. `tools/validate_shaders.py`
 passes `/O3` to `fxc` to match, so a shader that validates offline compiles in the app.
@@ -172,7 +172,7 @@ float4 main(PS_INPUT input) : SV_TARGET {
 ## What is prepended to your source
 
 The compiler never sees your file verbatim. `ShaderManager::BuildDefinesPreamble` assembles,
-in order: the whole of [`ShaderCommon.hlsli`](/reference/shadercommon-helpers/); the
+in order: the whole of [`ShaderCommon.hlsli`](/docs/reference/shadercommon-helpers/); the
 `AudioConstants` block and the `spectrumTexture` declaration if any parameter is an audio
 band; one `#define` per parameter; and finally `#line 1 "<preset name>"`, which resets the
 line counter so `fxc` error messages point at lines in your file rather than at

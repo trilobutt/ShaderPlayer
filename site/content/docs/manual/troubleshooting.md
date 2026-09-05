@@ -5,16 +5,17 @@ nav_title: Troubleshooting
 
 # Troubleshooting
 
-The failures worth a page are the ones that do not announce themselves: a build that
-succeeds and produces the wrong binary, a shader that vanishes from the library without an
-error, a webcam that never opens and never says why. Each has a specific check.
+The failures worth a page are the ones that do not announce themselves: a shader that
+vanishes from the library without an error, a parameter that reverts to its default while
+you are working, a webcam that never opens and never says why. Each has a specific check.
 
-## The library is empty after a fresh build
+## The library is empty
 
-Expected on a first run. The shader directory the application looks in is empty until you
-point it at one. Shader Library, **Scan Folder...**, choose `default_shaders`. The choice is
-written to `config.json` at once and reused on every later launch. See
-[Installation](/manual/installation/).
+The shader directory recorded in `config.json` has moved, been emptied, or been deleted,
+and the application scans it at startup without inventing a replacement. Point it at one
+again: Shader Library, **Scan Folder...**, then the `shaders` folder in the install
+directory. The choice is written to `config.json` at once and reused on every later launch.
+See [Getting started](/docs/manual/getting-started/).
 
 ## A shader did not appear after Scan Folder
 
@@ -26,7 +27,7 @@ The compile errors that confuse people are the ones that name a parameter rather
 of HLSL. `X3004: undeclared identifier 'Strength'` on a parameter that is plainly declared in
 the ISF block means the block did not parse, so no `#define` was generated for it. Five
 things cause that, and all five are silent by design. They are listed on
-[the ISF block reference page](/reference/isf-block-and-parameters/).
+[the ISF block reference page](/docs/reference/isf-block-and-parameters/).
 
 ## A parameter's alias is undeclared and the block looks fine
 
@@ -57,7 +58,7 @@ ShaderPlayer has it loaded therefore costs you the values you had dialled in.
 Editing inside ShaderPlayer and pressing F5 keeps your values, because that path saves and
 restores them by name. It still drops the keyframes. Values you want permanently belong in
 the shader's `DEFAULT` fields. See
-[Shaders and the editor](/manual/shaders-and-editing/).
+[Shaders and the editor](/docs/manual/shaders-and-editing/).
 
 ## The parameters panel disagrees with the picture
 
@@ -75,56 +76,22 @@ The structural one: ShaderPlayer loads `avdevice-*.dll` on demand rather than li
 because it is the most expensive FFmpeg library to map and nothing but capture needs it.
 Without that DLL beside the executable, device registration fails, every capture open fails
 silently, and everything else keeps working. Check that `avdevice-*.dll` is in the same
-directory as `ShaderPlayer.exe`; the [FFmpeg copy step](/manual/installation/) brings every
-DLL in the package across, so a missing one usually means a partial copy.
+directory as `ShaderPlayer.exe`. The installer puts the whole FFmpeg package there, so a
+missing one means the installation has been damaged: reinstall over the top of it.
 
 ## The application will not launch: a DLL was not found
 
-`avcodec-62.dll was not found` or similar means the FFmpeg runtime DLLs were never put into
-`third_party/ffmpeg/bin/`. The build now fails with a named error when that directory is
-empty rather than producing an executable that dies at load, so this is only seen with a
-binary built before that check or copied without its DLLs. Fix the directory and rebuild;
-adding DLLs needs a build, not a reconfigure.
+`avcodec-62.dll was not found` or similar means the FFmpeg runtime is no longer beside the
+executable. An installed copy cannot reach that state on its own, so something has removed
+the file since: an antivirus quarantine, a half-finished uninstall, or a copy of the
+install directory that left part of itself behind. Run the installer again over the
+existing installation, which replaces the runtime and keeps your `config.json`.
 
 ## A saved workspace does nothing
 
 Layout restoration is atomic. A preset saved under a different set of panels, or a file whose
 layout blob is corrupt, is refused wholesale and the built-in Default is applied instead,
 which is why nothing appears to happen. Rearrange the window and save the workspace again.
-
-## The build succeeds and the binary is wrong
-
-Two cache failures produce a working executable, so neither shows up as a build error.
-`build/CMakeCache.txt` is the single thing that decides what the build actually is, and the
-two need different fixes.
-
-**Wrong build type.** Any configure that bypasses the preset (a bare `cmake -B build`, or an
-IDE driving its own configure) writes `CMAKE_BUILD_TYPE=Debug` into the cache and drops
-`CMAKE_PREFIX_PATH` with it, in the tree the preset owns. The symptoms are a configure that
-cannot find Qt, or a Qt deployment step failing with `Broken filename passed to function`
-after a link that succeeded. Check it and re-run the preset:
-
-```
-grep CMAKE_BUILD_TYPE build/CMakeCache.txt
-cmake --preset windows-msvc
-```
-
-**Blanked compiler flags.** `CMAKE_CXX_FLAGS` and its per-configuration variants are
-initialised exactly once, when the cache entry is first created, and never again. A cache
-whose entries have been emptied **cannot be repaired by re-running the preset**: an empty
-value is a valid cached value and CMake honours it. The build then drops `/O2`, `/EHsc`,
-`/Zi` and `/DNDEBUG` together, giving an unoptimised binary with no debug symbols, live
-assertions and no unwind semantics, under a `RelWithDebInfo` name. The one outward sign is
-`warning C4530: C++ exception handler used, but unwind semantics are not enabled` from
-`<chrono>` in every translation unit. A configure-time guard now fails the configure on this
-rather than letting it build.
-
-The correct values on this toolchain are `/DWIN32 /D_WINDOWS /EHsc` and
-`/Zi /O2 /Ob1 /DNDEBUG`. The fix is to delete `build/CMakeCache.txt` and `build/CMakeFiles/`
-and reconfigure, not to re-run the preset over the top. Keep `build/_deps/` and nothing is
-re-downloaded; keep `build/config.json`, which is your presets, keybindings and layout.
-
-Any performance measurement taken from a build directory is worthless until both checks pass.
 
 ## The first launch after editing ShaderCommon.hlsli is slow
 

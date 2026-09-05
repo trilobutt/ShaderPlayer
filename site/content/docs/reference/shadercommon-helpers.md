@@ -63,7 +63,7 @@ the banding an 8-bit output puts into a smooth gradient.
 
 These three take a screen-space derivative of their argument, so they must not be called from
 inside divergent flow control: compute the field first, branch afterwards. See
-[Sampling and derivatives](/reference/sampling-and-derivatives/) for what goes wrong when the
+[Sampling and derivatives](/docs/reference/sampling-and-derivatives/) for what goes wrong when the
 argument is discontinuous.
 
 | Signature | Notes |

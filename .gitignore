@@ -57,3 +57,7 @@ __pycache__/
 # Site generator (site/build.py)
 site/.venv/
 site/dist/
+
+# Packaging (tools/package.ps1)
+dist/
+build/package/

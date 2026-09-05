@@ -12,30 +12,30 @@ footage open. Recording runs underneath all of it and does not stop when you swi
 edit source, or recompile.
 
 These pages cover using the application. The
-[shader reference](/reference/) covers writing shaders for it: the cbuffer contract, the ISF
+[shader reference](/docs/reference/) covers writing shaders for it: the cbuffer contract, the ISF
 parameter block, and a page per shipped shader.
 
 ## In reading order
 
-- [Installation](/manual/installation/). Fresh clone to a running `ShaderPlayer.exe`,
-  including the FFmpeg DLLs, which are the one step the build cannot do for you.
-- [The interface](/manual/interface-tour/). Every panel, what it is for, and the key that
+- [Getting started](/docs/manual/getting-started/). Installing the download, what the
+  first launch does, and where the application keeps your settings.
+- [The interface](/docs/manual/interface-tour/). Every panel, what it is for, and the key that
   opens it.
-- [Video and live capture](/manual/video-and-capture/). Opening a file, opening a camera or
+- [Video and live capture](/docs/manual/video-and-capture/). Opening a file, opening a camera or
   a stream, and why a live source behaves differently.
-- [Shaders and the editor](/manual/shaders-and-editing/). Applying a shader, editing it
+- [Shaders and the editor](/docs/manual/shaders-and-editing/). Applying a shader, editing it
   live, and what the compile cache and the file watcher do behind you.
-- [Parameters](/manual/parameters/). The parameter grid, one entry per control type, and
+- [Parameters](/docs/manual/parameters/). The parameter grid, one entry per control type, and
   the video blend section under it.
-- [Keyframe animation](/manual/keyframe-animation/). Animating a parameter along the
+- [Keyframe animation](/docs/manual/keyframe-animation/). Animating a parameter along the
   timeline, the curve types, and the bezier editor.
-- [Recording](/manual/recording/). Writing H.264 or ProRes while everything else keeps
+- [Recording](/docs/manual/recording/). Writing H.264 or ProRes while everything else keeps
   moving.
-- [Spout and the second window](/manual/spout-and-video-output/). Getting the output into
+- [Spout and the second window](/docs/manual/spout-and-video-output/). Getting the output into
   another application or onto another screen.
-- [Workspaces and keybindings](/manual/workspaces-and-keybindings/). Saving a layout,
+- [Workspaces and keybindings](/docs/manual/workspaces-and-keybindings/). Saving a layout,
   binding a shader to a key, and the keys you cannot have.
-- [Troubleshooting](/manual/troubleshooting/). The failures that are not shader bugs.
+- [Troubleshooting](/docs/manual/troubleshooting/). The failures that are not shader bugs.
 
 ## The one thing worth knowing first
 

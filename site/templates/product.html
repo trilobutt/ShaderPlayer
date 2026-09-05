@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block content %}
+{# The product page. content/index.md carries the sentences and nothing else;
+   everything structural is here, because Markdown cannot express a two-column
+   feature section, a screenshot bound to a region hue, or a pricing panel.
+
+   The two are joined by named slots. index.md opens each block with an HTML
+   comment marker, Markdown passes that comment through verbatim, and the loop
+   below splits the rendered body back into a name -> HTML map. Keying on the
+   name rather than on position means a block added or moved in index.md
+   cannot silently shift every section's copy one slot along. A name the
+   template asks for and index.md does not carry renders as nothing, which is
+   visible on the page and harmless to the build. #}
+{% set ns = namespace(copy={}) %}
+{% for chunk in body.split('<!--#') %}
+{% if '-->' in chunk %}
+{% set name, _sep, text = chunk.partition('-->') %}
+{% set _ = ns.copy.update({name.strip(): text}) %}
+{% endif %}
+{% endfor %}
+
+<div class="product">
+
+  {# Hero. The words sit on a 62ch measure inside .hero__inner, which is what
+     gives them the display type scale; the whole-window shot goes beneath at
+     the hero's full width, so the page opens on one dominant image. #}
+  <section class="hero">
+    <div class="hero__inner">
+      {{ ns.copy.get('hero', '') | safe }}
+      <p class="hero__actions">
+        <a class="button button--primary" href="{{ payment_link }}">Buy · $20</a>
+        <a class="button" href="/docs/">Read the documentation</a>
+      </p>
+    </div>
+    <figure class="shot product-hero__shot">
+      <a href="/static/img/interface.png" target="_blank" rel="noopener"><img src="/static/img/interface.png" alt="The ShaderPlayer window with a generative electromagnetic field shader running: the parameter panel on the left showing seventeen controls, the rendered picture in the centre, the shader library on the right, and the transport bar along the bottom." width="1600" height="958" loading="eager"></a>
+      <figcaption>Every shipped shader looks like this: its own parameters on the left, its picture in the centre, one click away in the library on the right. Click any screenshot on this page to open it full size in a new tab.</figcaption>
+    </figure>
+  </section>
+
+  {# Five feature sections. Each owns one region hue, carried unconditionally on
+     the panel hairline, the eyebrow, and the figure's top border, so the colour
+     is never a hover-only signal. The hue is the one the matching dock wears in
+     the application. Split versus stacked follows the screenshot's shape rather
+     than an alternating rule: a 1600x428 recording strip in a 40% column would
+     be unreadable, and a 900x1616 library rail stacked full width would tower
+     over its own paragraphs. #}
+
+  <section class="feature panel feature--sources">
+    <div class="feature__body">
+      <p class="feature__eyebrow">Sources</p>
+      {{ ns.copy.get('sources', '') | safe }}
+    </div>
+    <figure class="shot shot--transport feature__shot">
+      <a href="/static/img/empty-state.png" target="_blank" rel="noopener"><img src="/static/img/empty-state.png" alt="ShaderPlayer with nothing open: the centre of the window offers Open Video and Open Stream / Webcam buttons, and the shader library on the right lists the audio-reactive and generative groups." width="1600" height="958" loading="lazy"></a>
+      <figcaption>The first-run state. A video file, a webcam, or a stream URL all end up at the same place in the pipeline.</figcaption>
+    </figure>
+  </section>
+
+  <section class="feature panel feature--split feature--editor">
+    <div class="feature__body">
+      <p class="feature__eyebrow">Editing</p>
+      {{ ns.copy.get('editing', '') | safe }}
+    </div>
+    <figure class="shot shot--editor feature__shot">
+      <a href="/static/img/shader-editor.png" target="_blank" rel="noopener"><img src="/static/img/shader-editor.png" alt="The Shader Editor panel showing syntax-highlighted HLSL with line numbers, a Compile (F5) button, and an OK compile status." width="1200" height="1217" loading="lazy"></a>
+      <figcaption>The editor, with the compile status beside the button.</figcaption>
+    </figure>
+  </section>
+
+  <section class="feature panel feature--split feature--figure-first feature--params">
+    <div class="feature__body">
+      <p class="feature__eyebrow">Parameters</p>
+      {{ ns.copy.get('parameters', '') | safe }}
+    </div>
+    <figure class="shot shot--params feature__shot">
+      <a href="/static/img/keyframes.png" target="_blank" rel="noopener"><img src="/static/img/keyframes.png" alt="The Shader Parameters panel with sliders, dropdowns, and a colour swatch, and beneath the Glow parameter an expanded keyframe editor holding three timestamp chips, time and value fields, and a bezier curve with two draggable handles." width="1000" height="1433" loading="lazy"></a>
+      <figcaption>Parameters generated from the shader's own JSON block, with the keyframe editor open under Glow.</figcaption>
+    </figure>
+  </section>
+
+  <section class="feature panel feature--output">
+    <div class="feature__body">
+      <p class="feature__eyebrow">Output</p>
+      {{ ns.copy.get('output', '') | safe }}
+    </div>
+    <figure class="shot shot--recording feature__shot">
+      <a href="/static/img/recording.png" target="_blank" rel="noopener"><img src="/static/img/recording.png" alt="The Recording panel mid-render: output path output.mp4, H.264 codec, 25 fps, 20 Mbps, a REC badge reading eight seconds, a counter reading 243 frames and 0 dropped, and a Stop Rendering button." width="1600" height="428" loading="lazy"></a>
+      <figcaption>A render in progress. The dropped-frame counter is the one to watch, and on a file render it stays at zero.</figcaption>
+    </figure>
+  </section>
+
+  <section class="feature panel feature--split feature--figure-first feature--shaders">
+    <div class="feature__body">
+      <p class="feature__eyebrow">Included</p>
+      {{ ns.copy.get('shaders', '') | safe }}
+    </div>
+    <figure class="shot shot--library feature__shot">
+      <a href="/static/img/shader-library.png" target="_blank" rel="noopener"><img src="/static/img/shader-library.png" alt="The Shader Library panel: Scan Folder and New buttons, a name filter, then the Audio Reactive group with eight entries and the Generative group with fifteen, electromagnetic_field highlighted as the active preset." width="900" height="1616" loading="lazy"></a>
+      <figcaption>The library, grouped the way the shaders declare themselves.</figcaption>
+    </figure>
+  </section>
+
+  {# Pricing. Cyan is the site's global interactive accent and no section claims
+     it, which is what leaves it free to mark the one thing this page is asking
+     for. The buy card is recessed against its panel, like an input, so the
+     filled button reads as the brightest object on the page. #}
+  <section class="pricing panel" id="pricing">
+    <div class="pricing__body">
+      <p class="feature__eyebrow">Pricing</p>
+      {{ ns.copy.get('pricing', '') | safe }}
+    </div>
+    <div class="pricing__card">
+      <p class="pricing__price">
+        <span class="pricing__amount">$20</span>
+        <span class="pricing__unit">one-time</span>
+      </p>
+      <a class="button button--primary pricing__buy" href="{{ payment_link }}">Buy ShaderPlayer</a>
+      <p class="pricing__fine">Checkout and card handling are Stripe's.</p>
+    </div>
+  </section>
+
+  {# Requirements and licence close the page as a pair. Both are short, both are
+     things a buyer checks rather than reads, and side by side they stop the
+     page trailing off into two more full-width panels. #}
+  <div class="closing">
+    <section class="note panel note--requirements">
+      <p class="feature__eyebrow">Requirements</p>
+      {{ ns.copy.get('requirements', '') | safe }}
+    </section>
+    <section class="note panel note--licence">
+      <p class="feature__eyebrow">Licence</p>
+      {{ ns.copy.get('licence', '') | safe }}
+    </section>
+  </div>
+
+</div>
+{% endblock %}

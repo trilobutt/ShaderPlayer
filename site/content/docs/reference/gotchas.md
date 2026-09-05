@@ -125,7 +125,7 @@ python tools/validate_shaders.py default_shaders/my_shader.hlsl
 
 **Audio bands are small.** For ordinary music they run 0.01 to 0.3. A modulation of
 `1.0 + bass` is invisible; multipliers three to five times what intuition suggests are the
-working range. See [Audio bands and the spectrum](/reference/audio-and-spectrum/).
+working range. See [Audio bands and the spectrum](/docs/reference/audio-and-spectrum/).
 
 **Offset-based effects need a bigger default than they look like they should.** For a lens
 formula like `offset = (uv - 0.5) * s`, `s = 0.003` moves the corner of a 1080p frame by

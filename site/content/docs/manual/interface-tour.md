@@ -8,7 +8,7 @@ nav_title: Interface Tour
 One window, one central picture, eight dockable panels around it. Every panel can be dragged
 to another edge, floated, tabbed behind another, or closed, and the arrangement survives a
 restart. A layout worth keeping can be saved as a
-[workspace](/manual/workspaces-and-keybindings/).
+[workspace](/docs/manual/workspaces-and-keybindings/).
 
 Each panel carries a colour of its own on two channels: the glyph in its title bar and the
 hairline directly above its body. Azure is the Shader Library, violet the Editor, lime the
@@ -67,7 +67,7 @@ Keybinding...** and **Remove**.
 
 The source of the active shader, with HLSL syntax highlighting, a line-number gutter, and
 completion over the HLSL intrinsics and types, the uniforms and
-[helper functions](/reference/shadercommon-helpers/) the preamble injects, and the current
+[helper functions](/docs/reference/shadercommon-helpers/) the preamble injects, and the current
 shader's own parameter names.
 **Compile (F5)** compiles what is in the editor into the active shader; the result appears
 as `OK` or `Error` beside the button, and a failure prints the compiler message along the
@@ -75,7 +75,7 @@ bottom of the panel and marks the offending line in the gutter. Editing also tri
 automatic compile 500 ms after you stop typing.
 
 Ctrl+S writes the editor's contents back to the shader's file on disk. See
-[Shaders and the editor](/manual/shaders-and-editing/) for what that does to the parameter
+[Shaders and the editor](/docs/manual/shaders-and-editing/) for what that does to the parameter
 values, which is not nothing.
 
 ## Shader Parameters
@@ -84,7 +84,7 @@ The controls the active shader declares, one row each, with a reset arrow, an **
 randomiser and a **KF** keyframe toggle at the end of every row. **Randomise All** and
 **Reset to Defaults** sit at the top. Under the parameters, separated by a rule, is the
 **VIDEO BLEND** section: eleven modes and an amount, which decide how the shader's output
-meets the video underneath it. [Parameters](/manual/parameters/) covers all of it.
+meets the video underneath it. [Parameters](/docs/manual/parameters/) covers all of it.
 
 This is the one dock with no close button and no F-key. It cannot be closed, because no
 workspace preset records its visibility and there would be no route back.
@@ -113,7 +113,7 @@ at the bottom starts and stops. While armed, the panel grows a pulsing red borde
 badge, an elapsed clock, the destination, and counters for frames written and frames dropped.
 It also raises itself to the front of whatever tab stack it sits in, since a recording that
 has just started is the one thing that must not be hidden. See
-[Recording](/manual/recording/).
+[Recording](/docs/manual/recording/).
 
 ## Noise Generator
 
@@ -122,7 +122,7 @@ channel, Voronoi in the green. This panel owns its two settings, **Scale** and *
 (256, 512 or 1024 square, 512 by default), and shows a live preview of each channel read
 back off the GPU rather than re-simulated, so the preview cannot drift from what the shaders
 sample. **Regenerate** rebuilds it. The authoring side is on
-[the noise texture reference page](/reference/noise-texture/).
+[the noise texture reference page](/docs/reference/noise-texture/).
 
 <figure class="shot shot--noise">
   <a href="/static/img/noise-generator.png" target="_blank" rel="noopener"><img src="/static/img/noise-generator.png" alt="The Noise Generator panel showing the red-channel Perlin preview and the green-channel Voronoi preview side by side, above a Scale slider, a Size combo and a Regenerate button."></a>
@@ -133,7 +133,7 @@ sample. **Regenerate** rebuilds it. The authoring side is on
 
 A checkbox to share every rendered frame as a Spout sender, a sender name that receivers
 pick the stream out of their source list by, and a status block reading SENDING, WAITING,
-UNAVAILABLE or OFF. See [Spout and the second window](/manual/spout-and-video-output/).
+UNAVAILABLE or OFF. See [Spout and the second window](/docs/manual/spout-and-video-output/).
 
 ## Audio Monitor
 
@@ -142,7 +142,7 @@ centroid), a 256-bin spectrum display, and three settings that change how the an
 behaves: **Beat Sensitivity**, **Beat Decay** and **Smoothing**. The meters show exactly the
 numbers an audio-reactive shader reads, so this panel is how you find out whether a shader
 that is not moving has a bug or simply has no signal. The
-[audio reference](/reference/audio-and-spectrum/) gives the ranges.
+[audio reference](/docs/reference/audio-and-spectrum/) gives the ranges.
 
 ## Video Output Window (F7)
 
@@ -167,4 +167,4 @@ submenu.
 The keys printed against menu items are shown rather than bound there: every key in the
 product is dispatched from one place, so a menu accelerator is a label, not a second route
 to the action. The full table, including which keys you may not bind to your own shaders, is
-in [Workspaces and keybindings](/manual/workspaces-and-keybindings/).
+in [Workspaces and keybindings](/docs/manual/workspaces-and-keybindings/).

@@ -14,7 +14,8 @@
   <link rel="stylesheet" href="{{ static_prefix }}pygments.css">
   <link rel="stylesheet" href="{{ static_prefix }}site.css">
 </head>
-{% set has_sidebar = url != "/" %}
+{% set is_docs = url.startswith("/docs") %}
+{% set has_sidebar = is_docs or url == "/search/" %}
 <body class="{% if has_sidebar %}has-sidebar{% else %}is-home{% endif %}">
   {# Depth 0 is the top-level section (Home, Manual, Reference). Depth 1 and
      below are its pages and subgroups; a subgroup with children becomes a
@@ -66,8 +67,14 @@
           <rect x="1.5" y="1.5" width="29" height="29" rx="9" fill="none" stroke="#FFFFFF" stroke-opacity="0.4"/>
         </svg>
       </span>
-      <span class="brand__text">ShaderPlayer<span class="brand__suffix"> Documentation</span></span>
+      <span class="brand__text">ShaderPlayer{% if is_docs %}<span class="brand__suffix"> Documentation</span>{% endif %}</span>
     </a>
+
+    <nav class="site-links" aria-label="Sections">
+      <a class="site-links__link{% if url == "/" %} is-current{% endif %}" href="/">Overview</a>
+      <a class="site-links__link{% if is_docs %} is-current{% endif %}" href="/docs/">Documentation</a>
+      <a class="site-links__buy" href="{{ payment_link }}">Buy · $20</a>
+    </nav>
 
     {% if has_sidebar %}
     <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="site-nav">
@@ -76,6 +83,7 @@
     </button>
     {% endif %}
 
+    {% if has_sidebar %}
     <form class="site-search" action="/search/" method="get" role="search">
       <label class="visually-hidden" for="site-search-input">Search documentation</label>
       <span class="site-search__field">
@@ -84,6 +92,7 @@
         <button class="site-search__submit" type="submit">Search</button>
       </span>
     </form>
+    {% endif %}
   </header>
 
   <div class="shell">
@@ -103,7 +112,14 @@
   </div>
 
   <footer class="site-footer">
+    {# The documentation says where it came from; the product page says who is
+       selling and under what licence, which is what a buyer looks down here
+       for. One footer, two honest sentences. #}
+    {% if is_docs %}
     <p>ShaderPlayer documentation. Generated from the project repository.</p>
+    {% else %}
+    <p>ShaderPlayer by Marc Srour. GPLv3; the source is on <a href="https://github.com/trilobutt/ShaderPlayer">GitHub</a>.</p>
+    {% endif %}
   </footer>
 
   {% if has_sidebar %}

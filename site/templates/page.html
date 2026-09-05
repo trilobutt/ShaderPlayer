@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% if url == "/" %}
+{% if url == "/docs/" %}
 {# The landing surface. The rendered Markdown supplies its own <h1> and lede,
    so the hero styles the first heading and paragraph rather than printing a
    second copy of the title above them. #}
@@ -61,5 +61,14 @@
   {% endif %}
   {{ body | safe }}
 </article>
+{% endif %}
+{% endblock %}
+
+{# The post-purchase page is the one Markdown page with behaviour behind it.
+   The script is named here rather than in thanks.md so the content file stays
+   free of markup the templates own. #}
+{% block scripts %}
+{% if url == "/thanks/" %}
+<script src="{{ static_prefix }}js/download.js" defer></script>
 {% endif %}
 {% endblock %}

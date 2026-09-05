@@ -31,7 +31,7 @@ take its gradient for edges, or use it directly as a scatter of soft blobs.
 
 Both channels are 8-bit, which is 256 levels. That is plenty for a perturbation and visibly
 short for a slow gradient: a full-frame ramp sampled straight out of the red channel bands.
-Add a [dither](/reference/shadercommon-helpers/) or keep the amplitude small.
+Add a [dither](/docs/reference/shadercommon-helpers/) or keep the amplitude small.
 
 ## Size, scale and the seam
 

@@ -27,7 +27,7 @@ The **reset arrow** restores that parameter's declared default and is greyed whe
 already is the default. **R** rolls a random value inside exactly the range the control
 offers, so a rolled value is always one you could have set by hand. **KF** turns keyframing
 on for that parameter and opens its
-[keyframe editor](/manual/keyframe-animation/) in the row beneath.
+[keyframe editor](/docs/manual/keyframe-animation/) in the row beneath.
 
 Above the grid, **Randomise All** rolls every parameter at once and **Reset to Defaults**
 restores all of them. Both skip parameters currently under keyframe control, since the
@@ -65,7 +65,7 @@ frame, which is what a shader reads as a one-shot. Events cannot be keyframed an
 **Audio band** is a read-only meter showing the live value the analyser is producing. There
 is nothing to set: the signal comes from whatever is playing. Audio parameters are not saved
 to `config.json` and cannot be keyframed. The
-[audio reference](/reference/audio-and-spectrum/) gives the six bands and the range they
+[audio reference](/docs/reference/audio-and-spectrum/) gives the six bands and the range they
 actually occupy, which is smaller than most people guess.
 
 ## When a control is greyed out
@@ -105,4 +105,4 @@ body actually mentions the name. If it is one you did not write, that is what ha
 
 The full parameter declaration format, the packing rules and the `#define` alias each type
 generates are on [the ISF block reference
-page](/reference/isf-block-and-parameters/).
+page](/docs/reference/isf-block-and-parameters/).

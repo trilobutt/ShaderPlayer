@@ -1148,6 +1148,60 @@ and a flat `search-index.json`. Build it with the local venv (`site/.venv`, from
 - **Screenshots** live in `site/static/img/` and every figure links its own full-size file in
   a new tab, because a capture wider than the prose column loses its labels at 60% scale. See
   the DPI note under Qt Notes for how they are taken.
+- **`/` is the product page and `/docs/` is the documentation root.** `content/index.md`
+  renders through `templates/product.html`, which reads named slots out of the Markdown:
+  each `<!--# name -->` comment opens a slot and the template claims it by name, so the
+  sentences live in the content file and the layout lives in the template. Rename a slot in
+  one and the other stops finding it.
+- **A content page outside `content/docs/` is a product-surface page**, kept out of the docs
+  rail and out of `search-index.json` by `collect_sources`. The rail's section name is the
+  directory a page lives in, so a root-level page left in it invents a section named after
+  the file (`Thanks.Md`), and a transactional page like `/thanks/` is a dead end as a search
+  result anyway.
+- **The Stripe Payment Link never enters the repository.** It reaches the templates as
+  `--payment-link`, defaulting to `$SHADERPLAYER_PAYMENT_LINK` and then to
+  `PLACEHOLDER_PAYMENT_LINK`; `build()` refuses an indexable (`--no-noindex`) build still
+  carrying the placeholder.
+
+## The Paid Download (site/api/)
+
+`site/api/` is a standard-library-only WSGI app, deployed as a **second** Opalstack app
+mounted at `/api/` on the same domain as the static site (`site/deploy.sh` knows nothing
+about it). It verifies a Stripe Checkout session against Stripe's REST API on every request
+and streams the installer; `site/api/README.md` holds the deployment procedure.
+
+- **Route on `SCRIPT_NAME + PATH_INFO`, never `PATH_INFO` alone.** Mounted at `/api/`, the
+  server hands the app `SCRIPT_NAME="/api"` and `PATH_INFO="/download"`, so matching
+  `PATH_INFO == "/api/download"` 404s the deployment we actually use.
+- Configuration is read from the environment once at import (`STRIPE_SECRET_KEY`,
+  `SHADERPLAYER_PRICE_ID`, `SHADERPLAYER_RELEASE_FILE`, `SHADERPLAYER_DOWNLOAD_DB`,
+  `SHADERPLAYER_MAX_DOWNLOADS`), so a missing name fails the process at start rather than on
+  a request. `site/api/test_download.py` sets those before importing the module.
+- The download counter is SQLite, every statement parameterised, and the session id is
+  validated against `^cs_[A-Za-z0-9_]{10,200}$` before it reaches Stripe or the database.
+
+## Release Packaging (tools/package.ps1)
+
+`pwsh -File tools/package.ps1` stages a release tree from `build/` and runs Inno Setup over
+it, producing `dist/ShaderPlayer-<version>-setup.exe` (per-user, `%LOCALAPPDATA%\Programs\ShaderPlayer`,
+no UAC). `-SkipBuild` packages the existing `build/`. `dist/` and `build/package/` are
+gitignored; `tools/installer/ShaderPlayer.iss` takes its version and paths as ISCC `/D`
+defines and hardcodes neither.
+
+- **The stage is an allowlist, and it is asserted clean afterwards.** Only named items are
+  copied, and the script then throws on any `config.json`, `shader_cache`, `*.pdb`, `*.ilk`,
+  `*.lib` or `*.obj` under the stage, and on a shader count other than 45. `config.json`'s
+  `lastOpenedVideo` names a file on the developer's machine, which is what that check exists
+  to keep out of a public download.
+- **The version has one home**, `project(ShaderPlayer VERSION ...)` in `CMakeLists.txt`; the
+  script reads it and takes no `-Version` parameter. It also refuses a `build/` whose
+  `CMakeCache.txt` is not RelWithDebInfo with `/O2` and `/DNDEBUG` (see "When the cache goes
+  wrong").
+- **The shortcuts set `WorkingDir: "{app}"`**, because `AppConfig::shaderDirectory` defaults
+  to the CWD-relative `"shaders"`.
+- **The release's version and size are stated in `site/content/index.md` (the pricing panel)
+  and `site/content/thanks.md` (the lede), and nothing checks either.** Update both in the
+  same pass as an upload.
 
 ## Claude Code Automations
 

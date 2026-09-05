@@ -84,8 +84,8 @@ most expensive FFmpeg library to map and nothing but capture ever needs it. When
 missing from the runtime directory, device registration fails, **every capture open fails
 silently**, and the rest of the application works exactly as before. If the list is empty
 with a camera definitely attached and definitely free, check that `avdevice-*.dll` sits
-beside `ShaderPlayer.exe`; the [FFmpeg step](/manual/installation/) copies every DLL in the
-package precisely so that this one is not left behind.
+beside `ShaderPlayer.exe`. The installer puts the whole FFmpeg package in the install
+directory, so a missing one means something has removed it since.
 
 ## Resolution, with and without a source
 
@@ -99,4 +99,4 @@ height pair) whose value is written to `config.json` and used for the render tar
 
 The `resolution` uniform is a third thing again: it is the size of the viewport panel in
 pixels, which changes when you resize the window and has no relationship to either of the
-above. The [cbuffer contract](/reference/cbuffer-contract/) spells out which to use for what.
+above. The [cbuffer contract](/docs/reference/cbuffer-contract/) spells out which to use for what.

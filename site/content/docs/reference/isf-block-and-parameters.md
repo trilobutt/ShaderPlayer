@@ -113,7 +113,7 @@ number to compare against the packing table below.
 
 Every entry needs `NAME` and `TYPE`; an entry missing either is skipped without comment.
 `NAME` must be a valid HLSL identifier and must not shadow an intrinsic or a reserved word
-(see [Gotchas](/reference/gotchas/)). `LABEL` is the text in the panel and defaults to
+(see [Gotchas](/docs/reference/gotchas/)). `LABEL` is the text in the panel and defaults to
 `NAME`.
 
 **`float`** renders a slider and expands to one component.
@@ -157,7 +157,7 @@ zeroes it again. Event parameters cannot be keyframed.
 **`audio`** renders a read-only level meter and consumes no `custom[]` slot at all: the alias
 points straight at an `AudioConstants` field. `BAND` is one of `rms`, `bass`, `mid`, `high`,
 `beat`, `centroid`. Audio parameters are not persisted to `config.json` and cannot be
-keyframed. See [Audio bands and the spectrum](/reference/audio-and-spectrum/).
+keyframed. See [Audio bands and the spectrum](/docs/reference/audio-and-spectrum/).
 
 ```json
 {"NAME": "BassIn", "LABEL": "Bass", "TYPE": "audio", "BAND": "bass"}

@@ -383,3 +383,12 @@ Workspace layout presets are stored as `.ini` files in the `layouts/` directory 
 | Direct3D 11 / HLSL | Shader pipeline and rendering |
 
 All dependencies except FFmpeg runtime DLLs are fetched automatically via CMake FetchContent.
+
+## Licence
+
+ShaderPlayer is licensed under the GNU General Public License version 3; see
+[LICENSE](LICENSE). It links FFmpeg built with `--enable-gpl`, which is what
+fixes that choice rather than a weaker one.
+
+The components the installer ships alongside it, and their own licences, are
+listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

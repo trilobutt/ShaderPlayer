@@ -128,7 +128,7 @@ jobs:
       - name: Verify the live site
         run: |
           base=https://shaderplayer.marcsplained.com
-          for path in / /manual/ /reference/ /reference/shaders/plasma/ /static/site.css; do
+          for path in / /docs/ /docs/manual/ /docs/reference/ /docs/reference/shaders/plasma/ /thanks/ /static/site.css; do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$base$path")
             echo "$code  $path"
             [ "$code" = "200" ] || exit 1
