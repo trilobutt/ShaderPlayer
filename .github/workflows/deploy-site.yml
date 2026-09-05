@@ -81,9 +81,16 @@ jobs:
           import pathlib, re, sys
           dist = pathlib.Path("site/dist")
           bad = []
+          # A last segment carrying a dot is a file and is resolved literally; anything
+          # else is a page and lives at <path>/index.html. Tested by extension shape
+          # rather than against a list of known extensions, because the list silently
+          # misfiles everything absent from it: .png sent every screenshot link to
+          # static/img/<name>.png/index.html and failed a build whose files were all there.
           for f in dist.rglob("*.html"):
-              for h in set(re.findall(r'href="(/[^"#]*)', f.read_text(encoding="utf-8"))):
-                  if re.search(r"[.](css|js|json|xml|txt)$", h):
+              html = f.read_text(encoding="utf-8")
+              refs = set(re.findall(r'(?:href|src)="(/[^"#]*)', html))
+              for h in refs:
+                  if "." in h.rstrip("/").rsplit("/", 1)[-1]:
                       target = dist / h.lstrip("/")
                   elif h == "/":
                       target = dist / "index.html"
@@ -95,7 +102,7 @@ jobs:
               for page, href in bad[:20]:
                   print(f"broken: {page} -> {href}")
               sys.exit(f"{len(bad)} broken internal links")
-          print("internal links: all resolve")
+          print("internal links and assets: all resolve")
           PY
 
       - name: Configure SSH
