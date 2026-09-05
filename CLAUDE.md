@@ -764,13 +764,20 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - Recording framerate matches playback framerate (no arbitrary output rates)
 - A recorded file carries the source's audio only when the source is a file. Live capture
   opens a dshow video device with no audio pin, so a webcam recording is silent.
-- A generative recording declares 60 fps when `RecordingSettings::fps` is 0 (there is no
-  source to match) while submitting one frame per render tick, and the tick runs at the
-  display's rate. Above 60 Hz the file therefore carries more frames than its declared rate
-  accounts for and plays back longer than the capture took. Set an explicit fps in the
-  Recording panel to avoid it. Unmeasured: the mechanism is plain in
-  `Application::StartRecording`, but no recording has been timed against a clock to
-  quantify the drift.
+- **A generative recording is paced by the display, not by its declared frame rate.** The
+  generative branch of `ProcessFrame` sets `m_newVideoFrame` every tick, `RenderFrame`
+  submits on that flag, and `VideoEncoder` stamps PTS as `frameIndex * 1000` against a
+  `time_base` of `1/(fps*1000)`. Submission therefore tracks the display's refresh rate
+  while the timeline is a pure counter at the declared rate, and the two are never
+  reconciled. The file's duration is the capture's real duration multiplied by
+  `displayHz / declaredFps`, with the motion slowed by the same factor.
+
+  Setting an explicit fps in the Recording panel does **not** avoid this and generally makes
+  it worse: measured on a 59-60 Hz display, a declared 30 fps over an 11.2 s capture wrote
+  666 frames (59.5/s actual) into a 22.17 s file, exactly 2× long at half speed. The
+  `fps == 0` default of 60 is correct only where the display happens to run at 60 Hz, which
+  is why this has gone unnoticed. A file source is unaffected: that path is a render
+  (`m_offlineRender`) driven one decoded frame per tick at the source's own rate.
 
 ## Qt Notes
 
