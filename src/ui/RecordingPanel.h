@@ -143,7 +143,7 @@ private:
 
     // Last applied live state, so the per-frame sync is a compare rather than a restyle.
     bool m_armed = false;
-    int m_fileSourceApplied = -1;         // tri-state: -1 forces the idle button to re-apply
+    int m_sourceStateApplied = -1;        // 0 none, 1 file, 2 live; -1 forces a re-apply
     bool m_rendering = false;             // that render is running
     QString m_elapsedText;
     QString m_countersText;

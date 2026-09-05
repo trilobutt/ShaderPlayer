@@ -394,7 +394,17 @@ void EditorPanel::ShowCompileResult(bool ok, const QString& error)
 
 void EditorPanel::SetParamNames(const QStringList& names)
 {
-    m_highlighter->SetParamNames(names);
+    // Blocked for the same reason SetSource blocks: this is not an edit and must not start
+    // the auto-compile clock. QSyntaxHighlighter::rehighlight() marks the document's
+    // contents dirty, which reaches QPlainTextEdit::textChanged and looks identical to a
+    // keystroke from here. Escape is where that bit: it resets to passthrough and refreshes
+    // the parameter names to an empty list, the rehighlight restarted the timer, and half a
+    // second later Compile() ran with no active preset and silently added the editor's
+    // contents to the library as a new "Untitled" shader.
+    {
+        const QSignalBlocker blocker(m_edit);
+        m_highlighter->SetParamNames(names);
+    }
     RefreshCompletionModel();
 }
 

@@ -450,8 +450,15 @@ void RecordingPanel::SyncIdleAffordance()
 {
     const VideoDecoder& decoder = m_app.GetDecoder();
     const bool fileSource = decoder.IsOpen() && !decoder.IsLiveCapture();
-    if (static_cast<int>(fileSource) == m_fileSourceApplied) return;
-    m_fileSourceApplied = static_cast<int>(fileSource);
+    const bool liveSource = decoder.IsOpen() && decoder.IsLiveCapture();
+
+    // Three states, not two. The button and the hint turn on fileSource alone, while the
+    // rate control turns on whether there is any source at all, so keying the early-out on
+    // fileSource left the rate control un-applied across the one transition that changes
+    // it: opening a live device keeps fileSource false and used to skip this whole function.
+    const int state = fileSource ? 1 : (liveSource ? 2 : 0);
+    if (state == m_sourceStateApplied) return;
+    m_sourceStateApplied = state;
 
     m_toggle->setText(fileSource ? tr("Render Video to File") : tr("Start Recording"));
     m_toggle->setToolTip(fileSource
@@ -463,16 +470,22 @@ void RecordingPanel::SyncIdleAffordance()
              "F9 starts and stops from anywhere.")
         : tr("Not recording. F9 starts and stops from anywhere."));
 
-    // The rate is the shader's to choose only when the shader is the source. An open video
-    // supplies its own, so the control goes inert and says why rather than sitting there
-    // live and doing nothing, which is how a setting gets blamed for an unrelated result.
-    m_fps->setEnabled(!fileSource);
-    m_fps->setToolTip(fileSource
-        ? tr("The open video's own frame rate is used, so this does not apply. It sets the "
-             "rate for a generative recording, with no video open.")
-        : tr("The rate the file is written at. The render steps the shader by exactly one "
-             "frame at a time, so this is the speed the result plays at no matter what "
-             "the display refreshes at or how long each frame takes to draw."));
+    // The rate is the shader's to choose only when the shader is the source. Any open
+    // source supplies its own (Application::StartRecording takes GetFPS() from the decoder
+    // for a file and for a device alike), so the control goes inert and says why rather
+    // than sitting there live and doing nothing, which is how a setting gets blamed for an
+    // unrelated result.
+    m_fps->setEnabled(!decoder.IsOpen());
+    m_fps->setToolTip(
+        fileSource ? tr("The open video's own frame rate is used, so this does not apply. "
+                        "It sets the rate for a generative recording, with no video open.")
+      : liveSource ? tr("The capture device's own frame rate is used, so this does not "
+                        "apply. It sets the rate for a generative recording, with no "
+                        "source open.")
+                   : tr("The rate the file is written at. The render steps the shader by "
+                        "exactly one frame at a time, so this is the speed the result "
+                        "plays at no matter what the display refreshes at or how long "
+                        "each frame takes to draw."));
 }
 
 void RecordingPanel::SyncCodec()
@@ -501,9 +514,9 @@ void RecordingPanel::SyncArmed(bool recording)
     m_codec->setEnabled(!recording);
     m_bitrate->setEnabled(!recording);
     m_profile->setEnabled(!recording);
-    // Re-enabled by SyncIdleAffordance, which owns this one while idle: with a video open
-    // it stays disabled because the video's rate is used, and only the tri-state's reset
-    // below makes that run again.
+    // Re-enabled by SyncIdleAffordance, which owns this one while idle: with any source
+    // open it stays disabled because that source's rate is used, and only the state key's
+    // reset below makes that run again.
     m_fps->setEnabled(!recording);
 
     m_statusBlock->setVisible(recording);
@@ -517,7 +530,7 @@ void RecordingPanel::SyncArmed(bool recording)
             : tr("End the recording and close the file (F9)."));
     } else {
         // The idle button is one of two different actions; SyncIdleAffordance picks it.
-        m_fileSourceApplied = -1;
+        m_sourceStateApplied = -1;
         SyncIdleAffordance();
     }
 

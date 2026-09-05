@@ -17,6 +17,11 @@ Spout Output panel, magenta the Audio Monitor. Nothing in the interface responds
 focus with a colour change, so those hues are the one signal that tells a tabbed stack of
 panels apart at a glance.
 
+<figure class="shot">
+  <a href="/static/img/interface.png" target="_blank" rel="noopener"><img src="/static/img/interface.png" alt="The ShaderPlayer window with a generative shader running: Shader Parameters docked on the left, the rendered picture in the centre, the Shader Library on the right, the Transport along the bottom."></a>
+  <figcaption>The window with the <code>electromagnetic_field</code> shader active. Parameters on the left, the picture in the centre, the Shader Library and Shader Editor tabbed together on the right, the Transport along the bottom. The Parameters dock has been widened from its shipped width so the R and KF columns are not clipped. Click the picture for it full size.</figcaption>
+</figure>
+
 ## The centre
 
 The central area holds either the **viewport** or the **empty state**, and it switches
@@ -30,6 +35,11 @@ aspect ratio with black bars. It is the only part of the window Qt does not pain
 one visible consequence: a screenshot taken with a window-capture tool that reads Qt's
 backing store shows stale pixels there rather than the rendered frame. Capture the screen,
 not the window.
+
+<figure class="shot">
+  <a href="/static/img/empty-state.png" target="_blank" rel="noopener"><img src="/static/img/empty-state.png" alt="The same window with no video open and no shader active: the centre shows a large ShaderPlayer wordmark over Open Video and Open Stream buttons."></a>
+  <figcaption>The empty state, which is what the centre shows when there is no video open and no shader active. The Transport says the same thing in its own words, and Play and Stop are greyed. Click the picture for it full size.</figcaption>
+</figure>
 
 ## Shader Library (F2)
 
@@ -47,6 +57,11 @@ Each row carries a status dot. A red dot means the shader failed to compile, and
 it shows the compiler's message as a tooltip**. That is the only place the message appears
 for a shader you have not opened in the editor. Right-clicking a row offers **Set
 Keybinding...** and **Remove**.
+
+<figure class="shot shot--library">
+  <a href="/static/img/shader-library.png" target="_blank" rel="noopener"><img src="/static/img/shader-library.png" alt="The Shader Library panel: Scan Folder and New buttons, a filter box, the (No Effect) row, then AUDIO REACTIVE and GENERATIVE sections with their counts and shader names."></a>
+  <figcaption>The Shader Library, with the active shader highlighted. Each section header carries its own count, and the first row above them is the passthrough Escape returns to. Click the picture for it full size.</figcaption>
+</figure>
 
 ## Shader Editor (F1)
 
@@ -108,6 +123,11 @@ channel, Voronoi in the green. This panel owns its two settings, **Scale** and *
 back off the GPU rather than re-simulated, so the preview cannot drift from what the shaders
 sample. **Regenerate** rebuilds it. The authoring side is on
 [the noise texture reference page](/reference/noise-texture/).
+
+<figure class="shot shot--noise">
+  <a href="/static/img/noise-generator.png" target="_blank" rel="noopener"><img src="/static/img/noise-generator.png" alt="The Noise Generator panel showing the red-channel Perlin preview and the green-channel Voronoi preview side by side, above a Scale slider, a Size combo and a Regenerate button."></a>
+  <figcaption>The Noise Generator, tabbed alongside the Transport and Recording panels. Both previews are read back off the GPU, so they show the texture the shaders are actually sampling. Click the picture for it full size.</figcaption>
+</figure>
 
 ## Spout Output (F8)
 

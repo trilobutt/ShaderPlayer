@@ -39,6 +39,11 @@ a shader with no file is not written to `config.json`, so closing the applicatio
 Press Ctrl+S, which for an unsaved shader opens the Save As dialog, and pick a location
 inside your shader folder.
 
+<figure class="shot shot--editor">
+  <a href="/static/img/shader-editor.png" target="_blank" rel="noopener"><img src="/static/img/shader-editor.png" alt="The Shader Editor panel showing HLSL source with syntax highlighting, a line-number gutter, a Compile (F5) button and an OK status beside it."></a>
+  <figcaption>The editor on the body of a shipped shader. The highlighter knows the HLSL intrinsics, the injected uniforms and helpers, and the shader's own parameter names, which is why <code>spPalette</code> and <code>paletteShift</code> are both coloured as things it recognises. The same list is what completion offers. Click the picture for it full size.</figcaption>
+</figure>
+
 ## Compiling
 
 Three routes, all the same compile:

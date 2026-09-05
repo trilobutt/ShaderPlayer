@@ -129,11 +129,11 @@ src/
 └── WorkspaceManager.{cpp,h} - Workspace layout presets. Scans `layouts/` dir next to
                               exe for `.ini` files (a [WorkspacePreset] header whose
                               `state=` key holds a base64 QMainWindow::saveState() blob).
-                              Index 0 = built-in Default (kDefaultLayoutState constant —
-                              Parameters left, Library over Editor right, Viewport centre,
-                              Transport and Recording tabbed along the bottom; its
-                              PanelVisibility is set in the ctor and must match the docks
-                              in the blob). Owned by Application.
+                              Index 0 = built-in Default (kDefaultLayoutState constant.
+                              What it actually renders: Parameters left, Library and Editor
+                              *tabbed* together right, Viewport centre, Transport along the
+                              bottom, with Recording, Noise, Spout and Audio hidden by the
+                              PanelVisibility set in the ctor). Owned by Application.
 ```
 
 ### Qt UI Structure
@@ -619,11 +619,15 @@ generative recording muxes no audio. The flag is read as
 leave the preview stepping at a fixed rate forever.
 
 **The rate comes from the Recording panel** (`RecordingSettings::fps`, default
-`kDefaultRenderFps` = 25), and only for this case: a file render uses the open video's own
-rate, because its frames are that video's frames. `VideoEncoder::StartRecording` takes `fps`
-as authoritative and deliberately does **not** fall back to `settings.fps`. It used to, and
-the moment the panel gained an fps control that fallback would have stamped a file render at
-the panel's rate while one frame per decoded source frame arrived.
+`kDefaultRenderFps` = 25), and only for this case. `StartRecording` gates on
+`m_decoder.IsOpen()`, so **any** open source supplies its own rate, a live device as much as
+a file, and `RecordingPanel::SyncIdleAffordance` greys the Frame rate box on the same test.
+The panel's early-out key is therefore three-state (none / file / live): the button and the
+hint turn on a file alone, so a two-state key skipped the whole function across the one
+transition that changes the rate control. `VideoEncoder::StartRecording` takes `fps` as
+authoritative and deliberately does **not** fall back to `settings.fps`. It used to, and the
+moment the panel gained an fps control that fallback would have stamped a file render at the
+panel's rate while one frame per decoded source frame arrived.
 
 **Only a live capture drops frames now.** `StartRecording`'s `renderMode` argument is
 `!liveCapture`, and under it `SubmitFrame` waits for queue space instead of dropping: the
@@ -863,6 +867,19 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - **Qt paints nothing into the viewport's region**, so a `PrintWindow`/backing-store capture
   of the window shows stale pixels there rather than the rendered frame. A screenshot that
   appears to show the empty state under a live shader is a capture artefact, not a bug.
+- **A screen-capture helper must be per-monitor DPI aware, because the app is.** On a
+  scaled display a DPI-unaware caller sees a virtualised desktop, so `GetWindowRect` and
+  `SetWindowPos` speak logical pixels while `CopyFromScreen` grabs physical ones: the grab
+  lands on the top-left fraction of the window and every panel outside it reads as missing.
+  `SetProcessDpiAwarenessContext(PER_MONITOR_AWARE_V2)` before touching any of them fixes
+  it. The manual's screenshots in `site/static/img/` were taken this way.
+- **`QSyntaxHighlighter::rehighlight()` reaches `QPlainTextEdit::textChanged`**, because it
+  marks the document's contents dirty, and it is indistinguishable from a keystroke at that
+  signal. Anything that changes highlighting rules must therefore block the editor's signals
+  (`EditorPanel::SetParamNames` does, as `SetSource` does) or it restarts the 500 ms
+  auto-compile clock. Escape was where that bit: reset to passthrough refreshed the
+  parameter names to an empty list, and the resulting compile ran with no active preset and
+  silently added the editor's contents to the library as a new "Untitled" shader.
 - Menu accelerators are **displayed, not bound**: the text after `\t` in an action's label.
   `Application::HandleKeyboardShortcuts` owns every key in the product and
   `MainWindow::keyPressEvent` routes into it, so a real `QShortcut` would fire the action
@@ -1106,6 +1123,31 @@ Per-parameter keyframe animation tied to absolute video time. Each `ShaderParam`
 ### Blend Mode
 
 Video blend is available to all shader types (video effects, generative, audio). The UI condition is simply `GetDecoder().IsOpen()` — any shader can overlay or blend against a video or live source, including audio visualisers (e.g. waveform over video). Do not gate by `isGenerative` or exclude `isAudio`.
+
+## Documentation Site (site/)
+
+`shaderplayer.marcsplained.com` is generated from `site/` by `site/build.py`: Markdown in
+`site/content/` through Jinja2 templates into `site/dist/`, plus `sitemap.xml`, `robots.txt`
+and a flat `search-index.json`. Build it with the local venv (`site/.venv`, from
+`site/requirements.txt`); `site/.venv/` and `site/dist/` are gitignored.
+
+- **The 45 shader reference pages are generated, not written.** `site/tools/extract_shaders.py`
+  parses each `default_shaders/*.hlsl` ISF block into `site/content/shaders.json`, and
+  `build.py` runs it first. A shader's page changes by editing the shader's `DESCRIPTION` and
+  `INPUTS`, never the output.
+- **`--noindex` defaults on**, adding a robots meta to every page and a disallow-all
+  `robots.txt`. `--live` turns it off, and that is the launch moment. Unindexed is not
+  private: the URL is reachable by anyone holding it.
+- **A push to `master` touching `site/` or `default_shaders/` deploys**, via
+  `.github/workflows/deploy-site.yml` under an SSH key bound on the server to a forced rsync
+  into the one app directory. The automatic deploy always builds with the noindex default;
+  going live is a manual workflow run. `site/deploy.sh --app marcsplained_shaderplayer` does
+  the same by hand.
+- **The site must be served from a root**: `build.py` emits absolute asset paths, so opening
+  `site/dist/index.html` over `file://` renders unstyled. Serve `dist/` over HTTP to review it.
+- **Screenshots** live in `site/static/img/` and every figure links its own full-size file in
+  a new tab, because a capture wider than the prose column loses its labels at 60% scale. See
+  the DPI note under Qt Notes for how they are taken.
 
 ## Claude Code Automations
 

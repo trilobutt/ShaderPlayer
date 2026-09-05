@@ -24,6 +24,11 @@ with another value and the parameter now animates between the two.
 Order does not matter. Keys are kept sorted by time, and adding one at a time that already
 has a key overwrites it rather than producing two.
 
+<figure class="shot shot--params">
+  <a href="/static/img/keyframes.png" target="_blank" rel="noopener"><img src="/static/img/keyframes.png" alt="A parameter row with keyframing enabled: the KF button lit, three timestamp chips beneath it, and a detail block with time and value editors, a Custom Bezier interpolation combo and a curve editor with two draggable handles."></a>
+  <figcaption>Three keys on one parameter, with the first selected and its outgoing segment set to Custom Bezier. The parameter's own slider is greyed while the timeline owns it. Click the picture for it full size.</figcaption>
+</figure>
+
 ## The editor
 
 Every key on the track appears as a **chip** labelled with its time. Clicking a chip seeks

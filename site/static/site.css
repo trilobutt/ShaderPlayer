@@ -842,6 +842,79 @@ pre {
   line-height: 1.55;
 }
 
+/* Screenshots. A dark application window sitting on a dark page needs the figure
+   to supply the separation, so the frame is the recessed well a code block uses,
+   at panel radius. Figures deliberately escape the prose measure: a whole window
+   shrunk to 72ch is unreadable. */
+.shot {
+  display: flex;
+  flex-direction: column;
+  margin: var(--space-4) 0;
+  padding: var(--space);
+  border: 1px solid var(--panel-border);
+  border-top: 2px solid var(--panel-border);
+  border-radius: var(--radius-panel);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: var(--lift-1);
+}
+
+/* Never stretched to the column. A crop of one dock is 900 px of a 3840 px screen,
+   and blowing it up to fill a wide panel renders a side panel larger than the whole
+   window shown three paragraphs above it. Height is what bounds a tall crop; a
+   whole-window shot is wider than it is tall and reaches max-width first. */
+.shot img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 76vh;
+  margin: 0 auto;
+  border-radius: var(--radius-control);
+}
+
+.shot figcaption {
+  margin-top: var(--space);
+  padding: 0 var(--space) calc(var(--space) / 2);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+/* Every shot is a link to the file itself, because none of them survives the
+   downscale to column width intact: a whole-window capture loses its labels, and a
+   full-width dock strip is 1600 px shown at 957. It opens in a new tab so the reader
+   keeps their place in the page, and nothing else here does that, which is why each
+   caption says so rather than leaving it to be discovered. */
+.shot a {
+  display: block;
+  border-radius: var(--radius-control);
+  cursor: zoom-in;
+  transition: box-shadow var(--motion-hover) var(--ease-standard),
+              transform var(--motion-hover) var(--ease-standard);
+}
+
+.shot a:hover,
+.shot a:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px var(--accent-primary), var(--lift-2);
+}
+
+/* One hue per dock, the same assignment the application makes, so a reader who has
+   learned that violet is the editor reads the figure before the caption. A figure
+   showing the whole window claims no single dock and keeps the neutral hairline;
+   cyan stays reserved for interactive state. */
+.shot--library { border-top-color: var(--region-library); }
+.shot--editor { border-top-color: var(--region-editor); }
+.shot--params { border-top-color: var(--region-params); }
+.shot--transport { border-top-color: var(--region-transport); }
+.shot--recording { border-top-color: var(--region-recording); }
+.shot--noise { border-top-color: var(--region-noise); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shot a { transition: none; }
+  .shot a:hover,
+  .shot a:focus-visible { transform: none; }
+}
+
 .empty-note {
   margin: 0;
   padding: var(--space-3);

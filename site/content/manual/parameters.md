@@ -13,6 +13,11 @@ apply step and no per-frame cost when nothing is moving.
 A shader that declares no parameters gets a line saying so rather than an empty panel, and
 with nothing active at all the panel says the picture is passing through untouched.
 
+<figure class="shot shot--params">
+  <a href="/static/img/parameters.png" target="_blank" rel="noopener"><img src="/static/img/parameters.png" alt="The Shader Parameters panel listing seventeen controls for a shader: dropdowns, sliders with numeric boxes, a checkbox, a colour swatch, and read-only audio band meters, each row ending in a reset arrow, an R and a KF button."></a>
+  <figcaption>Seventeen parameters of one shader. Every row ends the same way, and the four meters at the bottom are AudioBand inputs, which the analyser writes and you cannot. Click the picture for it full size.</figcaption>
+</figure>
+
 ## A row
 
 Five columns, left to right: the parameter's label, its control, a reset arrow, an **R**, and
