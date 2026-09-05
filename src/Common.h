@@ -149,13 +149,24 @@ struct WorkspacePreset {
     PanelVisibility panels;
 };
 
+// The rate a generative render defaults to, and the bounds the Recording panel's control
+// offers. A generative shader has no source rate to inherit, so this is a plain editorial
+// default rather than a technical one.
+inline constexpr int kDefaultRenderFps = 25;
+inline constexpr int kMinRenderFps     = 1;
+inline constexpr int kMaxRenderFps     = 240;
+
 // Recording settings
 struct RecordingSettings {
     std::string outputPath;
     int width = 0;   // 0 = source resolution
     int height = 0;
     int bitrate = 20000000;  // 20 Mbps
-    int fps = 0;  // 0 = source fps
+    // The rate a generative render is written at, set in the Recording panel. A file render
+    // ignores it and uses the open video's own rate, since its frames are that video's.
+    // 0 means a config written before the panel had the control; StartRecording reads it
+    // as the default.
+    int fps = kDefaultRenderFps;
     std::string codec = "libx264";  // or "prores_ks"
     std::string preset = "medium";
     int proresProfile = 2;  // 0=proxy, 1=LT, 2=422, 3=HQ

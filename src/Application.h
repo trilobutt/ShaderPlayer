@@ -72,10 +72,14 @@ public:
     bool StartRecording(const RecordingSettings& settings);
     void StopRecording();
     // True while a recording is walking an opened video file from its first frame to its
-    // last, one frame per tick, and will stop itself at the end. Live capture and
-    // generative recording stay real-time and are stopped by hand, so this is false for
-    // both. The transport is inert while it is true (see Stop/SeekTo/TogglePlayback).
+    // last, one frame per tick, and will stop itself at the end. False for a generative
+    // render (which has no end of its own to reach and is stopped by hand) and for live
+    // capture. The transport is inert while it is true (see Stop/SeekTo/TogglePlayback).
     bool IsOfflineRender() const { return m_offlineRender; }
+    // True while a generative recording is stepping the shader clock one output frame per
+    // tick. The preview is deliberately not real-time while this is set, so the surfaces
+    // that would otherwise imply it is say so instead.
+    bool IsGenerativeRender() const { return m_generativeRender; }
     // Returns the chosen path, or an empty string if the user cancelled.
     std::string OpenRecordingOutputDialog(const std::string& currentPath);
 
@@ -201,6 +205,12 @@ private:
     // own timestamp rather than accumulated per tick, which drifts.
     bool m_offlineRender = false;
     int64_t m_offlineAudioFed = 0;
+
+    // Generative render: no decoder, so the shader itself is the source and its clock is
+    // stepped one output frame per tick instead of by the wall clock. m_renderFrameStep is
+    // 1/fps in seconds, fixed for the life of the recording.
+    bool m_generativeRender = false;
+    float m_renderFrameStep = 0.0f;
 };
 
 } // namespace SP

@@ -227,7 +227,10 @@ void SanitiseConfig(AppConfig& c) {
         c.recordingDefaults.width  = std::clamp(c.recordingDefaults.width,  16, 7680);
     if (c.recordingDefaults.height != 0)
         c.recordingDefaults.height = std::clamp(c.recordingDefaults.height, 16, 4320);
-    c.recordingDefaults.fps     = std::clamp(c.recordingDefaults.fps, 0, 1000);
+    // 0 survives: a config written before the panel had an fps control holds it, and
+    // StartRecording reads it as kDefaultRenderFps rather than as a rate.
+    if (c.recordingDefaults.fps != 0)
+        c.recordingDefaults.fps = std::clamp(c.recordingDefaults.fps, kMinRenderFps, kMaxRenderFps);
     c.recordingDefaults.bitrate = std::clamp(c.recordingDefaults.bitrate, 100000, 2000000000);
     c.recordingDefaults.proresProfile = std::clamp(c.recordingDefaults.proresProfile, 0, 3);
     if (c.recordingDefaults.codec != "libx264" && c.recordingDefaults.codec != "prores_ks")

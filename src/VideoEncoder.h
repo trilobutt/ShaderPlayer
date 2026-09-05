@@ -27,8 +27,20 @@ public:
     // Recording control. audioSampleRate > 0 adds an audio stream fed by SubmitAudio;
     // 0 writes a video-only file, which is what a live capture or a generative shader
     // gets, neither having any audio to mux.
+    //
+    // `fps` is authoritative and is written into the stream's time_base verbatim. The
+    // encoder deliberately does not consult RecordingSettings::fps: Application resolves
+    // the rate (the source's own for a file, the panel's for a generative render) and a
+    // second opinion here would stamp a file render at the panel's rate while one frame
+    // per decoded source frame arrived, which is the whole defect this signature exists
+    // to prevent.
+    //
+    // `renderMode` says this is a render rather than a live capture. A render's producer
+    // waits for queue space instead of dropping, because a dropped frame does not leave a
+    // gap in the timeline (PTS counts what was encoded) — it shortens the file and pulls
+    // everything after it earlier. A live capture cannot stall its device, so it drops.
     bool StartRecording(const RecordingSettings& settings, int sourceWidth, int sourceHeight,
-                        double sourceFPS, int audioSampleRate = 0);
+                        double fps, bool renderMode, int audioSampleRate = 0);
     void StopRecording();
     bool IsRecording() const { return m_recording.load(); }
     bool HasAudioStream() const { return m_audioStream != nullptr; }
@@ -36,6 +48,10 @@ public:
     // Frame submission (thread-safe). A frame whose geometry does not match the size the
     // recording was opened at is counted as dropped and refused: the encoder's source
     // frame is allocated once and would otherwise be written past.
+    //
+    // Blocks while the queue is full under renderMode (see StartRecording), so a render
+    // runs at the encoder's pace rather than losing frames to it. Returns when the
+    // recording is stopped from another thread, so the wait cannot outlive the encoder.
     bool SubmitFrame(const std::vector<uint8_t>& rgbaData, int width, int height);
 
     // Packed stereo float at the rate passed to StartRecording, as VideoDecoder's
@@ -107,6 +123,8 @@ private:
     // Encoder thread
     std::thread m_encoderThread;
     std::atomic<bool> m_recording{false};
+    // See StartRecording: a render waits for queue space, a live capture drops.
+    std::atomic<bool> m_renderMode{false};
     std::atomic<bool> m_stopRequested{false};
 
     // Statistics

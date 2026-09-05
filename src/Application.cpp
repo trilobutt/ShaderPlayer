@@ -549,7 +549,15 @@ void Application::ProcessFrame() {
         // starts and where CloseVideo leaves it, so the picture drew and never moved.
         // Pause still stops it, which is the only transport verb that means anything
         // with no footage.
-        const float dt = static_cast<float>(std::min(elapsed, 0.1));
+        //
+        // While a generative render is running, the step is the output frame's own
+        // duration rather than the wall clock: RenderFrame submits exactly one frame per
+        // tick, so this is what makes the file's timeline and the shader's animation the
+        // same clock. Gated on the encoder still running so an encoder that stopped on its
+        // own cannot leave the preview stepping at a fixed rate forever.
+        const bool rendering = m_generativeRender && m_encoder.IsRecording();
+        const float dt = rendering ? m_renderFrameStep
+                                   : static_cast<float>(std::min(elapsed, 0.1));
         m_generativeTime += dt;
         m_playbackTime = m_generativeTime;
         m_newVideoFrame = true;
@@ -1007,17 +1015,25 @@ bool Application::StartRecording(const RecordingSettings& settings) {
     // shader on it, which means every frame of it from the first, so the transport is
     // driven from here rather than left for the user to start by hand.
     const bool fileSource = m_decoder.IsOpen() && !m_decoder.IsLiveCapture();
+    // A live device is the one source that cannot be rendered: it produces frames at its
+    // own pace and stalling it loses them for good. Everything else is a render.
+    const bool liveCapture = m_decoder.IsOpen() && m_decoder.IsLiveCapture();
+
+    m_generativeRender = false;
 
     if (m_decoder.IsOpen()) {
         recW   = m_decoder.GetWidth();
         recH   = m_decoder.GetHeight();
+        // The open video's own rate, always. Its frames are that video's frames, so the
+        // panel's fps has nothing to say here and the encoder no longer second-guesses it.
         recFPS = m_decoder.GetFPS();
     } else {
-        // Generative mode: use configured generative resolution.
-        // If settings.fps is 0 ("match source"), default to 60 since there is no source.
+        // Generative mode: use configured generative resolution, and the panel's rate.
+        // A generative shader has no source rate to inherit, so 0 (a config written before
+        // the panel had the control) reads as the default rather than as a rate.
         recW   = m_renderer.GetGenerativeWidth();
         recH   = m_renderer.GetGenerativeHeight();
-        recFPS = (settings.fps > 0) ? static_cast<double>(settings.fps) : 60.0;
+        recFPS = (settings.fps > 0) ? static_cast<double>(settings.fps) : kDefaultRenderFps;
 
         // Ensure the generative render loop is running
         if (m_playbackState != PlaybackState::Playing)
@@ -1029,7 +1045,7 @@ bool Application::StartRecording(const RecordingSettings& settings) {
     const int audioRate = (fileSource && m_decoder.HasAudio())
                               ? m_decoder.GetAudioSampleRate() : 0;
 
-    if (!m_encoder.StartRecording(settings, recW, recH, recFPS, audioRate)) {
+    if (!m_encoder.StartRecording(settings, recW, recH, recFPS, !liveCapture, audioRate)) {
         Toast(m_mainWindow.get(), "Failed to start recording");
         return false;
     }
@@ -1050,6 +1066,21 @@ bool Application::StartRecording(const RecordingSettings& settings) {
         m_playbackTime = 0.0f;
         Play();
         Toast(m_mainWindow.get(), "Rendering to " + settings.outputPath);
+    } else if (!liveCapture) {
+        // A generative render, and the same bargain the file render above makes: shader
+        // time advances by exactly one frame per submitted frame instead of by the wall
+        // clock, so the file is written at recFPS whatever the display refreshes at and
+        // whatever the shader costs. Without this the tick rate set the frame rate and the
+        // declared rate only relabelled it, so a 60 Hz display writing a 25 fps file
+        // produced 2.4x the frames and a file 2.4x too long at 0.4x speed.
+        //
+        // The preview stops being real-time for the duration, which is what makes the
+        // output correct: a shader too heavy to hit recFPS now takes longer than real time
+        // to render rather than quietly writing a slower file. Nothing can desync against
+        // it, because a generative recording muxes no audio at all.
+        m_generativeRender = true;
+        m_renderFrameStep  = static_cast<float>(1.0 / recFPS);
+        Toast(m_mainWindow.get(), "Rendering to " + settings.outputPath);
     } else {
         Toast(m_mainWindow.get(), "Recording started: " + settings.outputPath);
     }
@@ -1064,10 +1095,13 @@ void Application::StopRecording() {
         return;
     }
 
+    const bool wasRender = m_generativeRender;
+    m_generativeRender = false;
+
     // Non-blocking: signals the encoder thread to drain its queue and exit.
     // Flush, file close, and resource free all happen on that thread.
     m_encoder.StopRecording();
-    Toast(m_mainWindow.get(), "Recording stopped");
+    Toast(m_mainWindow.get(), wasRender ? "Render stopped" : "Recording stopped");
 }
 
 void Application::FinishOfflineRender(bool completed) {
@@ -1076,8 +1110,9 @@ void Application::FinishOfflineRender(bool completed) {
     PumpRecordingAudio();
     m_decoder.SetRecordingTap(false);
 
-    m_offlineRender   = false;
-    m_offlineAudioFed = 0;
+    m_offlineRender    = false;
+    m_offlineAudioFed  = 0;
+    m_generativeRender = false;   // a file render never sets it; cleared so no path can leak it
 
     m_encoder.StopRecording();
 

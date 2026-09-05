@@ -263,6 +263,36 @@ void RecordingPanel::BuildEncoding(QVBoxLayout* layout)
     codecLine->addWidget(m_codec, 1);
     layout->addWidget(codecRow);
 
+    // ---- frame rate ------------------------------------------------------------------
+    m_fpsRow = new QWidget(this);
+    m_fpsRow->setObjectName(QStringLiteral("RecordingRow"));
+    auto* fpsLine = new QHBoxLayout(m_fpsRow);
+    fpsLine->setContentsMargins(0, 0, 0, 0);
+    fpsLine->setSpacing(Theme::kSpaceUnit);
+
+    auto* fpsLabel = new QLabel(tr("Frame rate"), m_fpsRow);
+    fpsLabel->setMinimumWidth(kFieldLabelWidth);
+    fpsLine->addWidget(fpsLabel);
+
+    m_fps = new QSpinBox(m_fpsRow);
+    m_fps->setRange(kMinRenderFps, kMaxRenderFps);
+    m_fps->setSuffix(tr(" fps"));
+    m_fps->setKeyboardTracking(false);
+    // 0 is what a config written before this control existed holds, and it means the
+    // default rather than a rate. Seeding the widget with the resolved value and writing
+    // it straight back is the same contract the codec and bitrate rows keep: the store
+    // must never hold a number the panel is not showing.
+    m_fps->setValue(m_settings.fps > 0
+                        ? std::clamp(m_settings.fps, kMinRenderFps, kMaxRenderFps)
+                        : kDefaultRenderFps);
+    m_settings.fps = m_fps->value();
+    connect(m_fps, &QSpinBox::valueChanged, this, [this](int fps) {
+        m_settings.fps = fps;
+        Persist();
+    });
+    fpsLine->addWidget(m_fps, 1);
+    layout->addWidget(m_fpsRow);
+
     // ---- bitrate (H.264 only) --------------------------------------------------------------
     m_bitrateRow = new QWidget(this);
     m_bitrateRow->setObjectName(QStringLiteral("RecordingRow"));
@@ -432,6 +462,17 @@ void RecordingPanel::SyncIdleAffordance()
         ? tr("Renders the whole video from the start and stops at the end. "
              "F9 starts and stops from anywhere.")
         : tr("Not recording. F9 starts and stops from anywhere."));
+
+    // The rate is the shader's to choose only when the shader is the source. An open video
+    // supplies its own, so the control goes inert and says why rather than sitting there
+    // live and doing nothing, which is how a setting gets blamed for an unrelated result.
+    m_fps->setEnabled(!fileSource);
+    m_fps->setToolTip(fileSource
+        ? tr("The open video's own frame rate is used, so this does not apply. It sets the "
+             "rate for a generative recording, with no video open.")
+        : tr("The rate the file is written at. The render steps the shader by exactly one "
+             "frame at a time, so this is the speed the result plays at no matter what "
+             "the display refreshes at or how long each frame takes to draw."));
 }
 
 void RecordingPanel::SyncCodec()
@@ -446,7 +487,9 @@ void RecordingPanel::SyncCodec()
 void RecordingPanel::SyncArmed(bool recording)
 {
     m_armed = recording;
-    m_rendering = recording && m_app.IsOfflineRender();
+    // Both renders, not only the file one: a generative recording now steps the shader a
+    // frame at a time too, so "Stop Rendering" is the honest verb for it as well.
+    m_rendering = recording && (m_app.IsOfflineRender() || m_app.IsGenerativeRender());
 
     if (recording && !m_since.isValid()) m_since.start();
     if (!recording) m_since.invalidate();
@@ -458,6 +501,10 @@ void RecordingPanel::SyncArmed(bool recording)
     m_codec->setEnabled(!recording);
     m_bitrate->setEnabled(!recording);
     m_profile->setEnabled(!recording);
+    // Re-enabled by SyncIdleAffordance, which owns this one while idle: with a video open
+    // it stays disabled because the video's rate is used, and only the tri-state's reset
+    // below makes that run again.
+    m_fps->setEnabled(!recording);
 
     m_statusBlock->setVisible(recording);
     m_idleHint->setVisible(!recording);

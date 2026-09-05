@@ -571,9 +571,41 @@ and sets `m_offlineRender`. While that flag is set:
   open `ProcessFrame` takes the generative branch and would never reach the end of stream
   that closes the encoder.
 
-Live capture and generative recording are unchanged: both stay real-time and are stopped by
-hand. `IsOfflineRender()` is false for both, which is what `RecordingPanel` reads to decide
-whether its button says "Render Video to File" or "Start Recording".
+### Recording With No Video Open
+
+A generative recording is a render too, on the same bargain as the file path above. While
+`m_generativeRender` is set, `ProcessFrame` advances `m_generativeTime` by
+`m_renderFrameStep` (1/fps) per tick rather than by the wall clock, and `RenderFrame`
+submits exactly one frame per tick, so the shader's animation and the file's timeline are
+the same clock. The output is written at its declared rate whatever the display refreshes
+at and whatever each frame costs to draw.
+
+The preview stops being real-time for the duration, which is the point: a shader too heavy
+to hit the rate now takes longer than real time to render instead of quietly writing a
+slower file, and a fast one finishes early. Nothing can desync against it, since a
+generative recording muxes no audio. The flag is read as
+`m_generativeRender && m_encoder.IsRecording()` so an encoder that stopped on its own cannot
+leave the preview stepping at a fixed rate forever.
+
+**The rate comes from the Recording panel** (`RecordingSettings::fps`, default
+`kDefaultRenderFps` = 25), and only for this case: a file render uses the open video's own
+rate, because its frames are that video's frames. `VideoEncoder::StartRecording` takes `fps`
+as authoritative and deliberately does **not** fall back to `settings.fps`. It used to, and
+the moment the panel gained an fps control that fallback would have stamped a file render at
+the panel's rate while one frame per decoded source frame arrived.
+
+**Only a live capture drops frames now.** `StartRecording`'s `renderMode` argument is
+`!liveCapture`, and under it `SubmitFrame` waits for queue space instead of dropping: the
+encoder's PTS counter walks over what was actually encoded, so a dropped frame does not
+leave a gap, it shortens the file and pulls everything after it earlier. The GPU outruns
+x264 at any interesting resolution, so the 16-frame queue fills within seconds and a render
+would otherwise be sampled at the encoder's rate. Submission is on the GUI thread, so the
+wait is bounded by `kRenderQueueWait` as well as by `StopRecording`; a live device is the one
+source that cannot be stalled, so it still drops.
+
+`IsOfflineRender()` stays specific to the file path (a render with an end of its own, which
+is why only it shows a progress percentage). `IsGenerativeRender()` is the other one, and
+`RecordingPanel` reads both to decide whether the armed button says "Stop Rendering".
 
 **The output resolution is frozen while the encoder is open.** `VideoEncoder::InitEncoder`
 allocates `m_srcFrame` once at the size the recording started at, and `EncoderThread` copies
@@ -764,20 +796,6 @@ executable, so a bare name resolves in a fresh build tree with no configuration.
 - Recording framerate matches playback framerate (no arbitrary output rates)
 - A recorded file carries the source's audio only when the source is a file. Live capture
   opens a dshow video device with no audio pin, so a webcam recording is silent.
-- **A generative recording is paced by the display, not by its declared frame rate.** The
-  generative branch of `ProcessFrame` sets `m_newVideoFrame` every tick, `RenderFrame`
-  submits on that flag, and `VideoEncoder` stamps PTS as `frameIndex * 1000` against a
-  `time_base` of `1/(fps*1000)`. Submission therefore tracks the display's refresh rate
-  while the timeline is a pure counter at the declared rate, and the two are never
-  reconciled. The file's duration is the capture's real duration multiplied by
-  `displayHz / declaredFps`, with the motion slowed by the same factor.
-
-  Setting an explicit fps in the Recording panel does **not** avoid this and generally makes
-  it worse: measured on a 59-60 Hz display, a declared 30 fps over an 11.2 s capture wrote
-  666 frames (59.5/s actual) into a 22.17 s file, exactly 2× long at half speed. The
-  `fps == 0` default of 60 is correct only where the display happens to run at 60 Hz, which
-  is why this has gone unnoticed. A file source is unaffected: that path is a render
-  (`m_offlineRender`) driven one decoded frame per tick at the source's own rate.
 
 ## Qt Notes
 

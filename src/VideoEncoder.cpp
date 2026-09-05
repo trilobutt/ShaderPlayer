@@ -17,6 +17,13 @@ namespace {
 constexpr int  kAudioQueueMax  = ENCODER_QUEUE_SIZE * 8;
 constexpr auto kAudioQueueWait = std::chrono::milliseconds(200);
 
+// How long a render's frame submission waits for queue space before giving up and counting
+// the frame dropped. Submission runs on the GUI thread, so this is also how long the window
+// can stop responding if the encoder wedges. Steady state is one frame's encode, so any
+// value above a few hundred milliseconds never fires in normal operation; this one is set
+// well clear of a slow 4K keyframe rather than tuned.
+constexpr auto kRenderQueueWait = std::chrono::seconds(5);
+
 // What one call to the audio encoder takes when the codec does not fix it itself (PCM does
 // not; AAC does, at 1024).
 constexpr int kDefaultAudioFrameSize = 1024;
@@ -49,7 +56,8 @@ VideoEncoder::~VideoEncoder() {
 }
 
 bool VideoEncoder::StartRecording(const RecordingSettings& settings, int sourceWidth,
-                                  int sourceHeight, double sourceFPS, int audioSampleRate) {
+                                  int sourceHeight, double fps, bool renderMode,
+                                  int audioSampleRate) {
     if (m_recording.load()) {
         return false;  // Already recording
     }
@@ -61,11 +69,12 @@ bool VideoEncoder::StartRecording(const RecordingSettings& settings, int sourceW
         m_encoderThread.join();
     }
 
-    // Use source dimensions/fps if not specified
+    // Use source dimensions if not specified. `fps` is taken as given — see the header for
+    // why this must not fall back to settings.fps.
     int width = settings.width > 0 ? settings.width : sourceWidth;
     int height = settings.height > 0 ? settings.height : sourceHeight;
-    double fps = settings.fps > 0 ? static_cast<double>(settings.fps) : sourceFPS;
 
+    m_renderMode = renderMode;
     m_audioSrcRate = audioSampleRate;
     if (!InitEncoder(settings, width, height, fps)) {
         return false;
@@ -389,10 +398,34 @@ bool VideoEncoder::SubmitFrame(const std::vector<uint8_t>& rgbaData, int width, 
 
     std::unique_lock<std::mutex> lock(m_queueMutex);
 
-    // Drop frames if queue is full
     if (m_frameQueue.size() >= ENCODER_QUEUE_SIZE) {
-        m_framesDropped++;
-        return false;
+        if (m_renderMode.load()) {
+            // A render is not real-time and has nowhere to put a lost frame: m_frameIndex
+            // walks over what was actually encoded, so a drop does not leave a gap in the
+            // timeline, it shortens the file and pulls every frame after it earlier. The
+            // GPU outruns x264 at any interesting resolution, so this queue fills within a
+            // second or two of starting and the whole render would otherwise be sampled at
+            // the encoder's rate. Waiting is exactly the trade a render exists to make.
+            //
+            // This runs on the GUI thread, so the wait is bounded twice over. StopRecording
+            // clears m_recording and notifies, which releases it the moment the user stops.
+            // And kRenderQueueWait caps it regardless: a steady-state wait is one frame's
+            // encode, single-digit milliseconds to a few tens, so a wait this long means
+            // the encoder is stuck (a full disk, a wedged codec) and losing a frame beats
+            // hanging the window with no way to stop.
+            m_queueCV.wait_for(lock, kRenderQueueWait, [this] {
+                return m_frameQueue.size() < ENCODER_QUEUE_SIZE || !m_recording.load();
+            });
+            if (!m_recording.load()) return false;
+            if (m_frameQueue.size() >= ENCODER_QUEUE_SIZE) {
+                m_framesDropped++;
+                return false;
+            }
+        } else {
+            // Live capture: the device cannot be stalled, so a backlog is dropped.
+            m_framesDropped++;
+            return false;
+        }
     }
 
     QueuedFrame qf;

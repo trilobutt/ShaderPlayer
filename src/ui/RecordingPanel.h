@@ -12,9 +12,10 @@
 //   Stopping is the easiest thing to do. The toggle spans the panel and grows when armed,
 //   so the largest target on the surface while recording is the one that ends it.
 //
-//   The settings cannot drift under a running encoder. Path, codec, bitrate and profile
-//   are all disabled while recording, because FFmpeg took its copy at StartRecording and a
-//   widget that still moves is telling the user something untrue.
+//   The settings cannot drift under a running encoder. Path, codec, frame rate, bitrate
+//   and profile are all disabled while recording, because FFmpeg took its copy at
+//   StartRecording and a widget that still moves is telling the user something untrue.
+//   Frame rate is disabled with a video open too: that render uses the video's own rate.
 //
 // The panel is the only editor of the RecordingSettings store it is handed (MainWindow
 // owns it), and ToggleRecording is the only place recording starts or stops: the Recording
@@ -119,6 +120,8 @@ private:
     PathEdit* m_path = nullptr;
     QPushButton* m_browse = nullptr;
     QComboBox* m_codec = nullptr;
+    QWidget* m_fpsRow = nullptr;
+    QSpinBox* m_fps = nullptr;
     QWidget* m_bitrateRow = nullptr;
     QSpinBox* m_bitrate = nullptr;
     QWidget* m_profileRow = nullptr;
