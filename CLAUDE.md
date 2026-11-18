@@ -302,6 +302,12 @@ pure `.cmake` files, so nothing compiles) because KSyntaxHighlighting does
 `find_package(ECM NO_MODULE)` and then overwrites `CMAKE_MODULE_PATH` with
 `ECM_MODULE_PATH` — a populated source tree on `CMAKE_MODULE_PATH` cannot satisfy it.
 
+KSyntaxHighlighting also builds `katehighlightingindexer.exe` and runs it mid-build to
+generate its syntax index. It links Qt6Core, which `CMakeLists.txt` copies beside it before
+it links, so no build environment needs Qt on PATH. A KSyntaxHighlighting bump that links
+the indexer against a second Qt module brings back a silent failure at
+`Generating index.katesyntax` (exit `0xC0000135`, DLL not found) until that DLL is copied too.
+
 ### FFmpeg Setup
 
 FFmpeg headers and import libs are bundled in `third_party/ffmpeg/` and committed to the repo (~3 MB). Only the runtime DLLs (~220 MB) must be provided locally — they are gitignored.
@@ -327,7 +333,7 @@ If you prefer a system-level FFmpeg install instead, pass `-DFFMPEG_ROOT=<path>`
 RelWithDebInfo, `build/`) is the only supported configuration; single-config, so there is
 no `--config` flag and the output is `build/ShaderPlayer.exe`.
 
-`tools/build.ps1` wraps the documented MSVC + Qt + CMake environment. `-Target shaderfx`
+`tools/build.ps1` wraps the documented MSVC + CMake environment. `-Target shaderfx`
 builds the headless runner alone, which skips Qt, moc and windeployqt entirely.
 
 **Never ship or hand over a Debug build.** Debug links `ucrtbased.dll`, `msvcp140d.dll` and
@@ -369,8 +375,8 @@ presets, keybindings and layout.
 
 Any performance number taken from `build/` is worthless until both checks pass.
 
-`pwsh -File tools/build.ps1` is the whole build: it locates Visual Studio, CMake, Ninja and
-Qt on the machine, assembles the environment described below, configures the `windows-msvc`
+`pwsh -File tools/build.ps1` is the whole build: it locates Visual Studio, CMake and Ninja on
+the machine, assembles the environment described below, configures the `windows-msvc`
 preset when `build/CMakeCache.txt` is absent, and builds. On a fresh clone it is the only
 command needed once the FFmpeg DLLs are in place.
 
@@ -385,10 +391,10 @@ Command-line builds work only from a shell where the MSVC environment has been i
 — otherwise the link fails with `memcpy` unresolved. From a plain shell:
 
 ```
-cmd /c "set ""PATH=C:\Program Files (x86)\Microsoft Visual Studio\Installer;C:\Qt\6.9.1\msvc2022_64\bin;%PATH%"" & call ""<vcvars64.bat>"" >nul & cmake --build build"
+cmd /c "set ""PATH=C:\Program Files (x86)\Microsoft Visual Studio\Installer;%PATH%"" & call ""<vcvars64.bat>"" >nul & cmake --build build"
 ```
 
-Four things in that line are load-bearing:
+Three things in that line are load-bearing:
 
 - **The PATH additions must come BEFORE `call vcvars64.bat`, not after.** `cmd` expands
   `%PATH%` when it *parses* the line, so `set PATH=...;%PATH%` written after the call
@@ -400,8 +406,6 @@ Four things in that line are load-bearing:
   recognized`, then reports "Environment initialized" having set neither `INCLUDE`, `LIB`
   nor the tool paths — which surfaces as `fatal error C1083: Cannot open include file:
   'type_traits'` from every target.
-- **Qt's `bin` must be on PATH**: KSyntaxHighlighting builds `katehighlightingindexer.exe`
-  and runs it during the build, which fails with `0xc0000135` without it.
 - Adjust the vcvars path to the installed edition (`vswhere.exe -latest -property
   installationPath` locates it). It may be a **BuildTools** install under
   `Program Files (x86)`, not Community.

@@ -194,6 +194,31 @@ FetchContent_MakeAvailable(ksyntaxhighlighting)
 set(CMAKE_POLICY_DEFAULT_CMP0175 "${_SP_SAVED_CMP0175}")
 unset(_SP_SAVED_CMP0175)
 
+# katehighlightingindexer links Qt6Core and runs mid-build to generate the syntax index.
+# Windows resolves its DLLs beside the exe and then on PATH, so any build whose environment
+# lacked Qt's bin (VS Code's CMake Tools, a plain shell) died here with
+# STATUS_DLL_NOT_FOUND (0xC0000135) and no message. Copy Qt6Core beside the indexer before
+# it links, so it runs under whatever environment the build inherits.
+# A POST_BUILD step cannot reach a target defined in another directory (CMP0040), and a
+# generator expression naming the indexer would make this copy depend on the indexer, a
+# cycle once the indexer depends on the copy; hence the directory is read at configure time.
+# The copy is a target that runs on every build (copy_if_different leaves an identical file
+# alone, and Ninja orders the indexer after it without relinking). An add_custom_command
+# OUTPUT cannot name the DLL, since OUTPUT genexes see only global targets and Qt6::Core is
+# directory-scoped, and a stamp file would go on claiming the copy after a deleted bin/.
+get_target_property(_SP_INDEXER_DIR katehighlightingindexer RUNTIME_OUTPUT_DIRECTORY)
+if(NOT _SP_INDEXER_DIR)
+    message(FATAL_ERROR "katehighlightingindexer has no RUNTIME_OUTPUT_DIRECTORY; "
+        "KSyntaxHighlighting or ECM changed how it places executables.")
+endif()
+add_custom_target(sp_indexer_runtime
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:Qt6::Core>" "${_SP_INDEXER_DIR}/$<TARGET_FILE_NAME:Qt6::Core>"
+    COMMENT "Copying Qt6Core beside katehighlightingindexer"
+    VERBATIM)
+add_dependencies(katehighlightingindexer sp_indexer_runtime)
+unset(_SP_INDEXER_DIR)
+
 FetchContent_Declare(
     json
     GIT_REPOSITORY https://github.com/nlohmann/json.git

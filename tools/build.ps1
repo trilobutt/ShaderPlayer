@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-    Configures (if needed) and builds ShaderPlayer via the documented MSVC + Qt + CMake
+    Configures (if needed) and builds ShaderPlayer via the documented MSVC + CMake
     environment.
 
 .DESCRIPTION
     Wraps the build line documented in CLAUDE.md so the eight-plus done-when: checks in
     tasks/todo.md do not each re-derive it. Locates the Visual Studio installation with
     vswhere (BuildTools installs need `-products *`, or vswhere prints nothing), puts the
-    VS Installer directory, Qt's bin, and CMake's bin on PATH *before* calling
-    vcvars64.bat (cmd expands %PATH% when it parses the line, so appending after the call
-    would discard everything vcvars added), then runs `cmake --build build`.
+    VS Installer directory and CMake's bin on PATH *before* calling vcvars64.bat (cmd
+    expands %PATH% when it parses the line, so appending after the call would discard
+    everything vcvars added), then runs `cmake --build build`.
 
     Nothing here is a fixed absolute path beyond the VS Installer's own well-known
-    location: CMake and Qt are discovered on this machine, so a fresh clone builds without
-    editing the script.
+    location: CMake is discovered on this machine, and Qt by CMakeLists.txt, so a fresh
+    clone builds without editing the script.
 
 .PARAMETER Target
     Build one target instead of all of them. `-Target shaderfx` skips Qt, moc and the
@@ -69,63 +69,12 @@ if (-not ($toolDirs | Where-Object { Test-Path (Join-Path $_ 'cmake.exe') })) {
     exit 1
 }
 
-# --- Qt ----------------------------------------------------------------------------
-#
-# Qt's bin must be on PATH for the build, not merely for CMake: KSyntaxHighlighting builds
-# katehighlightingindexer.exe and runs it mid-build, which dies with 0xc0000135 without the
-# Qt DLLs beside it. Take the location from the configured cache where there is one, so the
-# build cannot use a different Qt from the one it was configured against.
-
-function Find-QtPrefix {
-    param([string]$CacheFile)
-
-    $candidates = @()
-
-    if (Test-Path $CacheFile) {
-        foreach ($line in Get-Content -LiteralPath $CacheFile) {
-            if ($line -match '^Qt6_DIR:[^=]*=(.+)$') {
-                # <prefix>/lib/cmake/Qt6 -> <prefix>
-                $candidates += (Join-Path $matches[1] '..\..\..')
-            } elseif ($line -match '^CMAKE_PREFIX_PATH:[^=]*=(.+)$') {
-                $candidates += ($matches[1] -split ';')
-            }
-        }
-    }
-
-    $candidates += @($env:QT_ROOT_DIR, $env:QTDIR)
-
-    $qtRoot = Join-Path $env:SystemDrive 'Qt'
-    if (Test-Path $qtRoot) {
-        $candidates += (Get-ChildItem $qtRoot -Directory -Filter '6.*' -ErrorAction SilentlyContinue |
-                        Sort-Object Name -Descending |
-                        ForEach-Object { Get-ChildItem $_.FullName -Directory -Filter 'msvc*_64' -ErrorAction SilentlyContinue } |
-                        Select-Object -ExpandProperty FullName)
-    }
-
-    foreach ($c in $candidates) {
-        if ([string]::IsNullOrWhiteSpace($c)) { continue }
-        $bin = Join-Path $c 'bin'
-        if (Test-Path (Join-Path $bin 'windeployqt.exe')) {
-            return (Resolve-Path $bin).Path
-        }
-    }
-    return $null
-}
-
-$qtBin = Find-QtPrefix (Join-Path $buildDir 'CMakeCache.txt')
-if (-not $qtBin) {
-    Write-Error ("ERROR: no Qt 6 install found. Install Qt 6.9+ (msvc2022_64), then either " +
-                 "put it under $(Join-Path $env:SystemDrive 'Qt'), set QT_ROOT_DIR, or pass " +
-                 "-DCMAKE_PREFIX_PATH=<qt prefix> when configuring.")
-    exit 1
-}
-
 # --- Run ---------------------------------------------------------------------------
 #
 # The PATH additions must precede `call vcvars64.bat`, not follow it: cmd expands
 # %PATH% when it parses the line, so appending afterwards silently discards everything
 # vcvars added.
-$pathPrefix = (@($vsInstallerDir, $qtBin) + $toolDirs) -join ';'
+$pathPrefix = (@($vsInstallerDir) + $toolDirs) -join ';'
 $prelude    = "set ""PATH=$pathPrefix;%PATH%"" & call ""$vcvars"" >nul"
 
 # A fresh clone has no cache; configure it rather than failing on a missing build tree.
